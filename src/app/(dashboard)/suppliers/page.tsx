@@ -1,20 +1,20 @@
 // src/app/(dashboard)/suppliers/page.tsx
+// FIXED VERSION - Works with Current API Format { suppliers: [...] }
 "use client";
 
 import React, { useState, useEffect } from "react";
 import {
-  Plus,
-  Search,
-  Eye,
   Edit,
-  Trash2,
   Phone,
+  Mail,
   MapPin,
   Package,
+  ShoppingCart,
+  DollarSign,
+  Calendar,
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -22,14 +22,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -39,19 +31,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 // -----------------------------------------------------------
-// 1. Define Supplier Interface (Mirrors database.types.ts)
+// SINGLE SUPPLIER SYSTEM - Sierra Cables Ltd Only
+// FIXED: Works with current API format { suppliers: [...] }
 // -----------------------------------------------------------
+
 interface Supplier {
-  id: string; // UUID from DB
+  id: string;
   supplier_code: string;
   name: string;
   contact: string | null;
@@ -61,66 +57,43 @@ interface Supplier {
   category: string | null;
   created_at: string;
   updated_at: string;
-  // Mocked fields to maintain UI functionality
   totalPurchases: number;
   totalAmount: number;
   lastPurchase: string;
 }
 
-// Mock data conversion - used for initial display and deriving stats
-const mockSuppliers = [
+// Mock purchase history (TODO: Replace with real purchase API later)
+const purchaseHistory = [
   {
-    id: "1",
-    name: "Sierra Cables Ltd",
-    contact: "+94 11 234 5678",
-    city: "Colombo",
-    address: "456 Industrial Zone, Colombo 10",
-    email: "sales@sierracables.lk",
-    category: "Cables & Wires",
-    totalPurchases: 45,
-    totalAmount: 12500000,
-    lastPurchase: "2025-01-15",
+    id: "PUR-001",
+    date: "2025-01-15",
+    total: 230000,
+    status: "Received",
+    items: 2,
   },
   {
-    id: "2",
-    name: "Lanka Wire Industries",
-    contact: "+94 11 345 6789",
-    city: "Colombo",
-    address: "789 Export Processing Zone, Katunayake",
-    email: "info@lankawire.lk",
-    category: "Cables & Wires",
-    totalPurchases: 32,
-    totalAmount: 8900000,
-    lastPurchase: "2025-01-12",
+    id: "PUR-002",
+    date: "2025-01-10",
+    total: 348000,
+    status: "Received",
+    items: 2,
   },
   {
-    id: "3",
-    name: "Ceylon Electrical Supplies",
-    contact: "+94 81 456 7890",
-    city: "Kandy",
-    address: "123 Peradeniya Road, Kandy",
-    email: "ceylon@electrical.lk",
-    category: "Electrical Components",
-    totalPurchases: 18,
-    totalAmount: 3400000,
-    lastPurchase: "2025-01-08",
+    id: "PUR-003",
+    date: "2025-01-05",
+    total: 357500,
+    status: "Pending",
+    items: 2,
   },
-] as Partial<Supplier>[];
+];
 
-// Helper to convert empty string to null for optional Supabase fields
 const cleanString = (value: string | null) =>
   value === null || value.trim() === "" ? null : value;
 
 export default function SuppliersPage() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([] as Supplier[]);
+  const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(
-    null
-  );
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     contact: "",
@@ -131,157 +104,99 @@ export default function SuppliersPage() {
   });
 
   // -----------------------------------------------------------
-  // 2. Data Fetching and CRUD Logic
+  // Fetch SINGLE supplier from REAL API
+  // FIXED: Handles current API format { suppliers: [...] }
   // -----------------------------------------------------------
+  useEffect(() => {
+    fetchSupplier();
+  }, []);
 
-  const fetchSuppliers = async () => {
+  const fetchSupplier = async () => {
     setLoading(true);
     try {
+      // REAL API CALL - Fetches from database
       const response = await fetch("/api/suppliers");
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch supplier");
+      }
+
       const data = await response.json();
 
-      if (response.ok) {
-        // Map fetched data to include mock derived fields for the UI tables/cards
-        const mappedSuppliers: Supplier[] = data.suppliers.map((s: any) => {
-          const mockData = mockSuppliers.find((m) => m.name === s.name) || {
-            totalPurchases: 0,
-            totalAmount: 0,
-            lastPurchase: s.created_at.split("T")[0],
-          };
-          return {
-            ...s,
-            id: s.id,
-            supplier_code: s.supplier_code,
-            name: s.name,
-            contact: s.contact,
-            city: s.city,
-            address: s.address,
-            email: s.email,
-            category: s.category,
-            totalPurchases: mockData.totalPurchases, // Mocked
-            totalAmount: mockData.totalAmount, // Mocked
-            lastPurchase: mockData.lastPurchase, // Mocked
-          };
-        });
+      // FIX: Current API returns { suppliers: [...] } as array
+      // We need to get the first (only) supplier from the array
+      if (data.suppliers && data.suppliers.length > 0) {
+        const firstSupplier = data.suppliers[0]; // Get first supplier
 
-        setSuppliers(mappedSuppliers);
+        // Add mock derived data for now (TODO: Calculate from purchases table)
+        const supplierWithStats: Supplier = {
+          ...firstSupplier,
+          totalPurchases: 45, // TODO: Calculate from purchases
+          totalAmount: 12500000, // TODO: Sum from purchases
+          lastPurchase: "2025-01-15", // TODO: Get latest purchase date
+        };
+
+        setSupplier(supplierWithStats);
       } else {
-        console.error("Failed to fetch suppliers:", data.error);
-        setSuppliers(mockSuppliers as Supplier[]);
-        // Do not alert on failed fetch if local mock data is used as fallback
+        throw new Error(
+          "No supplier found in database. Please add Sierra Cables."
+        );
       }
     } catch (error) {
-      console.error("Network error fetching suppliers:", error);
-      setSuppliers(mockSuppliers as Supplier[]);
+      console.error("Error fetching supplier:", error);
+      alert(`Failed to load supplier information: ${(error as Error).message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchSuppliers();
-  }, []);
-
-  const handleSaveSupplier = async () => {
+  const handleUpdateSupplier = async () => {
     if (
       !formData.name ||
       !formData.contact ||
       !formData.city ||
-      !formData.address ||
-      !formData.category
+      !formData.address
     ) {
       alert("Please fill all required fields");
       return;
     }
 
-    // 💡 FIX: Use cleanString for all optional fields to send null instead of ""
-    const payload = {
-      name: cleanString(formData.name),
-      contact: cleanString(formData.contact),
-      city: cleanString(formData.city),
-      address: cleanString(formData.address),
-      email: cleanString(formData.email),
-      category: cleanString(formData.category),
-    };
-
     try {
-      if (selectedSupplier) {
-        // PUT: Update existing supplier
-        const response = await fetch(`/api/suppliers/${selectedSupplier.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+      const payload = {
+        name: formData.name,
+        contact: cleanString(formData.contact),
+        city: cleanString(formData.city),
+        address: cleanString(formData.address),
+        email: cleanString(formData.email),
+        category: cleanString(formData.category),
+      };
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to update supplier");
-        }
-        alert("Supplier updated successfully!");
-      } else {
-        // POST: Add new supplier
-        const response = await fetch("/api/suppliers", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        // 💡 FIX: The original error point. Now we expect a successful response.
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to add new supplier");
-        }
-        alert("Supplier added successfully!");
-      }
-
-      fetchSuppliers(); // Re-fetch data to update UI
-    } catch (error) {
-      console.error("Error saving supplier:", error);
-      alert(`Error saving supplier: ${(error as Error).message}.`);
-    }
-
-    setIsAddDialogOpen(false);
-    setSelectedSupplier(null);
-    resetForm();
-  };
-
-  const handleDeleteSupplier = async () => {
-    if (!selectedSupplier) return;
-
-    try {
-      const response = await fetch(`/api/suppliers/${selectedSupplier.id}`, {
-        method: "DELETE",
+      // REAL API CALL - Updates database
+      const response = await fetch(`/api/suppliers/${supplier?.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to delete supplier");
+        throw new Error(errorData.error || "Failed to update supplier");
       }
 
-      alert(`Supplier ${selectedSupplier.name} deleted successfully!`);
-      fetchSuppliers(); // Re-fetch data to update UI
+      alert("Supplier information updated successfully!");
+
+      // Refresh data from database
+      await fetchSupplier();
+
+      setIsEditDialogOpen(false);
     } catch (error) {
-      console.error("Error deleting supplier:", error);
-      alert(`Error deleting supplier: ${(error as Error).message}.`);
+      console.error("Error updating supplier:", error);
+      alert(`Error updating supplier: ${(error as Error).message}`);
     }
-
-    setIsDeleteDialogOpen(false);
-    setSelectedSupplier(null);
   };
 
-  const resetForm = () => {
-    setFormData({
-      name: "",
-      contact: "",
-      city: "",
-      address: "",
-      email: "",
-      category: "",
-    });
-  };
-
-  const openEditDialog = (supplier: Supplier) => {
-    setSelectedSupplier(supplier);
+  const openEditDialog = () => {
+    if (!supplier) return;
     setFormData({
       name: supplier.name,
       contact: supplier.contact || "",
@@ -290,248 +205,234 @@ export default function SuppliersPage() {
       email: supplier.email || "",
       category: supplier.category || "",
     });
-    setIsAddDialogOpen(true);
+    setIsEditDialogOpen(true);
   };
 
-  const openAddDialog = () => {
-    setSelectedSupplier(null);
-    resetForm();
-    setIsAddDialogOpen(true);
-  };
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-full min-h-64">
+        <Loader2 className="h-6 w-6 animate-spin mr-2" />
+        <p className="text-lg text-muted-foreground">Loading supplier...</p>
+      </div>
+    );
+  }
 
-  // -----------------------------------------------------------
-  // 3. Filtering and Calculations
-  // -----------------------------------------------------------
+  if (!supplier) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold text-destructive">Error</h1>
+        <p className="text-muted-foreground">
+          Failed to load supplier information.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Make sure Sierra Cables exists in your database.
+        </p>
+        <Button onClick={fetchSupplier}>Try Again</Button>
+      </div>
+    );
+  }
 
-  const filteredSuppliers = suppliers.filter((supplier) => {
-    const matchesSearch =
-      supplier.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (supplier.contact && supplier.contact.includes(searchQuery)) ||
-      (supplier.city &&
-        supplier.city.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    const matchesCategory =
-      categoryFilter === "all" || supplier.category === categoryFilter;
-
-    return matchesSearch && matchesCategory;
-  });
-
-  // Get unique categories for filter from the current supplier list
-  const categories = [
-    "all",
-    ...new Set(
-      suppliers.map((s) => s.category).filter((c): c is string => c !== null)
-    ),
-  ];
-
-  const totalPurchases = suppliers.reduce(
-    (sum, s) => sum + s.totalPurchases,
-    0
-  );
-  const totalSpent = suppliers.reduce((sum, s) => sum + s.totalAmount, 0);
+  const avgOrder =
+    supplier.totalPurchases > 0
+      ? Math.round(supplier.totalAmount / supplier.totalPurchases)
+      : 0;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Suppliers</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Supplier Information
+          </h1>
           <p className="text-muted-foreground mt-1">
-            Manage your wire and cable suppliers
+            {supplier.name} - Your Primary Wire and Cable Supplier
           </p>
         </div>
-        <Button onClick={openAddDialog}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add New Supplier
+        <Button onClick={openEditDialog}>
+          <Edit className="w-4 h-4 mr-2" />
+          Edit Information
         </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Suppliers
-            </CardTitle>
-            <Package className="w-4 h-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{suppliers.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Active supplier accounts
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
               Total Purchases
             </CardTitle>
+            <ShoppingCart className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalPurchases}</div>
+            <div className="text-2xl font-bold">{supplier.totalPurchases}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              All-time purchase orders
+              Purchase orders
             </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
+            <DollarSign className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              LKR {totalSpent.toLocaleString()}
+              LKR {(supplier.totalAmount / 1000000).toFixed(2)}M
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              All-time expenditure
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">Lifetime value</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Average Order</CardTitle>
+            <Package className="w-4 h-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              LKR {(avgOrder / 1000).toFixed(0)}K
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Per purchase</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Last Purchase</CardTitle>
+            <Calendar className="w-4 h-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {new Date(supplier.lastPurchase).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Most recent</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Search and Filters */}
+      {/* Contact Information Card */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex-1 max-w-sm">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name, contact, or city..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
+          <CardTitle>Contact Information</CardTitle>
+          <CardDescription>Supplier details and contact info</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex items-start gap-3">
+              <Phone className="w-5 h-5 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">Phone Number</p>
+                <p className="text-sm text-muted-foreground">
+                  {supplier.contact || "N/A"}
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Filter by category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+            <div className="flex items-start gap-3">
+              <Mail className="w-5 h-5 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">Email Address</p>
+                <p className="text-sm text-muted-foreground">
+                  {supplier.email || "N/A"}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">Location</p>
+                <p className="text-sm text-muted-foreground">
+                  {supplier.city || "N/A"}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <Package className="w-5 h-5 text-muted-foreground mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">Category</p>
+                <p className="text-sm text-muted-foreground">
+                  {supplier.category || "N/A"}
+                </p>
+              </div>
             </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex justify-center items-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin mr-2" />
-              <span className="text-muted-foreground">
-                Loading suppliers...
-              </span>
+
+          <div className="flex items-start gap-3 pt-2 border-t">
+            <MapPin className="w-5 h-5 text-muted-foreground mt-0.5" />
+            <div>
+              <p className="text-sm font-medium">Full Address</p>
+              <p className="text-sm text-muted-foreground">
+                {supplier.address || "N/A"}
+              </p>
             </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Supplier Name</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>City</TableHead>
-                  <TableHead className="text-right">Total Purchases</TableHead>
-                  <TableHead className="text-right">Total Amount</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredSuppliers.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="text-center py-8 text-muted-foreground"
-                    >
-                      No suppliers found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredSuppliers.map((supplier) => (
-                    <TableRow key={supplier.id}>
-                      <TableCell className="font-medium">
-                        {supplier.name}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Phone className="w-3 h-3 text-muted-foreground" />
-                          {supplier.contact}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                          {supplier.category}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-sm">
-                          <MapPin className="w-3 h-3 text-muted-foreground" />
-                          {supplier.city}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {supplier.totalPurchases}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        LKR {supplier.totalAmount.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() =>
-                              (window.location.href = `/suppliers/${supplier.id}`)
-                            }
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => openEditDialog(supplier)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => {
-                              setSelectedSupplier(supplier);
-                              setIsDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Add/Edit Supplier Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+      {/* Recent Purchases */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Purchase History</CardTitle>
+          <CardDescription>
+            Latest purchases from {supplier.name}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Purchase ID</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Items</TableHead>
+                <TableHead>Total Amount</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {purchaseHistory.map((purchase) => (
+                <TableRow key={purchase.id}>
+                  <TableCell className="font-medium">{purchase.id}</TableCell>
+                  <TableCell>
+                    {new Date(purchase.date).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </TableCell>
+                  <TableCell>{purchase.items} items</TableCell>
+                  <TableCell>LKR {purchase.total.toLocaleString()}</TableCell>
+                  <TableCell>
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        purchase.status === "Received"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-yellow-100 text-yellow-700"
+                      }`}
+                    >
+                      {purchase.status}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Edit Supplier Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>
-              {selectedSupplier ? "Edit Supplier" : "Add New Supplier"}
-            </DialogTitle>
+            <DialogTitle>Edit Supplier Information</DialogTitle>
             <DialogDescription>
-              {selectedSupplier
-                ? "Update supplier information below"
-                : "Enter the details of the new supplier"}
+              Update {supplier.name} contact and business information
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
@@ -548,26 +449,14 @@ export default function SuppliersPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="category">Category *</Label>
-              <Select
+              <Input
+                id="category"
+                placeholder="e.g., Cables & Wires"
                 value={formData.category}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, category: value })
+                onChange={(e) =>
+                  setFormData({ ...formData, category: e.target.value })
                 }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Cables & Wires">Cables & Wires</SelectItem>
-                  <SelectItem value="Electrical Components">
-                    Electrical Components
-                  </SelectItem>
-                  <SelectItem value="Tools & Equipment">
-                    Tools & Equipment
-                  </SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
-                </SelectContent>
-              </Select>
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="contact">Contact Number *</Label>
@@ -619,43 +508,12 @@ export default function SuppliersPage() {
             <Button
               variant="outline"
               onClick={() => {
-                setIsAddDialogOpen(false);
-                setSelectedSupplier(null);
-                resetForm();
+                setIsEditDialogOpen(false);
               }}
             >
               Cancel
             </Button>
-            <Button onClick={handleSaveSupplier}>
-              {selectedSupplier ? "Update Supplier" : "Add Supplier"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Supplier</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete {selectedSupplier?.name}? This
-              action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsDeleteDialogOpen(false);
-                setSelectedSupplier(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteSupplier}>
-              Delete
-            </Button>
+            <Button onClick={handleUpdateSupplier}>Update Information</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
