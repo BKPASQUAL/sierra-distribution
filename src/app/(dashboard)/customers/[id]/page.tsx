@@ -1,21 +1,28 @@
 // src/app/(dashboard)/customers/[id]/page.tsx
-'use client';
+"use client";
 
-import React from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { 
-  ArrowLeft, 
-  Phone, 
-  Mail, 
-  MapPin, 
+import React, { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  Phone,
+  Mail,
+  MapPin,
   DollarSign,
   FileText,
   Calendar,
   TrendingUp,
-  Edit
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+  Edit,
+  Loader2, // Used for loading state
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -23,107 +30,206 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-// Mock customer data (in real app, fetch by ID)
-const mockCustomer = {
-  id: 1,
-  name: 'Perera Hardware',
-  contact: '+94 77 123 4567',
-  email: 'perera@hardware.lk',
-  city: 'Colombo',
-  address: '123 Galle Road, Colombo 03',
-  balance: 45000,
+// -----------------------------------------------------------
+// 1. Types mirroring Database Schema (and required UI fields)
+// -----------------------------------------------------------
+interface Customer {
+  id: string; // UUID in Supabase
+  customer_code: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  outstanding_balance: number; // Matches the DB field
+  created_at: string; // Used as the joined date
+  // Mocked fields to keep UI functional until full backend logic is implemented
+  totalOrders: number;
+  totalPaid: number;
+}
+
+// Mock derived data (for Orders/Payments Tabs and Stats - replace with API calls later)
+const mockDerivedData = {
   totalOrders: 23,
   totalPaid: 2340000,
-  joinedDate: '2023-05-15',
 };
 
-// Mock order history
+// Mock order history (for UI only)
 const orderHistory = [
   {
-    id: 'ORD-001',
-    date: '2025-01-15',
+    id: "ORD-001",
+    date: "2025-01-15",
     items: 5,
     total: 125000,
     paid: 125000,
-    status: 'Delivered',
+    status: "Delivered",
   },
   {
-    id: 'ORD-002',
-    date: '2025-01-10',
+    id: "ORD-002",
+    date: "2025-01-10",
     items: 3,
     total: 75000,
     paid: 75000,
-    status: 'Delivered',
+    status: "Delivered",
   },
   {
-    id: 'ORD-003',
-    date: '2025-01-05',
+    id: "ORD-003",
+    date: "2025-01-05",
     items: 8,
     total: 200000,
     paid: 155000,
-    status: 'Partially Paid',
+    status: "Partially Paid",
   },
   {
-    id: 'ORD-004',
-    date: '2024-12-28',
+    id: "ORD-004",
+    date: "2024-12-28",
     items: 4,
     total: 95000,
     paid: 95000,
-    status: 'Delivered',
+    status: "Delivered",
   },
   {
-    id: 'ORD-005',
-    date: '2024-12-20',
+    id: "ORD-005",
+    date: "2024-12-20",
     items: 6,
     total: 145000,
     paid: 145000,
-    status: 'Delivered',
+    status: "Delivered",
   },
 ];
 
-// Mock payment history
+// Mock payment history (for UI only)
 const paymentHistory = [
   {
-    id: 'PAY-001',
-    date: '2025-01-15',
-    orderId: 'ORD-001',
+    id: "PAY-001",
+    date: "2025-01-15",
+    orderId: "ORD-001",
     amount: 125000,
-    method: 'Bank Transfer',
-    reference: 'TXN123456',
+    method: "Bank Transfer",
+    reference: "TXN123456",
   },
   {
-    id: 'PAY-002',
-    date: '2025-01-10',
-    orderId: 'ORD-002',
+    id: "PAY-002",
+    date: "2025-01-10",
+    orderId: "ORD-002",
     amount: 75000,
-    method: 'Cash',
-    reference: 'CASH-001',
+    method: "Cash",
+    reference: "CASH-001",
   },
   {
-    id: 'PAY-003',
-    date: '2025-01-08',
-    orderId: 'ORD-003',
+    id: "PAY-003",
+    date: "2025-01-08",
+    orderId: "ORD-003",
     amount: 155000,
-    method: 'Cheque',
-    reference: 'CHQ-789456',
+    method: "Cheque",
+    reference: "CHQ-789456",
   },
   {
-    id: 'PAY-004',
-    date: '2024-12-28',
-    orderId: 'ORD-004',
+    id: "PAY-004",
+    date: "2024-12-28",
+    orderId: "ORD-004",
     amount: 95000,
-    method: 'Bank Transfer',
-    reference: 'TXN789123',
+    method: "Bank Transfer",
+    reference: "TXN789123",
   },
 ];
 
 export default function CustomerDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const customerId = params.id;
+  // Safely cast params.id to string
+  const customerId = Array.isArray(params.id)
+    ? params.id[0]
+    : (params.id as string);
+
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // -----------------------------------------------------------
+  // 2. Data Fetching Hook
+  // -----------------------------------------------------------
+  useEffect(() => {
+    async function fetchCustomer() {
+      if (!customerId) return;
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Fetch customer details using the Customer by ID API route
+        const response = await fetch(`/api/customers/${customerId}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.error || `Failed to fetch customer ${customerId}`
+          );
+        }
+
+        // Map API response to our local Customer interface, injecting mock derived data
+        const fetchedCustomer: Customer = {
+          ...data.customer,
+          id: data.customer.id,
+          outstanding_balance: data.customer.outstanding_balance ?? 0,
+          // Inject mock derived data to keep the UI functional
+          totalOrders: mockDerivedData.totalOrders,
+          totalPaid: mockDerivedData.totalPaid,
+        };
+
+        setCustomer(fetchedCustomer);
+      } catch (err) {
+        console.error("Error fetching customer:", err);
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchCustomer();
+  }, [customerId]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-full min-h-64">
+        <Loader2 className="h-6 w-6 animate-spin mr-2" />
+        <p className="text-lg text-muted-foreground">
+          Loading customer details...
+        </p>
+      </div>
+    );
+  }
+
+  if (error || !customer) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold text-destructive">Error</h1>
+        <p className="text-muted-foreground">
+          Failed to load customer details for ID: {customerId}.
+        </p>
+        {error && <p className="text-red-500">Details: {error}</p>}
+        <Button onClick={() => router.push("/customers")}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Customers List
+        </Button>
+      </div>
+    );
+  }
+
+  // Assign fetched customer data to a local variable for cleaner access in JSX
+  const currentCustomer = customer;
+
+  // We use 'created_at' as 'joinedDate'
+  const joinedDate = new Date(currentCustomer.created_at).toLocaleDateString(
+    "en-US",
+    {
+      month: "short",
+      year: "numeric",
+    }
+  );
 
   return (
     <div className="space-y-6">
@@ -132,14 +238,16 @@ export default function CustomerDetailsPage() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => router.push('/customers')}
+          onClick={() => router.push("/customers")}
         >
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-3xl font-bold tracking-tight">{mockCustomer.name}</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {currentCustomer.name}
+          </h1>
           <p className="text-muted-foreground mt-1">
-            Customer ID: #{customerId}
+            Customer ID: #{currentCustomer.customer_code}
           </p>
         </div>
         <Button>
@@ -152,12 +260,14 @@ export default function CustomerDetailsPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Outstanding Balance</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Outstanding Balance
+            </CardTitle>
             <DollarSign className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-destructive">
-              LKR {mockCustomer.balance.toLocaleString()}
+              LKR {currentCustomer.outstanding_balance.toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Amount due</p>
           </CardContent>
@@ -169,8 +279,12 @@ export default function CustomerDetailsPage() {
             <FileText className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockCustomer.totalOrders}</div>
-            <p className="text-xs text-muted-foreground mt-1">All-time orders</p>
+            <div className="text-2xl font-bold">
+              {currentCustomer.totalOrders}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              All-time orders
+            </p>
           </CardContent>
         </Card>
 
@@ -181,7 +295,7 @@ export default function CustomerDetailsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              LKR {mockCustomer.totalPaid.toLocaleString()}
+              LKR {currentCustomer.totalPaid.toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Lifetime value</p>
           </CardContent>
@@ -193,12 +307,7 @@ export default function CustomerDetailsPage() {
             <Calendar className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {new Date(mockCustomer.joinedDate).toLocaleDateString('en-US', { 
-                month: 'short', 
-                year: 'numeric' 
-              })}
-            </div>
+            <div className="text-2xl font-bold">{joinedDate}</div>
             <p className="text-xs text-muted-foreground mt-1">Join date</p>
           </CardContent>
         </Card>
@@ -208,7 +317,9 @@ export default function CustomerDetailsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Contact Information</CardTitle>
-          <CardDescription>Customer contact details and address</CardDescription>
+          <CardDescription>
+            Customer contact details and address
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
@@ -219,7 +330,7 @@ export default function CustomerDetailsPage() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Phone Number</p>
-                  <p className="font-medium">{mockCustomer.contact}</p>
+                  <p className="font-medium">{currentCustomer.phone}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -228,7 +339,7 @@ export default function CustomerDetailsPage() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Email Address</p>
-                  <p className="font-medium">{mockCustomer.email}</p>
+                  <p className="font-medium">{currentCustomer.email}</p>
                 </div>
               </div>
             </div>
@@ -239,8 +350,10 @@ export default function CustomerDetailsPage() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Address</p>
-                  <p className="font-medium">{mockCustomer.address}</p>
-                  <p className="text-sm text-muted-foreground">{mockCustomer.city}</p>
+                  <p className="font-medium">{currentCustomer.address}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {currentCustomer.city}
+                  </p>
                 </div>
               </div>
             </div>
@@ -248,7 +361,7 @@ export default function CustomerDetailsPage() {
         </CardContent>
       </Card>
 
-      {/* Order and Payment History Tabs */}
+      {/* Order and Payment History Tabs (Still using mocks) */}
       <Tabs defaultValue="orders" className="space-y-4">
         <TabsList>
           <TabsTrigger value="orders">Order History</TabsTrigger>
@@ -288,7 +401,9 @@ export default function CustomerDetailsPage() {
                   {orderHistory.map((order) => (
                     <TableRow key={order.id}>
                       <TableCell className="font-medium">{order.id}</TableCell>
-                      <TableCell>{new Date(order.date).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        {new Date(order.date).toLocaleDateString()}
+                      </TableCell>
                       <TableCell>{order.items} items</TableCell>
                       <TableCell className="text-right">
                         LKR {order.total.toLocaleString()}
@@ -299,9 +414,9 @@ export default function CustomerDetailsPage() {
                       <TableCell>
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            order.status === 'Delivered'
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                              : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                            order.status === "Delivered"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
                           }`}
                         >
                           {order.status}
@@ -347,8 +462,12 @@ export default function CustomerDetailsPage() {
                 <TableBody>
                   {paymentHistory.map((payment) => (
                     <TableRow key={payment.id}>
-                      <TableCell className="font-medium">{payment.id}</TableCell>
-                      <TableCell>{new Date(payment.date).toLocaleDateString()}</TableCell>
+                      <TableCell className="font-medium">
+                        {payment.id}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(payment.date).toLocaleDateString()}
+                      </TableCell>
                       <TableCell>{payment.orderId}</TableCell>
                       <TableCell>{payment.method}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">
