@@ -1,11 +1,27 @@
 // src/app/(dashboard)/due-invoices/page.tsx
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { AlertTriangle, Phone, Mail, Eye, DollarSign, Calendar, Send, CheckCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect } from "react";
+import {
+  AlertTriangle,
+  Phone,
+  Mail,
+  Eye,
+  DollarSign,
+  Calendar,
+  Send,
+  CheckCircle,
+  Loader2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -13,7 +29,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -21,228 +37,311 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Due Invoice type
 interface DueInvoice {
   id: string;
-  invoiceNo: string;
-  customer: string;
-  customerId: number;
-  customerContact: string;
-  customerEmail: string;
-  billDate: string;
-  dueDate: string;
-  daysOverdue: number;
-  total: number;
-  paid: number;
+  order_number: string;
+  order_date: string;
+  customer_id: string;
+  total_amount: number;
   balance: number;
+  paid: number;
+  daysOverdue: number;
+  payment_status: string;
+  customers: {
+    name: string;
+    phone: string | null;
+    email: string | null;
+  };
   lastReminderDate: string | null;
   reminderCount: number;
 }
 
-// Mock overdue invoices data
-const mockDueInvoices: DueInvoice[] = [
-  {
-    id: '1',
-    invoiceNo: 'INV-003',
-    customer: 'Fernando Constructions',
-    customerId: 3,
-    customerContact: '+94 76 345 6789',
-    customerEmail: 'fernando@constructions.lk',
-    billDate: '2024-11-15',
-    dueDate: '2024-12-15',
-    daysOverdue: 68,
-    total: 425000,
-    paid: 300000,
-    balance: 125000,
-    lastReminderDate: '2025-01-10',
-    reminderCount: 2,
-  },
-  {
-    id: '2',
-    invoiceNo: 'INV-005',
-    customer: 'Mendis Electrician Services',
-    customerId: 5,
-    customerContact: '+94 77 567 8901',
-    customerEmail: 'mendis@services.lk',
-    billDate: '2024-11-20',
-    dueDate: '2024-12-20',
-    daysOverdue: 63,
-    total: 320000,
-    paid: 0,
-    balance: 320000,
-    lastReminderDate: '2025-01-05',
-    reminderCount: 3,
-  },
-  {
-    id: '3',
-    invoiceNo: 'INV-009',
-    customer: 'Perera Hardware',
-    customerId: 1,
-    customerContact: '+94 77 123 4567',
-    customerEmail: 'perera@hardware.lk',
-    billDate: '2024-11-25',
-    dueDate: '2024-12-25',
-    daysOverdue: 58,
-    total: 185000,
-    paid: 85000,
-    balance: 100000,
-    lastReminderDate: null,
-    reminderCount: 0,
-  },
-  {
-    id: '4',
-    invoiceNo: 'INV-012',
-    customer: 'Silva Electricals',
-    customerId: 2,
-    customerContact: '+94 71 234 5678',
-    customerEmail: 'silva@electric.lk',
-    billDate: '2024-12-01',
-    dueDate: '2024-12-31',
-    daysOverdue: 52,
-    total: 275000,
-    paid: 150000,
-    balance: 125000,
-    lastReminderDate: '2025-01-12',
-    reminderCount: 1,
-  },
-  {
-    id: '5',
-    invoiceNo: 'INV-015',
-    customer: 'Jayasinghe Hardware Store',
-    customerId: 4,
-    customerContact: '+94 75 456 7890',
-    customerEmail: 'jayasinghe@store.lk',
-    billDate: '2024-12-03',
-    dueDate: '2025-01-02',
-    daysOverdue: 50,
-    total: 195000,
-    paid: 50000,
-    balance: 145000,
-    lastReminderDate: null,
-    reminderCount: 0,
-  },
-];
-
 export default function DueInvoicesPage() {
-  const [dueInvoices, setDueInvoices] = useState(mockDueInvoices);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [dueInvoices, setDueInvoices] = useState<DueInvoice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
   const [isReminderDialogOpen, setIsReminderDialogOpen] = useState(false);
-  const [isMarkPaidDialogOpen, setIsMarkPaidDialogOpen] = useState(false);
-  const [selectedInvoice, setSelectedInvoice] = useState<DueInvoice | null>(null);
-  const [reminderMessage, setReminderMessage] = useState('');
-  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [isRecordPaymentDialogOpen, setIsRecordPaymentDialogOpen] =
+    useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<DueInvoice | null>(
+    null
+  );
+  const [reminderMessage, setReminderMessage] = useState("");
+
+  // Payment form data
+  const [paymentData, setPaymentData] = useState({
+    amount: 0,
+    date: new Date().toISOString().split("T")[0],
+    method: "cash",
+    reference: "",
+    chequeNo: "",
+    chequeDate: "",
+    notes: "",
+  });
+
+  // Fetch and calculate due invoices
+  useEffect(() => {
+    fetchDueInvoices();
+  }, []);
+
+  const fetchDueInvoices = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch all orders
+      const ordersResponse = await fetch("/api/orders");
+      const ordersData = await ordersResponse.json();
+
+      if (!ordersData.orders) {
+        console.error("Failed to fetch orders");
+        return;
+      }
+
+      // Fetch all payments
+      const paymentsResponse = await fetch("/api/payments");
+      const paymentsData = await paymentsResponse.json();
+
+      if (!paymentsData.payments) {
+        console.error("Failed to fetch payments");
+        return;
+      }
+
+      // Filter orders that are not fully paid
+      const unpaidOrders = ordersData.orders.filter(
+        (order: any) =>
+          order.payment_status === "unpaid" ||
+          order.payment_status === "partial"
+      );
+
+      // Calculate balance and days overdue for each order
+      const overdueInvoices: DueInvoice[] = unpaidOrders.map((order: any) => {
+        // Calculate total paid (exclude returned cheques)
+        const orderPayments = paymentsData.payments.filter(
+          (p: any) => p.order_id === order.id && p.cheque_status !== "returned"
+        );
+
+        const totalPaid = orderPayments.reduce(
+          (sum: number, p: any) => sum + p.amount,
+          0
+        );
+        const balance = order.total_amount - totalPaid;
+
+        // Calculate days overdue (from order date)
+        const orderDate = new Date(order.order_date);
+        const today = new Date();
+        const diffTime = today.getTime() - orderDate.getTime();
+        const daysOverdue = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+        // Count reminders (for future implementation - would need reminders table)
+        const reminderCount = 0;
+        const lastReminderDate = null;
+
+        return {
+          id: order.id,
+          order_number: order.order_number,
+          order_date: order.order_date,
+          customer_id: order.customer_id,
+          total_amount: order.total_amount,
+          balance: balance,
+          paid: totalPaid,
+          daysOverdue: daysOverdue,
+          payment_status: order.payment_status,
+          customers: order.customers,
+          lastReminderDate,
+          reminderCount,
+        };
+      });
+
+      // Filter only invoices that are 45+ days overdue
+      const criticalOverdue = overdueInvoices.filter(
+        (inv) => inv.daysOverdue >= 45
+      );
+
+      // Sort by days overdue (most overdue first)
+      criticalOverdue.sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+      setDueInvoices(criticalOverdue);
+    } catch (error) {
+      console.error("Error fetching due invoices:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filter invoices
   const filteredInvoices = dueInvoices.filter((invoice) => {
     const matchesSearch =
-      invoice.invoiceNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      invoice.customer.toLowerCase().includes(searchQuery.toLowerCase());
+      invoice.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      invoice.customers.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesSearch;
   });
-
-  // Sort by days overdue (most overdue first)
-  const sortedInvoices = [...filteredInvoices].sort((a, b) => b.daysOverdue - a.daysOverdue);
 
   // Calculate stats
   const totalOverdue = dueInvoices.length;
   const totalAmount = dueInvoices.reduce((sum, inv) => sum + inv.balance, 0);
-  const criticalCount = dueInvoices.filter(inv => inv.daysOverdue > 90).length;
-  const noReminderCount = dueInvoices.filter(inv => inv.reminderCount === 0).length;
+  const criticalCount = dueInvoices.filter(
+    (inv) => inv.daysOverdue > 90
+  ).length;
+  const noReminderCount = dueInvoices.filter(
+    (inv) => inv.reminderCount === 0
+  ).length;
 
   const getDaysOverdueColor = (days: number) => {
-    if (days > 90) return 'text-red-600 font-bold';
-    if (days > 60) return 'text-orange-600 font-semibold';
-    return 'text-yellow-600 font-medium';
+    if (days > 90) return "text-red-600 font-bold";
+    if (days > 60) return "text-orange-600 font-semibold";
+    return "text-yellow-600 font-medium";
   };
 
   const getDaysOverdueBadge = (days: number) => {
     if (days > 90) {
-      return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200';
+      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200";
     }
     if (days > 60) {
-      return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 border-orange-200';
+      return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 border-orange-200";
     }
-    return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200';
+    return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200";
   };
 
   const handleSendReminder = () => {
     if (!selectedInvoice) return;
 
-    // Update invoice with new reminder
-    setDueInvoices(dueInvoices.map(inv => 
-      inv.id === selectedInvoice.id 
-        ? {
-            ...inv,
-            lastReminderDate: new Date().toISOString().split('T')[0],
-            reminderCount: inv.reminderCount + 1,
-          }
-        : inv
-    ));
-
-    console.log('Sending reminder:', {
-      invoice: selectedInvoice.invoiceNo,
-      customer: selectedInvoice.customer,
-      email: selectedInvoice.customerEmail,
+    // TODO: Implement actual email/SMS sending via API
+    console.log("Sending reminder:", {
+      invoice: selectedInvoice.order_number,
+      customer: selectedInvoice.customers.name,
+      email: selectedInvoice.customers.email,
+      phone: selectedInvoice.customers.phone,
       message: reminderMessage,
     });
 
     setIsReminderDialogOpen(false);
     setSelectedInvoice(null);
-    setReminderMessage('');
-    alert('Reminder sent successfully via Email and SMS!');
+    setReminderMessage("");
+    alert("Reminder logged! (Email/SMS integration pending)");
   };
 
-  const handleMarkAsPaid = () => {
-    if (!selectedInvoice || paymentAmount <= 0) {
-      alert('Please enter a valid payment amount');
+  const handleRecordPayment = async () => {
+    if (!selectedInvoice || paymentData.amount <= 0) {
+      alert("Please enter a valid payment amount");
       return;
     }
 
-    if (paymentAmount > selectedInvoice.balance) {
-      alert('Payment amount cannot exceed balance');
+    if (paymentData.amount > selectedInvoice.balance) {
+      alert(
+        `Payment amount (LKR ${paymentData.amount.toLocaleString()}) cannot exceed balance (LKR ${selectedInvoice.balance.toLocaleString()})`
+      );
       return;
     }
 
-    // Remove from overdue list if fully paid
-    if (paymentAmount === selectedInvoice.balance) {
-      setDueInvoices(dueInvoices.filter(inv => inv.id !== selectedInvoice.id));
-      alert('Invoice marked as fully paid and removed from overdue list!');
-    } else {
-      // Update balance if partially paid
-      setDueInvoices(dueInvoices.map(inv => 
-        inv.id === selectedInvoice.id 
-          ? {
-              ...inv,
-              paid: inv.paid + paymentAmount,
-              balance: inv.balance - paymentAmount,
-            }
-          : inv
-      ));
-      alert('Partial payment recorded!');
+    if (
+      paymentData.method === "cheque" &&
+      (!paymentData.chequeNo || !paymentData.chequeDate)
+    ) {
+      alert("Please provide cheque number and date for cheque payments");
+      return;
     }
 
-    setIsMarkPaidDialogOpen(false);
-    setSelectedInvoice(null);
-    setPaymentAmount(0);
+    try {
+      const payment_number = `PAY-${Date.now()}`;
+
+      const paymentPayload = {
+        payment_number,
+        order_id: selectedInvoice.id,
+        customer_id: selectedInvoice.customer_id,
+        payment_date: paymentData.date,
+        amount: paymentData.amount,
+        payment_method: paymentData.method,
+        reference_number: paymentData.reference || null,
+        notes:
+          paymentData.notes ||
+          `Payment for overdue invoice ${selectedInvoice.order_number}`,
+        cheque_number:
+          paymentData.method === "cheque" ? paymentData.chequeNo : null,
+        cheque_date:
+          paymentData.method === "cheque" ? paymentData.chequeDate : null,
+        cheque_status: paymentData.method === "cheque" ? "pending" : null,
+      };
+
+      const response = await fetch("/api/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(paymentPayload),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to record payment");
+      }
+
+      alert("✅ Payment recorded successfully!");
+
+      // Refresh the due invoices list
+      fetchDueInvoices();
+
+      setIsRecordPaymentDialogOpen(false);
+      setSelectedInvoice(null);
+      resetPaymentForm();
+    } catch (error) {
+      console.error("Error recording payment:", error);
+      alert(`❌ Error recording payment: ${(error as Error).message}`);
+    }
+  };
+
+  const resetPaymentForm = () => {
+    setPaymentData({
+      amount: 0,
+      date: new Date().toISOString().split("T")[0],
+      method: "cash",
+      reference: "",
+      chequeNo: "",
+      chequeDate: "",
+      notes: "",
+    });
   };
 
   const openReminderDialog = (invoice: DueInvoice) => {
     setSelectedInvoice(invoice);
     setReminderMessage(
-      `Dear ${invoice.customer},\n\nThis is a friendly reminder that Invoice ${invoice.invoiceNo} dated ${new Date(invoice.billDate).toLocaleDateString()} is now ${invoice.daysOverdue} days overdue.\n\nOutstanding Balance: LKR ${invoice.balance.toLocaleString()}\n\nPlease arrange payment at your earliest convenience.\n\nThank you,\nSierra Distribution`
+      `Dear ${
+        invoice.customers.name
+      },\n\nThis is a friendly reminder that Invoice ${
+        invoice.order_number
+      } dated ${new Date(invoice.order_date).toLocaleDateString()} is now ${
+        invoice.daysOverdue
+      } days overdue.\n\nOutstanding Balance: LKR ${invoice.balance.toLocaleString()}\n\nPlease arrange payment at your earliest convenience.\n\nThank you,\nYour Company Name`
     );
     setIsReminderDialogOpen(true);
   };
 
-  const openMarkPaidDialog = (invoice: DueInvoice) => {
+  const openRecordPaymentDialog = (invoice: DueInvoice) => {
     setSelectedInvoice(invoice);
-    setPaymentAmount(invoice.balance);
-    setIsMarkPaidDialogOpen(true);
+    setPaymentData({
+      ...paymentData,
+      amount: invoice.balance,
+    });
+    setIsRecordPaymentDialogOpen(true);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -259,19 +358,24 @@ export default function DueInvoicesPage() {
       </div>
 
       {/* Alert Banner */}
-      <Card className="border-destructive/50 bg-destructive/10">
-        <CardContent className="py-4">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-6 h-6 text-destructive" />
-            <div>
-              <h3 className="font-semibold text-destructive">Payment Collection Alert</h3>
-              <p className="text-sm text-muted-foreground">
-                {totalOverdue} invoices are overdue by more than 45 days. Total outstanding: LKR {totalAmount.toLocaleString()}
-              </p>
+      {totalOverdue > 0 && (
+        <Card className="border-destructive/50 bg-destructive/10">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-6 h-6 text-destructive" />
+              <div>
+                <h3 className="font-semibold text-destructive">
+                  Payment Collection Alert
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {totalOverdue} invoices are overdue by more than 45 days.
+                  Total outstanding: LKR {totalAmount.toLocaleString()}
+                </p>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -281,7 +385,9 @@ export default function DueInvoicesPage() {
             <AlertTriangle className="w-4 h-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">{totalOverdue}</div>
+            <div className="text-2xl font-bold text-destructive">
+              {totalOverdue}
+            </div>
             <p className="text-xs text-muted-foreground mt-1">
               Invoices 45+ days
             </p>
@@ -289,7 +395,9 @@ export default function DueInvoicesPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Amount Due</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Amount Due
+            </CardTitle>
             <DollarSign className="w-4 h-4 text-destructive" />
           </CardHeader>
           <CardContent>
@@ -303,7 +411,9 @@ export default function DueInvoicesPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Critical (90+ Days)</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Critical (90+ Days)
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
@@ -342,7 +452,7 @@ export default function DueInvoicesPage() {
               />
             </div>
             <div className="text-sm text-muted-foreground">
-              Showing {sortedInvoices.length} overdue invoice(s)
+              Showing {filteredInvoices.length} overdue invoice(s)
             </div>
           </div>
         </CardHeader>
@@ -357,78 +467,76 @@ export default function DueInvoicesPage() {
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead className="text-right">Paid</TableHead>
                 <TableHead className="text-right">Balance</TableHead>
-                <TableHead>Last Reminder</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedInvoices.length === 0 ? (
+              {filteredInvoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={8} className="text-center py-8">
                     <CheckCircle className="w-12 h-12 mx-auto mb-2 text-green-500" />
                     <p className="text-lg font-medium">No Overdue Invoices!</p>
-                    <p className="text-sm text-muted-foreground">All payments are up to date</p>
+                    <p className="text-sm text-muted-foreground">
+                      All payments are up to date (45+ days)
+                    </p>
                   </TableCell>
                 </TableRow>
               ) : (
-                sortedInvoices.map((invoice) => (
-                  <TableRow 
-                    key={invoice.id}
-                    className="hover:bg-destructive/5"
-                  >
-                    <TableCell className="font-medium">{invoice.invoiceNo}</TableCell>
+                filteredInvoices.map((invoice) => (
+                  <TableRow key={invoice.id} className="hover:bg-destructive/5">
+                    <TableCell className="font-medium">
+                      {invoice.order_number}
+                    </TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{invoice.customer}</p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                          <Phone className="w-3 h-3" />
-                          {invoice.customerContact}
-                        </div>
+                        <p className="font-medium">{invoice.customers.name}</p>
+                        {invoice.customers.phone && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                            <Phone className="w-3 h-3" />
+                            {invoice.customers.phone}
+                          </div>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2 text-sm">
                         <Calendar className="w-3 h-3 text-muted-foreground" />
-                        {new Date(invoice.billDate).toLocaleDateString()}
+                        {new Date(invoice.order_date).toLocaleDateString()}
                       </div>
                     </TableCell>
                     <TableCell>
                       <span
-                        className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getDaysOverdueBadge(invoice.daysOverdue)}`}
+                        className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getDaysOverdueBadge(
+                          invoice.daysOverdue
+                        )}`}
                       >
                         <AlertTriangle className="w-3 h-3 mr-1" />
                         {invoice.daysOverdue} days
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      LKR {invoice.total.toLocaleString()}
+                      LKR {invoice.total_amount.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right text-green-600">
                       LKR {invoice.paid.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right">
-                      <span className={`font-bold ${getDaysOverdueColor(invoice.daysOverdue)}`}>
+                      <span
+                        className={`font-bold ${getDaysOverdueColor(
+                          invoice.daysOverdue
+                        )}`}
+                      >
                         LKR {invoice.balance.toLocaleString()}
                       </span>
-                    </TableCell>
-                    <TableCell>
-                      {invoice.lastReminderDate ? (
-                        <div className="text-sm">
-                          <p>{new Date(invoice.lastReminderDate).toLocaleDateString()}</p>
-                          <p className="text-xs text-muted-foreground">
-                            ({invoice.reminderCount} reminder{invoice.reminderCount > 1 ? 's' : ''})
-                          </p>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">No reminders</span>
-                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => window.location.href = `/bills/${invoice.invoiceNo}`}
+                          onClick={() =>
+                            (window.location.href = `/bills/${invoice.id}`)
+                          }
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
@@ -443,10 +551,10 @@ export default function DueInvoicesPage() {
                         <Button
                           variant="default"
                           size="sm"
-                          onClick={() => openMarkPaidDialog(invoice)}
+                          onClick={() => openRecordPaymentDialog(invoice)}
                         >
                           <CheckCircle className="w-4 h-4 mr-1" />
-                          Mark Paid
+                          Record Payment
                         </Button>
                       </div>
                     </TableCell>
@@ -459,43 +567,65 @@ export default function DueInvoicesPage() {
       </Card>
 
       {/* Send Reminder Dialog */}
-      <Dialog open={isReminderDialogOpen} onOpenChange={setIsReminderDialogOpen}>
+      <Dialog
+        open={isReminderDialogOpen}
+        onOpenChange={setIsReminderDialogOpen}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Send Payment Reminder</DialogTitle>
             <DialogDescription>
-              Send reminder to {selectedInvoice?.customer} for Invoice {selectedInvoice?.invoiceNo}
+              Send reminder to {selectedInvoice?.customers.name} for Invoice{" "}
+              {selectedInvoice?.order_number}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="text-sm text-muted-foreground">Customer</Label>
-                <p className="font-medium">{selectedInvoice?.customer}</p>
+                <Label className="text-sm text-muted-foreground">
+                  Customer
+                </Label>
+                <p className="font-medium">{selectedInvoice?.customers.name}</p>
               </div>
               <div>
-                <Label className="text-sm text-muted-foreground">Days Overdue</Label>
-                <p className={`font-bold ${getDaysOverdueColor(selectedInvoice?.daysOverdue || 0)}`}>
+                <Label className="text-sm text-muted-foreground">
+                  Days Overdue
+                </Label>
+                <p
+                  className={`font-bold ${getDaysOverdueColor(
+                    selectedInvoice?.daysOverdue || 0
+                  )}`}
+                >
                   {selectedInvoice?.daysOverdue} days
                 </p>
               </div>
               <div>
                 <Label className="text-sm text-muted-foreground">Email</Label>
-                <p className="text-sm">{selectedInvoice?.customerEmail}</p>
+                <p className="text-sm">
+                  {selectedInvoice?.customers.email || "N/A"}
+                </p>
               </div>
               <div>
                 <Label className="text-sm text-muted-foreground">Phone</Label>
-                <p className="text-sm">{selectedInvoice?.customerContact}</p>
+                <p className="text-sm">
+                  {selectedInvoice?.customers.phone || "N/A"}
+                </p>
               </div>
               <div>
-                <Label className="text-sm text-muted-foreground">Outstanding Balance</Label>
+                <Label className="text-sm text-muted-foreground">
+                  Outstanding Balance
+                </Label>
                 <p className="font-bold text-destructive">
                   LKR {selectedInvoice?.balance.toLocaleString()}
                 </p>
               </div>
               <div>
-                <Label className="text-sm text-muted-foreground">Previous Reminders</Label>
-                <p className="text-sm">{selectedInvoice?.reminderCount || 0} sent</p>
+                <Label className="text-sm text-muted-foreground">
+                  Previous Reminders
+                </Label>
+                <p className="text-sm">
+                  {selectedInvoice?.reminderCount || 0} sent
+                </p>
               </div>
             </div>
             <div className="space-y-2">
@@ -515,7 +645,7 @@ export default function DueInvoicesPage() {
               onClick={() => {
                 setIsReminderDialogOpen(false);
                 setSelectedInvoice(null);
-                setReminderMessage('');
+                setReminderMessage("");
               }}
             >
               Cancel
@@ -528,41 +658,151 @@ export default function DueInvoicesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Mark as Paid Dialog */}
-      <Dialog open={isMarkPaidDialogOpen} onOpenChange={setIsMarkPaidDialogOpen}>
-        <DialogContent>
+      {/* Record Payment Dialog */}
+      <Dialog
+        open={isRecordPaymentDialogOpen}
+        onOpenChange={setIsRecordPaymentDialogOpen}
+      >
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Record Payment</DialogTitle>
             <DialogDescription>
-              Record payment for Invoice {selectedInvoice?.invoiceNo}
+              Record payment for overdue Invoice {selectedInvoice?.order_number}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="col-span-2 space-y-2">
               <Label>Customer</Label>
-              <p className="font-medium">{selectedInvoice?.customer}</p>
+              <p className="font-medium">{selectedInvoice?.customers.name}</p>
             </div>
-            <div className="space-y-2">
+            <div className="col-span-2 space-y-2">
               <Label>Outstanding Balance</Label>
               <p className="text-2xl font-bold text-destructive">
                 LKR {selectedInvoice?.balance.toLocaleString()}
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="paymentAmount">Payment Amount (LKR)</Label>
+              <Label htmlFor="amount">Payment Amount (LKR) *</Label>
               <Input
-                id="paymentAmount"
+                id="amount"
                 type="number"
                 min="0"
                 max={selectedInvoice?.balance}
-                value={paymentAmount}
-                onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                value={paymentData.amount}
+                onChange={(e) =>
+                  setPaymentData({
+                    ...paymentData,
+                    amount: parseFloat(e.target.value) || 0,
+                  })
+                }
+                className="w-full h-10"
               />
             </div>
-            {paymentAmount > 0 && paymentAmount < (selectedInvoice?.balance || 0) && (
-              <div className="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-3">
-                <p className="text-sm text-yellow-800 dark:text-yellow-400">
-                  Partial payment. Remaining balance: LKR {((selectedInvoice?.balance || 0) - paymentAmount).toLocaleString()}
+            <div className="space-y-2">
+              <Label htmlFor="date">Payment Date *</Label>
+              <Input
+                id="date"
+                type="date"
+                value={paymentData.date}
+                onChange={(e) =>
+                  setPaymentData({ ...paymentData, date: e.target.value })
+                }
+                className="w-full h-10"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="method">Payment Method *</Label>
+              <Select
+                value={paymentData.method}
+                onValueChange={(value) =>
+                  setPaymentData({ ...paymentData, method: value })
+                }
+              >
+                <SelectTrigger className="w-full h-10">
+                  <SelectValue placeholder="Select method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bank">Bank Transfer</SelectItem>
+                  <SelectItem value="credit">Credit</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reference">Reference Number</Label>
+              <Input
+                id="reference"
+                placeholder="TXN/REF Number"
+                value={paymentData.reference}
+                onChange={(e) =>
+                  setPaymentData({ ...paymentData, reference: e.target.value })
+                }
+                className="w-full h-10"
+              />
+            </div>
+            {paymentData.method === "cheque" && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="chequeNo">Cheque Number *</Label>
+                  <Input
+                    id="chequeNo"
+                    placeholder="CHQ123456"
+                    value={paymentData.chequeNo}
+                    onChange={(e) =>
+                      setPaymentData({
+                        ...paymentData,
+                        chequeNo: e.target.value,
+                      })
+                    }
+                    className="w-full h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="chequeDate">Cheque Date *</Label>
+                  <Input
+                    id="chequeDate"
+                    type="date"
+                    value={paymentData.chequeDate}
+                    onChange={(e) =>
+                      setPaymentData({
+                        ...paymentData,
+                        chequeDate: e.target.value,
+                      })
+                    }
+                    className="w-full h-10"
+                  />
+                </div>
+              </>
+            )}
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Input
+                id="notes"
+                placeholder="Additional notes..."
+                value={paymentData.notes}
+                onChange={(e) =>
+                  setPaymentData({ ...paymentData, notes: e.target.value })
+                }
+                className="w-full h-10"
+              />
+            </div>
+            {paymentData.amount > 0 &&
+              paymentData.amount < (selectedInvoice?.balance || 0) && (
+                <div className="col-span-2 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-3">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-400">
+                    ⚠️ Partial payment. Remaining balance: LKR{" "}
+                    {(
+                      (selectedInvoice?.balance || 0) - paymentData.amount
+                    ).toLocaleString()}
+                  </p>
+                </div>
+              )}
+            {paymentData.amount === selectedInvoice?.balance && (
+              <div className="col-span-2 rounded-lg bg-green-50 dark:bg-green-900/20 p-3">
+                <p className="text-sm text-green-800 dark:text-green-400">
+                  ✅ Full payment. Invoice will be marked as paid and removed
+                  from overdue list.
                 </p>
               </div>
             )}
@@ -571,14 +811,14 @@ export default function DueInvoicesPage() {
             <Button
               variant="outline"
               onClick={() => {
-                setIsMarkPaidDialogOpen(false);
+                setIsRecordPaymentDialogOpen(false);
                 setSelectedInvoice(null);
-                setPaymentAmount(0);
+                resetPaymentForm();
               }}
             >
               Cancel
             </Button>
-            <Button onClick={handleMarkAsPaid}>
+            <Button onClick={handleRecordPayment}>
               <CheckCircle className="w-4 h-4 mr-2" />
               Record Payment
             </Button>
