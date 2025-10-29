@@ -1,7 +1,7 @@
 // src/app/(dashboard)/products/page.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Plus,
   Search,
@@ -10,6 +10,7 @@ import {
   Trash2,
   AlertTriangle,
   Package,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,111 +46,68 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// Mock products data
-const mockProducts = [
-  {
-    id: 1,
-    name: "2.5mm Single Core Wire",
-    type: "Single Core",
-    size: "2.5mm",
-    rollLength: 100,
-    stock: 45,
-    minStock: 50,
-    mrp: 2500,
-    totalValue: 112500,
-  },
-  {
-    id: 2,
-    name: "4.0mm Multi-strand Cable",
-    type: "Multi-strand",
-    size: "4.0mm",
-    rollLength: 100,
-    stock: 28,
-    minStock: 30,
-    mrp: 3500,
-    totalValue: 98000,
-  },
-  {
-    id: 3,
-    name: "1.5mm Flexible Wire",
-    type: "Flexible",
-    size: "1.5mm",
-    rollLength: 100,
-    stock: 62,
-    minStock: 40,
-    mrp: 1800,
-    totalValue: 111600,
-  },
-  {
-    id: 4,
-    name: "6.0mm House Wire",
-    type: "Single Core",
-    size: "6.0mm",
-    rollLength: 100,
-    stock: 15,
-    minStock: 20,
-    mrp: 4200,
-    totalValue: 63000,
-  },
-  {
-    id: 5,
-    name: "10mm Armoured Cable",
-    type: "Armoured",
-    size: "10mm",
-    rollLength: 100,
-    stock: 8,
-    minStock: 20,
-    mrp: 8500,
-    totalValue: 68000,
-  },
-  {
-    id: 6,
-    name: "16mm Single Core Wire",
-    type: "Single Core",
-    size: "16mm",
-    rollLength: 100,
-    stock: 52,
-    minStock: 25,
-    mrp: 6800,
-    totalValue: 353600,
-  },
-  {
-    id: 7,
-    name: "2.5mm Twin & Earth Cable",
-    type: "Twin & Earth",
-    size: "2.5mm",
-    rollLength: 200,
-    stock: 450,
-    minStock: 500,
-    mrp: 85,
-    totalValue: 38250,
-  },
-  {
-    id: 8,
-    name: "1.0mm Single Core Wire",
-    type: "Single Core",
-    size: "1.0mm",
-    rollLength: 100,
-    stock: 55,
-    minStock: 40,
-    mrp: 1200,
-    totalValue: 66000,
-  },
-];
+// --- START: DB-UI Interface and Mapping ---
+import { Database } from "@/types/database.types";
+
+type ProductInsert = Database["public"]["Tables"]["products"]["Insert"];
+type ProductUpdate = Database["public"]["Tables"]["products"]["Update"];
+
+interface Product {
+  id: string;
+  sku: string;
+  name: string;
+  type: string; // Maps to DB: category
+  size: string; // Derived from name/description
+  rollLength: number; // Derived from unit_of_measure
+  stock: number; // Maps to DB: stock_quantity
+  minStock: number; // Maps to DB: reorder_level
+  mrp: number; // Maps to DB: unit_price / mrp
+  totalValue: number; // Calculated
+}
+
+function mapDbProductToUiProduct(dbProduct: any): Product {
+  // Extract length from unit_of_measure (e.g., "100m Roll" -> 100)
+  const unitOfMeasure = dbProduct.unit_of_measure || dbProduct.name;
+  const rollLengthMatch = unitOfMeasure?.match(/(\d+)(?:m| meter)/i);
+
+  // Extract size (e.g., "2.5mm") from name or description
+  const sizeMatch =
+    dbProduct.name.match(/(\d+\.\d+|\d+)mm/i) ||
+    dbProduct.description?.match(/Size: (\d+\.\d+|\d+)/i);
+
+  const mrp = dbProduct.unit_price ?? 0;
+  const stock = dbProduct.stock_quantity ?? 0;
+  const minStock = dbProduct.reorder_level ?? 0;
+
+  return {
+    id: dbProduct.id.toString(),
+    sku: dbProduct.sku,
+    name: dbProduct.name,
+    type: dbProduct.category || "Other", // UI 'type' maps to DB 'category'
+    size: sizeMatch
+      ? sizeMatch[1] + (dbProduct.name.includes("mm") ? "mm" : "")
+      : "N/A",
+    rollLength: rollLengthMatch ? parseInt(rollLengthMatch[1]) : 100, // Default to 100m
+    stock: stock,
+    minStock: minStock,
+    mrp: mrp,
+    totalValue: stock * mrp,
+  };
+}
+// --- END: DB-UI Interface and Mapping ---
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState(mockProducts);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [stockFilter, setStockFilter] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<
-    (typeof mockProducts)[0] | null
-  >(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({
     name: "",
-    type: "",
+    type: "Single Core",
     size: "",
     rollLength: 100,
     customRollLength: 0,
@@ -158,14 +116,182 @@ export default function ProductsPage() {
     mrp: 0,
   });
 
-  // Filter products
+  // -----------------------------------------------------------
+  // 1. Data Fetching
+  // -----------------------------------------------------------
+  const fetchProducts = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/products");
+      const data = await response.json();
+
+      if (response.ok && data.products) {
+        const uiProducts = (data.products as any[]).map(
+          mapDbProductToUiProduct
+        );
+        setProducts(uiProducts);
+      } else {
+        console.error("Failed to fetch products:", data.error);
+        setProducts([]);
+      }
+    } catch (error) {
+      console.error("Network error fetching products:", error);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  // -----------------------------------------------------------
+  // 2. CRUD Handlers
+  // -----------------------------------------------------------
+
+  const handleAddProduct = async () => {
+    // Basic form validation
+    if (
+      !formData.name ||
+      !formData.type ||
+      !formData.size ||
+      formData.mrp <= 0 ||
+      isNaN(formData.mrp)
+    ) {
+      alert(
+        "Please fill all required fields: Name, Type, Size, and MRP (must be positive)."
+      );
+      return;
+    }
+
+    const finalRollLength =
+      formData.rollLength === 0
+        ? formData.customRollLength
+        : formData.rollLength;
+
+    // Map UI fields to DB schema (ProductInsert/ProductUpdate)
+    const payload = {
+      name: formData.name,
+      category: formData.type, // UI 'type' maps to DB 'category'
+      unit_price: formData.mrp,
+      stock_quantity: formData.stock,
+      reorder_level: formData.minStock,
+      unit_of_measure: `${finalRollLength}m Roll`, // Store full unit_of_measure
+      description: `Size: ${formData.size}, Length: ${finalRollLength}m`, // Keep detailed description
+      is_active: true,
+      mrp: formData.mrp,
+      // NOTE: Removed barcode, type, size, roll_length from payload, as per the request
+      // and updated database schema.
+    };
+
+    try {
+      let response;
+      if (selectedProduct) {
+        // PUT: Update existing product
+        response = await fetch(`/api/products/${selectedProduct.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload as ProductUpdate),
+        });
+
+        if (!response.ok) throw new Error("Failed to update product");
+        alert("Product updated successfully!");
+      } else {
+        // POST: Add new product
+        const insertPayload: ProductInsert = {
+          ...payload,
+          // Placeholder SKU - ideally from server-side logic
+          sku: `SKU-${Date.now().toString().slice(-6)}`,
+        } as ProductInsert;
+
+        response = await fetch("/api/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(insertPayload),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("API Error Response:", errorData);
+          throw new Error(errorData.error || "Failed to add new product");
+        }
+        alert("Product added successfully!");
+      }
+
+      // Refresh data to update UI
+      await fetchProducts();
+    } catch (error) {
+      console.error("Error saving product:", error);
+      alert(`Error saving product: ${(error as Error).message}`);
+    }
+
+    setIsAddDialogOpen(false);
+    setSelectedProduct(null);
+    resetForm();
+  };
+
+  const handleDeleteProduct = async () => {
+    if (!selectedProduct) return;
+
+    try {
+      const response = await fetch(`/api/products/${selectedProduct.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) throw new Error("Failed to delete product");
+
+      alert(`Product ${selectedProduct.name} deleted successfully!`);
+      await fetchProducts();
+    } catch (error) {
+      console.error("Error deleting product:", error);
+      alert(`Error deleting product. See console for details.`);
+    }
+
+    setIsDeleteDialogOpen(false);
+    setSelectedProduct(null);
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      type: "Single Core",
+      size: "",
+      rollLength: 100,
+      customRollLength: 0,
+      stock: 0,
+      minStock: 0,
+      mrp: 0,
+    });
+  };
+
+  const openEditDialog = (product: Product) => {
+    const isStandardLength = [50, 100, 500].includes(product.rollLength);
+    setFormData({
+      name: product.name,
+      type: product.type,
+      size: product.size,
+      rollLength: isStandardLength ? product.rollLength : 0,
+      customRollLength: isStandardLength ? 0 : product.rollLength,
+      stock: product.stock,
+      minStock: product.minStock,
+      mrp: product.mrp,
+    });
+    setSelectedProduct(product);
+    setIsAddDialogOpen(true);
+  };
+
+  // -----------------------------------------------------------
+  // 3. Filtering and Calculations (Using fetched data)
+  // -----------------------------------------------------------
+
   const filteredProducts = products.filter((product) => {
     const matchesSearch =
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.size.includes(searchQuery) ||
       product.type.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesType = typeFilter === "all" || product.type === typeFilter;
+    const matchesType = typeFilter === "all" || product.type === product.type;
 
     let matchesStock = true;
     if (stockFilter === "low") {
@@ -177,76 +303,8 @@ export default function ProductsPage() {
     return matchesSearch && matchesType && matchesStock;
   });
 
-  // Get unique types for filter
   const types = ["all", ...new Set(products.map((p) => p.type))];
 
-  const handleAddProduct = () => {
-    const finalRollLength =
-      formData.rollLength === 0
-        ? formData.customRollLength
-        : formData.rollLength;
-
-    if (selectedProduct) {
-      // Update existing product
-      setProducts(
-        products.map((p) =>
-          p.id === selectedProduct.id
-            ? {
-                ...p,
-                name: formData.name,
-                type: formData.type,
-                size: formData.size,
-                rollLength: finalRollLength,
-                stock: formData.stock,
-                minStock: formData.minStock,
-                mrp: formData.mrp,
-                totalValue: formData.stock * formData.mrp,
-              }
-            : p
-        )
-      );
-    } else {
-      // Add new product
-      const newProduct = {
-        id: products.length + 1,
-        name: formData.name,
-        type: formData.type,
-        size: formData.size,
-        rollLength: finalRollLength,
-        stock: formData.stock,
-        minStock: formData.minStock,
-        mrp: formData.mrp,
-        totalValue: formData.stock * formData.mrp,
-      };
-      setProducts([...products, newProduct]);
-    }
-    setIsAddDialogOpen(false);
-    setSelectedProduct(null);
-    resetForm();
-  };
-
-  const handleDeleteProduct = () => {
-    if (selectedProduct) {
-      setProducts(products.filter((p) => p.id !== selectedProduct.id));
-      setIsDeleteDialogOpen(false);
-      setSelectedProduct(null);
-    }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      name: "",
-      type: "",
-      size: "",
-      rollLength: 100,
-      customRollLength: 0,
-      stock: 0,
-      minStock: 0,
-      mrp: 0,
-    });
-  };
-
-  // Calculate stats
   const totalProducts = products.length;
   const totalStockValue = products.reduce((sum, p) => sum + p.totalValue, 0);
   const lowStockProducts = products.filter((p) => p.stock < p.minStock).length;
@@ -261,7 +319,13 @@ export default function ProductsPage() {
             Manage wire products and inventory
           </p>
         </div>
-        <Button onClick={() => setIsAddDialogOpen(true)}>
+        <Button
+          onClick={() => {
+            setSelectedProduct(null);
+            resetForm();
+            setIsAddDialogOpen(true);
+          }}
+        >
           <Plus className="w-4 h-4 mr-2" />
           Add New Product
         </Button>
@@ -358,127 +422,114 @@ export default function ProductsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Product Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Size</TableHead>
-                <TableHead className="text-right">Roll Length (m)</TableHead>
-                <TableHead className="text-right">Stock</TableHead>
-                <TableHead className="text-right">MRP</TableHead>
-                <TableHead className="text-right">Total Value</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProducts.length === 0 ? (
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" />
+              <span className="text-muted-foreground">Loading products...</span>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="text-center py-8 text-muted-foreground"
-                  >
-                    No products found
-                  </TableCell>
+                  <TableHead>Product Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Size</TableHead>
+                  <TableHead className="text-right">Roll Length (m)</TableHead>
+                  <TableHead className="text-right">Stock</TableHead>
+                  <TableHead className="text-right">MRP</TableHead>
+                  <TableHead className="text-right">Total Value</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ) : (
-                filteredProducts.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        {product.name}
-                        {product.stock < product.minStock && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive">
-                            <AlertTriangle className="w-3 h-3 mr-1" />
-                            Low Stock
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                        {product.type}
-                      </span>
-                    </TableCell>
-                    <TableCell>{product.size}</TableCell>
-                    <TableCell className="text-right">
-                      {product.rollLength}m
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span
-                        className={
-                          product.stock < product.minStock
-                            ? "text-destructive font-medium"
-                            : ""
-                        }
-                      >
-                        {product.stock} rolls
-                      </span>
-                      <span className="text-xs text-muted-foreground block">
-                        Min: {product.minStock}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      LKR {product.mrp.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      LKR {product.totalValue.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() =>
-                            (window.location.href = `/products/${product.id}`)
-                          }
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => {
-                            const isStandardLength = [50, 100, 500].includes(
-                              product.rollLength
-                            );
-                            setFormData({
-                              name: product.name,
-                              type: product.type,
-                              size: product.size,
-                              rollLength: isStandardLength
-                                ? product.rollLength
-                                : 0,
-                              customRollLength: isStandardLength
-                                ? 0
-                                : product.rollLength,
-                              stock: product.stock,
-                              minStock: product.minStock,
-                              mrp: product.mrp,
-                            });
-                            setSelectedProduct(product);
-                            setIsAddDialogOpen(true);
-                          }}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => {
-                            setSelectedProduct(product);
-                            setIsDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </div>
+              </TableHeader>
+              <TableBody>
+                {filteredProducts.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={8}
+                      className="text-center py-8 text-muted-foreground"
+                    >
+                      No products found
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  filteredProducts.map((product) => (
+                    <TableRow key={product.id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {product.name}
+                          {product.stock < product.minStock && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive">
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              Low Stock
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                          {product.type}
+                        </span>
+                      </TableCell>
+                      <TableCell>{product.size}</TableCell>
+                      <TableCell className="text-right">
+                        {product.rollLength}m
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span
+                          className={
+                            product.stock < product.minStock
+                              ? "text-destructive font-medium"
+                              : ""
+                          }
+                        >
+                          {product.stock} rolls
+                        </span>
+                        <span className="text-xs text-muted-foreground block">
+                          Min: {product.minStock}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        LKR {product.mrp.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        LKR {product.totalValue.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() =>
+                              (window.location.href = `/products/${product.id}`)
+                            }
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => openEditDialog(product)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => {
+                              setSelectedProduct(product);
+                              setIsDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -598,6 +649,7 @@ export default function ProductsPage() {
                 placeholder="0"
                 value={formData.mrp}
                 onChange={(e) =>
+                  // Robust float parsing, defaults to 0 if input is empty string or NaN
                   setFormData({
                     ...formData,
                     mrp: parseFloat(e.target.value) || 0,
@@ -615,6 +667,7 @@ export default function ProductsPage() {
                 placeholder="0"
                 value={formData.stock}
                 onChange={(e) =>
+                  // Robust integer parsing, defaults to 0
                   setFormData({
                     ...formData,
                     stock: parseInt(e.target.value) || 0,
@@ -632,6 +685,7 @@ export default function ProductsPage() {
                 placeholder="0"
                 value={formData.minStock}
                 onChange={(e) =>
+                  // Robust integer parsing, defaults to 0
                   setFormData({
                     ...formData,
                     minStock: parseInt(e.target.value) || 0,

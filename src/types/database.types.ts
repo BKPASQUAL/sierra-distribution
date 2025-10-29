@@ -103,10 +103,10 @@ export interface Database {
           stock_quantity: number;
           reorder_level: number;
           unit_of_measure: string;
-          barcode: string | null;
           is_active: boolean;
           created_at: string;
           updated_at: string;
+          mrp: number;
         };
         Insert: {
           id?: string;
@@ -119,10 +119,10 @@ export interface Database {
           stock_quantity?: number;
           reorder_level?: number;
           unit_of_measure?: string;
-          barcode?: string | null;
           is_active?: boolean;
           created_at?: string;
           updated_at?: string;
+          mrp: number;
         };
         Update: {
           id?: string;
@@ -135,10 +135,10 @@ export interface Database {
           stock_quantity?: number;
           reorder_level?: number;
           unit_of_measure?: string;
-          barcode?: string | null;
           is_active?: boolean;
           created_at?: string;
           updated_at?: string;
+          mrp?: number;
         };
       };
       orders: {
@@ -327,7 +327,6 @@ export interface Database {
           created_at?: string;
         };
       };
-      // START OF NEW SUPPLIERS TABLE
       suppliers: {
         Row: {
           id: string;
@@ -366,7 +365,6 @@ export interface Database {
           updated_at?: string;
         };
       };
-      // END OF NEW SUPPLIERS TABLE
     };
     Views: {
       [_ in never]: never;
