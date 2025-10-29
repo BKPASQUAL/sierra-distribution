@@ -1,5 +1,4 @@
 // src/app/(dashboard)/purchases/new/page.tsx
-// SIMPLIFIED VERSION - MRP and Discount Only (No Cost Price)
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -51,8 +50,8 @@ interface PurchaseItem {
   unit: string;
   mrp: number; // Maximum Retail Price (unit_price)
   discountPercent: number; // Discount percentage
-  discountAmount: number; // Calculated discount in LKR
-  finalPrice: number; // Price after discount
+  discountAmount: number; // Calculated discount in LKR (per unit)
+  finalPrice: number; // Price after discount (per unit) - This is the new COST PRICE
   total: number; // Final line total
   mrpChanged: boolean; // Track if MRP was modified
 }
@@ -87,7 +86,8 @@ export default function AddPurchasePage() {
       const productsData = await productsResponse.json();
 
       if (productsResponse.ok && productsData.products) {
-        setProducts(productsData.products);
+        // NOTE: Coerce the fetched products array to the local interface
+        setProducts(productsData.products as Product[]);
       }
 
       // Fetch supplier (Sierra Cables)
@@ -128,7 +128,7 @@ export default function AddPurchasePage() {
     quantity: number
   ) => {
     const discountAmount = (mrp * discountPercent) / 100;
-    const finalPrice = mrp - discountAmount;
+    const finalPrice = mrp - discountAmount; // This is the new Cost Price per unit
     const total = finalPrice * quantity;
 
     return {
@@ -166,8 +166,8 @@ export default function AddPurchasePage() {
       unit: product.unit_of_measure,
       mrp: currentItem.mrp,
       discountPercent: currentItem.discountPercent,
-      discountAmount: discountAmount,
-      finalPrice: finalPrice,
+      discountAmount: discountAmount, // This is the unit discount amount
+      finalPrice: finalPrice, // This is the unit price after discount
       total: total,
       mrpChanged: currentItem.mrp !== product.unit_price,
     };
@@ -199,7 +199,12 @@ export default function AddPurchasePage() {
     0
   );
 
-  // Save purchase and update product MRPs if changed
+  /**
+   * UPDATED LOGIC:
+   * 1. Update Product Stock (+= quantity) and Cost Price (finalPrice) via PUT /api/products/[id]
+   * 2. Create Inventory Transaction log via POST /api/inventory-transactions
+   * 3. Save the main Purchase Order Document via POST /api/purchases
+   */
   const handleSavePurchase = async () => {
     if (items.length === 0) {
       alert("Please add at least one item");
@@ -212,26 +217,57 @@ export default function AddPurchasePage() {
     }
 
     try {
-      // Update MRP for products where it changed
-      const productUpdatePromises = items
-        .filter((item) => item.mrpChanged)
-        .map((item) => {
-          return fetch(`/api/products/${item.productId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              unit_price: item.mrp,
-            }),
-          });
+      const purchaseId = `PUR-${Date.now().toString().slice(-6)}`;
+
+      // --- Step 1 & 2: Update Product Stock, Cost Price, and MRP (if changed) + Create Inventory Transaction ---
+      const transactionAndProductUpdatePromises = items.map(async (item) => {
+        const currentProduct = products.find((p) => p.id === item.productId);
+        if (!currentProduct) return;
+
+        // Calculate New Stock Quantity by adding received quantity
+        const newStock = currentProduct.stock_quantity + item.quantity;
+
+        // Final Price is the new acquisition cost (Cost Price)
+        const newCostPrice = item.finalPrice;
+
+        // Prepare Product Update Payload
+        const productUpdatePayload = {
+          // 1. Update MRP (unit_price) if changed
+          unit_price: item.mrpChanged ? item.mrp : currentProduct.unit_price,
+          // 2. Update stock_quantity (current stock) by adding received quantity
+          stock_quantity: newStock,
+          // 3. Update cost_price with the unit price after discount
+          cost_price: newCostPrice,
+        };
+
+        // Send PUT request to update product
+        await fetch(`/api/products/${item.productId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(productUpdatePayload),
         });
 
-      if (productUpdatePromises.length > 0) {
-        await Promise.all(productUpdatePromises);
-        console.log(`Updated MRP for ${productUpdatePromises.length} products`);
-      }
+        // --- Step 3: Create Inventory Transaction Entry ---
+        await fetch("/api/inventory-transactions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            product_id: item.productId,
+            transaction_type: "purchase",
+            quantity: item.quantity,
+            reference_id: purchaseId,
+            reference_type: "purchase",
+            notes: `Stock addition from purchase order ${purchaseId}`,
+          }),
+        });
+      });
 
-      // TODO: Save purchase order to API
+      // Wait for all product updates and inventory transactions to complete
+      await Promise.all(transactionAndProductUpdatePromises);
+
+      // --- Step 4: Save the main Purchase Order Document (Mocking API call) ---
       const purchaseData = {
+        purchase_id: purchaseId, // Using the generated ID
         supplier_id: supplierId,
         purchase_date: purchaseDate,
         items: items.map((item) => ({
@@ -240,22 +276,32 @@ export default function AddPurchasePage() {
           mrp: item.mrp,
           discount_percent: item.discountPercent,
           discount_amount: item.discountAmount,
-          unit_price: item.finalPrice,
+          unit_price: item.finalPrice, // Price actually paid per unit
           line_total: item.total,
         })),
         subtotal: subtotal,
         total_discount: totalDiscount,
         total_amount: subtotal,
+        status: "Received", // Assuming stock is updated instantly upon saving
       };
 
-      console.log("Purchase Order Data:", purchaseData);
+      // Assuming a POST /api/purchases endpoint exists to save the document:
+      const savePurchaseResponse = await fetch("/api/purchases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(purchaseData),
+      });
+
+      if (!savePurchaseResponse.ok) {
+        console.error(
+          "Failed to save Purchase Order document:",
+          await savePurchaseResponse.json()
+        );
+        throw new Error("Failed to save Purchase Order document.");
+      }
 
       alert(
-        `Purchase order created successfully!${
-          productUpdatePromises.length > 0
-            ? `\n${productUpdatePromises.length} product MRPs updated.`
-            : ""
-        }`
+        `Purchase order ${purchaseId} created and inventory updated successfully!`
       );
 
       router.push("/purchases");
@@ -293,7 +339,7 @@ export default function AddPurchasePage() {
             Create a new purchase order from Sierra Cables Ltd
           </p>
         </div>
-        <Button onClick={handleSavePurchase}>
+        <Button onClick={handleSavePurchase} disabled={items.length === 0}>
           <Save className="w-4 h-4 mr-2" />
           Save Purchase
         </Button>
@@ -529,7 +575,7 @@ export default function AddPurchasePage() {
                         <TableHead className="text-right">MRP</TableHead>
                         <TableHead className="text-right">Discount %</TableHead>
                         <TableHead className="text-right">
-                          Final Price
+                          Final Price (Cost)
                         </TableHead>
                         <TableHead className="text-right">Total</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
@@ -639,7 +685,12 @@ export default function AddPurchasePage() {
                 </div>
               )}
 
-              <Button onClick={handleSavePurchase} className="w-full" size="lg">
+              <Button
+                onClick={handleSavePurchase}
+                className="w-full"
+                size="lg"
+                disabled={items.length === 0}
+              >
                 <Save className="w-4 h-4 mr-2" />
                 Create Purchase Order
               </Button>
