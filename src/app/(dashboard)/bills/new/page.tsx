@@ -31,30 +31,25 @@ import {
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-// Mock customers
-const mockCustomers = [
-  { id: 1, name: "Perera Hardware" },
-  { id: 2, name: "Silva Electricals" },
-  { id: 3, name: "Fernando Constructions" },
-  { id: 4, name: "Jayasinghe Hardware Store" },
-  { id: 5, name: "Mendis Electrician Services" },
-];
+// Types for API data
+interface Customer {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  city: string | null;
+}
 
-// Mock products with MRP
-const mockProducts = [
-  { id: 1, name: "2.5mm Single Core Wire", unit: "roll", mrp: 3200, stock: 45 },
-  {
-    id: 2,
-    name: "4.0mm Multi-strand Cable",
-    unit: "roll",
-    mrp: 4500,
-    stock: 28,
-  },
-  { id: 3, name: "1.5mm Flexible Wire", unit: "roll", mrp: 2400, stock: 62 },
-  { id: 4, name: "6.0mm House Wire", unit: "roll", mrp: 5500, stock: 15 },
-  { id: 5, name: "10mm Armoured Cable", unit: "roll", mrp: 11000, stock: 8 },
-  { id: 6, name: "16mm Single Core Wire", unit: "roll", mrp: 8800, stock: 52 },
-];
+interface Product {
+  id: string;
+  name: string;
+  sku: string;
+  unit_of_measure: string;
+  unit_price: number;
+  cost_price: number | null;
+  stock_quantity: number;
+}
 
 interface BillItem {
   id: string;
@@ -66,6 +61,8 @@ interface BillItem {
   discount: number;
   sellingPrice: number;
   total: number;
+  costPrice: number;
+  profit: number;
 }
 
 export default function CreateBillPage() {
@@ -74,18 +71,71 @@ export default function CreateBillPage() {
   const [billDate, setBillDate] = useState(
     new Date().toISOString().split("T")[0]
   );
-  const [billNo, setBillNo] = useState(`INV-${String(Date.now()).slice(-6)}`);
+  const [billNo, setBillNo] = useState("");
   const [items, setItems] = useState<BillItem[]>([]);
   const [billDiscount, setBillDiscount] = useState(0);
   const [paymentType, setPaymentType] = useState("cash");
   const [paidAmount, setPaidAmount] = useState(0);
-  const [status, setStatus] = useState("Processing");
+
+  // API data states
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(true);
+  const [loadingProducts, setLoadingProducts] = useState(true);
 
   const [currentItem, setCurrentItem] = useState({
     productId: "",
     quantity: 1,
     discount: 0,
   });
+
+  // Fetch customers from API
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        const response = await fetch("/api/customers");
+        const data = await response.json();
+
+        if (data.customers) {
+          setCustomers(data.customers);
+        } else {
+          console.error("Failed to fetch customers:", data.error);
+          alert(`Error fetching customers: ${data.error}`);
+        }
+      } catch (error) {
+        console.error("Network error fetching customers:", error);
+        alert("Network error fetching customers");
+      } finally {
+        setLoadingCustomers(false);
+      }
+    };
+
+    fetchCustomers();
+  }, []);
+
+  // Fetch products from API
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await fetch("/api/products");
+        const data = await response.json();
+
+        if (data.products) {
+          setProducts(data.products);
+        } else {
+          console.error("Failed to fetch products:", data.error);
+          alert(`Error fetching products: ${data.error}`);
+        }
+      } catch (error) {
+        console.error("Network error fetching products:", error);
+        alert("Network error fetching products");
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
 
   // Calculate selling price based on MRP and discount
   const calculateSellingPrice = (mrp: number, discount: number) => {
@@ -99,30 +149,36 @@ export default function CreateBillPage() {
       return;
     }
 
-    const product = mockProducts.find(
-      (p) => p.id.toString() === currentItem.productId
-    );
+    const product = products.find((p) => p.id === currentItem.productId);
     if (!product) return;
 
-    if (currentItem.quantity > product.stock) {
-      alert(`Only ${product.stock} ${product.unit}s available in stock`);
+    if (currentItem.quantity > product.stock_quantity) {
+      alert(
+        `Only ${product.stock_quantity} ${product.unit_of_measure}s available in stock`
+      );
       return;
     }
 
     const sellingPrice = calculateSellingPrice(
-      product.mrp,
+      product.unit_price,
       currentItem.discount
     );
+    
+    const costPrice = product.cost_price || 0;
+    const itemProfit = (sellingPrice - costPrice) * currentItem.quantity;
+    
     const newItem: BillItem = {
       id: Date.now().toString(),
       productId: currentItem.productId,
       productName: product.name,
       quantity: currentItem.quantity,
-      unit: product.unit,
-      mrp: product.mrp,
+      unit: product.unit_of_measure,
+      mrp: product.unit_price,
       discount: currentItem.discount,
       sellingPrice: sellingPrice,
       total: sellingPrice * currentItem.quantity,
+      costPrice: costPrice,
+      profit: itemProfit,
     };
 
     setItems([...items, newItem]);
@@ -136,6 +192,7 @@ export default function CreateBillPage() {
 
   // Calculate totals
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+  const totalProfit = items.reduce((sum, item) => sum + item.profit, 0);
   const billDiscountAmount = (subtotal * billDiscount) / 100;
   const finalTotal = subtotal - billDiscountAmount;
   const balance = finalTotal - paidAmount;
@@ -148,9 +205,13 @@ export default function CreateBillPage() {
   }, [paymentType, finalTotal]);
 
   // Save bill
-  const handleSaveBill = () => {
+  const handleSaveBill = async () => {
     if (!customerId) {
       alert("Please select a customer");
+      return;
+    }
+    if (!billNo.trim()) {
+      alert("Please enter an invoice number");
       return;
     }
     if (items.length === 0) {
@@ -158,28 +219,65 @@ export default function CreateBillPage() {
       return;
     }
 
-    const billData = {
-      billNo,
-      customerId,
-      date: billDate,
-      items,
-      subtotal,
-      billDiscount,
-      billDiscountAmount,
-      finalTotal,
-      paymentType,
-      paidAmount,
-      balance,
-      status,
-    };
+    try {
+      // Prepare order items data
+      const orderItems = items.map(item => ({
+        product_id: item.productId,
+        quantity: item.quantity,
+        unit_price: item.sellingPrice,
+        discount_percent: item.discount,
+      }));
 
-    console.log("Saving bill:", billData);
-    alert("Bill saved successfully! Stock has been updated.");
-    router.push("/bills");
+      // Prepare order data
+      const orderData = {
+        order_number: billNo,
+        customer_id: customerId,
+        order_date: billDate,
+        items: orderItems,
+        subtotal: subtotal,
+        discount_amount: billDiscountAmount,
+        total_amount: finalTotal,
+        payment_method: paymentType,
+        paid_amount: paidAmount,
+        notes: `Bill created via POS. Balance: LKR ${balance.toLocaleString()}`,
+      };
+
+      // Call API to create order
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orderData),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to create bill");
+      }
+
+      // Determine payment status for message
+      let paymentStatusText = 'Unpaid';
+      if (paidAmount >= finalTotal) {
+        paymentStatusText = 'Fully Paid';
+      } else if (paidAmount > 0) {
+        paymentStatusText = 'Partially Paid';
+      }
+
+      // Show success message with profit information
+      const profitInfo = result.profit 
+        ? `\n\n✅ Total Profit: LKR ${result.profit.toLocaleString()}` 
+        : '';
+      
+      alert(`✅ Bill Saved Successfully!${profitInfo}\n\n📦 Stock has been updated.\n💰 Payment Status: ${paymentStatusText}`);
+      router.push("/bills");
+    } catch (error) {
+      console.error("Error saving bill:", error);
+      alert(`❌ Error saving bill: ${(error as Error).message}`);
+    }
   };
 
-  const handleSaveAndPrint = () => {
-    handleSaveBill();
+  const handleSaveAndPrint = async () => {
+    await handleSaveBill();
     // Trigger print dialog
     window.print();
   };
@@ -202,11 +300,18 @@ export default function CreateBillPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleSaveBill}>
+          <Button 
+            variant="outline" 
+            onClick={handleSaveBill}
+            disabled={items.length === 0 || !customerId || !billNo.trim()}
+          >
             <Save className="w-4 h-4 mr-2" />
             Save Bill
           </Button>
-          <Button onClick={handleSaveAndPrint}>
+          <Button 
+            onClick={handleSaveAndPrint}
+            disabled={items.length === 0 || !customerId || !billNo.trim()}
+          >
             <Printer className="w-4 h-4 mr-2" />
             Save & Print
           </Button>
@@ -223,16 +328,23 @@ export default function CreateBillPage() {
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="customer">Customer *</Label>
-              <Select value={customerId} onValueChange={setCustomerId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select customer" />
+              <Select
+                value={customerId}
+                onValueChange={setCustomerId}
+                disabled={loadingCustomers}
+              >
+                <SelectTrigger className="w-full h-10">
+                  <SelectValue
+                    placeholder={
+                      loadingCustomers
+                        ? "Loading customers..."
+                        : "Select customer"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockCustomers.map((customer) => (
-                    <SelectItem
-                      key={customer.id}
-                      value={customer.id.toString()}
-                    >
+                  {customers.map((customer) => (
+                    <SelectItem key={customer.id} value={customer.id}>
                       {customer.name}
                     </SelectItem>
                   ))}
@@ -246,15 +358,17 @@ export default function CreateBillPage() {
                 type="date"
                 value={billDate}
                 onChange={(e) => setBillDate(e.target.value)}
+                className="w-full h-10"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="billNo">Invoice No *</Label>
               <Input
                 id="billNo"
+                placeholder="Enter invoice number"
                 value={billNo}
                 onChange={(e) => setBillNo(e.target.value)}
-                disabled
+                className="w-full h-10"
               />
             </div>
           </div>
@@ -276,14 +390,19 @@ export default function CreateBillPage() {
                 onValueChange={(value) =>
                   setCurrentItem({ ...currentItem, productId: value })
                 }
+                disabled={loadingProducts}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select product" />
+                <SelectTrigger className="w-full h-10">
+                  <SelectValue
+                    placeholder={
+                      loadingProducts ? "Loading products..." : "Select product"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockProducts.map((product) => (
-                    <SelectItem key={product.id} value={product.id.toString()}>
-                      {product.name} (Stock: {product.stock})
+                  {products.map((product) => (
+                    <SelectItem key={product.id} value={product.id}>
+                      {product.name} (Stock: {product.stock_quantity})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -302,6 +421,7 @@ export default function CreateBillPage() {
                     quantity: parseInt(e.target.value) || 0,
                   })
                 }
+                className="w-full h-10"
               />
             </div>
             <div className="space-y-2">
@@ -311,11 +431,11 @@ export default function CreateBillPage() {
                 disabled
                 value={
                   currentItem.productId
-                    ? mockProducts.find(
-                        (p) => p.id.toString() === currentItem.productId
-                      )?.mrp || 0
+                    ? products.find((p) => p.id === currentItem.productId)
+                        ?.unit_price || 0
                     : 0
                 }
+                className="w-full h-10"
               />
             </div>
             <div className="space-y-2">
@@ -332,11 +452,12 @@ export default function CreateBillPage() {
                     discount: parseFloat(e.target.value) || 0,
                   })
                 }
+                className="w-full h-10"
               />
             </div>
             <div className="space-y-2">
               <Label className="invisible">Add</Label>
-              <Button onClick={handleAddItem} className="w-full">
+              <Button onClick={handleAddItem} className="w-full h-10">
                 <Plus className="w-4 h-4 mr-2" />
                 Add Item
               </Button>
@@ -370,6 +491,7 @@ export default function CreateBillPage() {
                     <TableHead className="text-right">Discount (%)</TableHead>
                     <TableHead className="text-right">Selling Price</TableHead>
                     <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="text-right">Profit</TableHead>
                     <TableHead className="text-right">Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -393,6 +515,9 @@ export default function CreateBillPage() {
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         LKR {item.total.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-blue-600">
+                        LKR {item.profit.toLocaleString()}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
@@ -418,6 +543,12 @@ export default function CreateBillPage() {
                         LKR {subtotal.toLocaleString()}
                       </span>
                     </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Total Profit:</span>
+                      <span className="font-bold text-blue-600">
+                        LKR {totalProfit.toLocaleString()}
+                      </span>
+                    </div>
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground">
                         Bill Discount:
@@ -432,7 +563,7 @@ export default function CreateBillPage() {
                           onChange={(e) =>
                             setBillDiscount(parseFloat(e.target.value) || 0)
                           }
-                          className="w-20 h-8 text-right"
+                          className="w-24 h-10 text-right"
                         />
                         <span>%</span>
                         <span className="font-medium text-green-600">
@@ -452,88 +583,72 @@ export default function CreateBillPage() {
         </CardContent>
       </Card>
 
-      {/* Payment & Status Section */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Payment Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Payment Type *</Label>
-              <RadioGroup value={paymentType} onValueChange={setPaymentType}>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="cash" id="cash" />
-                  <Label htmlFor="cash" className="font-normal cursor-pointer">
-                    Cash
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="credit" id="credit" />
-                  <Label
-                    htmlFor="credit"
-                    className="font-normal cursor-pointer"
-                  >
-                    Credit
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="bank" id="bank" />
-                  <Label htmlFor="bank" className="font-normal cursor-pointer">
-                    Bank Transfer
-                  </Label>
-                </div>
-              </RadioGroup>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="paidAmount">Paid Amount (LKR)</Label>
-              <Input
-                id="paidAmount"
-                type="number"
-                min="0"
-                placeholder="0"
-                value={paidAmount}
-                onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
-                disabled={paymentType === "cash"}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Balance</Label>
-              <div
-                className={`text-2xl font-bold ${
-                  balance > 0 ? "text-destructive" : "text-green-600"
-                }`}
-              >
-                LKR {balance.toLocaleString()}
+      {/* Payment Details Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment Details</CardTitle>
+          <CardDescription>Select payment method and amount</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Payment Method *</Label>
+            <RadioGroup value={paymentType} onValueChange={setPaymentType}>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="cash" id="cash" />
+                <Label htmlFor="cash" className="font-normal cursor-pointer">
+                  Cash
+                </Label>
               </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="credit" id="credit" />
+                <Label htmlFor="credit" className="font-normal cursor-pointer">
+                  Credit
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="bank" id="bank" />
+                <Label htmlFor="bank" className="font-normal cursor-pointer">
+                  Bank Transfer
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="cheque" id="cheque" />
+                <Label htmlFor="cheque" className="font-normal cursor-pointer">
+                  Cheque
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="paidAmount">Paid Amount (LKR)</Label>
+            <Input
+              id="paidAmount"
+              type="number"
+              min="0"
+              placeholder="0"
+              value={paidAmount}
+              onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
+              disabled={paymentType === "cash"}
+              className="w-full h-10"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Balance</Label>
+            <div
+              className={`text-2xl font-bold ${
+                balance > 0 ? "text-destructive" : "text-green-600"
+              }`}
+            >
+              LKR {balance.toLocaleString()}
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Order Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="status">Current Status *</Label>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Processing">Processing</SelectItem>
-                  <SelectItem value="Checking">Checking</SelectItem>
-                  <SelectItem value="Delivered">Delivered</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground mt-2">
-                Status Flow: Processing → Checking → Delivered
+            {balance > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Outstanding balance will be tracked in due invoices
               </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Action Buttons */}
       <div className="flex justify-end gap-4">
@@ -542,7 +657,7 @@ export default function CreateBillPage() {
         </Button>
         <Button
           onClick={handleSaveBill}
-          disabled={items.length === 0 || !customerId}
+          disabled={items.length === 0 || !customerId || !billNo.trim()}
           variant="outline"
         >
           <Save className="w-4 h-4 mr-2" />
@@ -550,7 +665,7 @@ export default function CreateBillPage() {
         </Button>
         <Button
           onClick={handleSaveAndPrint}
-          disabled={items.length === 0 || !customerId}
+          disabled={items.length === 0 || !customerId || !billNo.trim()}
         >
           <Printer className="w-4 h-4 mr-2" />
           Save & Print Invoice
