@@ -299,6 +299,10 @@ export interface Database {
           notes: string | null;
           created_by: string | null;
           created_at: string;
+          // NEW FIELDS FOR CHEQUE TRACKING:
+          cheque_number: string | null;
+          cheque_date: string | null;
+          cheque_status: "pending" | "passed" | "returned" | null;
         };
         Insert: {
           id?: string;
@@ -312,6 +316,10 @@ export interface Database {
           notes?: string | null;
           created_by?: string | null;
           created_at?: string;
+          // NEW FIELDS FOR CHEQUE TRACKING:
+          cheque_number?: string | null;
+          cheque_date?: string | null;
+          cheque_status?: "pending" | "passed" | "returned" | null;
         };
         Update: {
           id?: string;
@@ -325,8 +333,13 @@ export interface Database {
           notes?: string | null;
           created_by?: string | null;
           created_at?: string;
+          // NEW FIELDS FOR CHEQUE TRACKING:
+          cheque_number?: string | null;
+          cheque_date?: string | null;
+          cheque_status?: "pending" | "passed" | "returned" | null;
         };
       };
+
       suppliers: {
         Row: {
           id: string;
