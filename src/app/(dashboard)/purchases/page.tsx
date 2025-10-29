@@ -1,11 +1,11 @@
 // src/app/(dashboard)/purchases/page.tsx
 'use client';
 
-import React, { useState } from 'react';
-import { Plus, Search, Eye, Trash2, Calendar, ShoppingCart, Package } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Search, Eye, Trash2, Calendar, ShoppingCart, Package, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -22,84 +22,52 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-// Mock purchases data
-const mockPurchases = [
-  {
-    id: 'PUR-001',
-    supplierId: 1,
-    supplierName: 'Sierra Cables Ltd',
-    date: '2025-01-15',
-    items: 2,
-    totalItems: 80,
-    total: 230000,
-    status: 'Received',
-  },
-  {
-    id: 'PUR-002',
-    supplierId: 2,
-    supplierName: 'Lanka Wire Industries',
-    date: '2025-01-10',
-    items: 2,
-    totalItems: 140,
-    total: 348000,
-    status: 'Received',
-  },
-  {
-    id: 'PUR-003',
-    supplierId: 1,
-    supplierName: 'Sierra Cables Ltd',
-    date: '2025-01-05',
-    items: 2,
-    totalItems: 95,
-    total: 357500,
-    status: 'Pending',
-  },
-  {
-    id: 'PUR-004',
-    supplierId: 3,
-    supplierName: 'Ceylon Electrical Supplies',
-    date: '2024-12-28',
-    items: 1,
-    totalItems: 60,
-    total: 210000,
-    status: 'Received',
-  },
-  {
-    id: 'PUR-005',
-    supplierId: 4,
-    supplierName: 'National Cable Corporation',
-    date: '2024-12-20',
-    items: 2,
-    totalItems: 200,
-    total: 416000,
-    status: 'Received',
-  },
-];
-
-// Mock suppliers list
-const mockSuppliers = [
-  { id: 1, name: 'Sierra Cables Ltd' },
-  { id: 2, name: 'Lanka Wire Industries' },
-  { id: 3, name: 'Ceylon Electrical Supplies' },
-  { id: 4, name: 'National Cable Corporation' },
-  { id: 5, name: 'Asia Wire Manufacturing' },
-];
+interface Purchase {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  date: string;
+  items: number;
+  totalItems: number;
+  total: number;
+  subtotal: number;
+  totalDiscount: number;
+}
 
 export default function PurchasesPage() {
-  const [purchases, setPurchases] = useState(mockPurchases);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [supplierFilter, setSupplierFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
+
+  // Fetch purchases from API
+  useEffect(() => {
+    fetchPurchases();
+  }, []);
+
+  const fetchPurchases = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/purchases');
+      const data = await response.json();
+
+      if (response.ok && data.purchases) {
+        setPurchases(data.purchases);
+      } else {
+        console.error('Failed to fetch purchases:', data.error);
+      }
+    } catch (error) {
+      console.error('Error fetching purchases:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filter purchases
   const filteredPurchases = purchases.filter((purchase) => {
     const matchesSearch =
       purchase.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       purchase.supplierName.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesSupplier = 
-      supplierFilter === 'all' || 
-      purchase.supplierId.toString() === supplierFilter;
     
     let matchesDate = true;
     if (dateFilter !== 'all') {
@@ -118,13 +86,46 @@ export default function PurchasesPage() {
       }
     }
     
-    return matchesSearch && matchesSupplier && matchesDate;
+    return matchesSearch && matchesDate;
   });
 
   // Calculate stats
   const totalPurchases = purchases.length;
   const totalSpent = purchases.reduce((sum, p) => sum + p.total, 0);
-  const pendingPurchases = purchases.filter(p => p.status === 'Pending').length;
+  const totalDiscount = purchases.reduce((sum, p) => sum + (p.totalDiscount || 0), 0);
+
+  // Handle delete purchase
+  const handleDelete = async (purchaseId: string) => {
+    if (!confirm('Are you sure you want to delete this purchase order? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/purchases/${purchaseId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        alert('Purchase order deleted successfully');
+        fetchPurchases(); // Refresh the list
+      } else {
+        const data = await response.json();
+        alert(`Failed to delete purchase: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Error deleting purchase:', error);
+      alert('Error deleting purchase order');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-full min-h-64">
+        <Loader2 className="h-6 w-6 animate-spin mr-2" />
+        <p className="text-lg text-muted-foreground">Loading purchases...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -133,7 +134,7 @@ export default function PurchasesPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Purchases</h1>
           <p className="text-muted-foreground mt-1">
-            Record and manage supplier purchases
+            Record and manage purchases from Sierra Cables Ltd
           </p>
         </div>
         <Button onClick={() => window.location.href = '/purchases/new'}>
@@ -172,14 +173,14 @@ export default function PurchasesPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Pending Orders</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Savings</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
-              {pendingPurchases}
+            <div className="text-2xl font-bold text-green-600">
+              LKR {totalDiscount.toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Awaiting receipt
+              From discounts
             </p>
           </CardContent>
         </Card>
@@ -193,7 +194,7 @@ export default function PurchasesPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by ID or supplier..."
+                  placeholder="Search by Purchase ID..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9"
@@ -201,19 +202,6 @@ export default function PurchasesPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Select value={supplierFilter} onValueChange={setSupplierFilter}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Filter by supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Suppliers</SelectItem>
-                  {mockSuppliers.map((supplier) => (
-                    <SelectItem key={supplier.id} value={supplier.id.toString()}>
-                      {supplier.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Select value={dateFilter} onValueChange={setDateFilter}>
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Filter by date" />
@@ -233,19 +221,18 @@ export default function PurchasesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Purchase ID</TableHead>
-                <TableHead>Supplier</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-right">Items</TableHead>
                 <TableHead className="text-right">Quantity</TableHead>
+                <TableHead className="text-right">Discount</TableHead>
                 <TableHead className="text-right">Total</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredPurchases.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     No purchases found
                   </TableCell>
                 </TableRow>
@@ -253,7 +240,6 @@ export default function PurchasesPage() {
                 filteredPurchases.map((purchase) => (
                   <TableRow key={purchase.id}>
                     <TableCell className="font-medium">{purchase.id}</TableCell>
-                    <TableCell>{purchase.supplierName}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2 text-sm">
                         <Calendar className="w-3 h-3 text-muted-foreground" />
@@ -266,19 +252,11 @@ export default function PurchasesPage() {
                     <TableCell className="text-right">
                       {purchase.totalItems} units
                     </TableCell>
+                    <TableCell className="text-right text-green-600">
+                      LKR {(purchase.totalDiscount || 0).toLocaleString()}
+                    </TableCell>
                     <TableCell className="text-right font-medium">
                       LKR {purchase.total.toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          purchase.status === 'Received'
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                        }`}
-                      >
-                        {purchase.status}
-                      </span>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -292,6 +270,7 @@ export default function PurchasesPage() {
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          onClick={() => handleDelete(purchase.id)}
                         >
                           <Trash2 className="w-4 h-4 text-destructive" />
                         </Button>
