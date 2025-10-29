@@ -1,8 +1,8 @@
 // src/app/(dashboard)/bills/page.tsx
 "use client";
 
-import React, { useState } from "react";
-import { Plus, Search, Eye, Calendar, Filter } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Plus, Search, Eye, Calendar, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,141 +28,181 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// Mock bills data
-const mockBills = [
-  {
-    id: "INV-001",
-    date: "2025-01-15",
-    customer: "Perera Hardware",
-    customerId: 1,
-    items: 3,
-    total: 245000,
-    discount: 12250,
-    paid: 245000,
-    balance: 0,
-    status: "Delivered",
-    paymentType: "Bank",
-  },
-  {
-    id: "INV-002",
-    date: "2025-01-14",
-    customer: "Silva Electricals",
-    customerId: 2,
-    items: 2,
-    total: 180000,
-    discount: 9000,
-    paid: 180000,
-    balance: 0,
-    status: "Delivered",
-    paymentType: "Cash",
-  },
-  {
-    id: "INV-003",
-    date: "2025-01-12",
-    customer: "Fernando Constructions",
-    customerId: 3,
-    items: 5,
-    total: 425000,
-    discount: 21250,
-    paid: 300000,
-    balance: 125000,
-    status: "Checking",
-    paymentType: "Credit",
-  },
-  {
-    id: "INV-004",
-    date: "2025-01-10",
-    customer: "Jayasinghe Hardware Store",
-    customerId: 4,
-    items: 2,
-    total: 165000,
-    discount: 8250,
-    paid: 165000,
-    balance: 0,
-    status: "Delivered",
-    paymentType: "Bank",
-  },
-  {
-    id: "INV-005",
-    date: "2025-01-08",
-    customer: "Mendis Electrician Services",
-    customerId: 5,
-    items: 4,
-    total: 320000,
-    discount: 16000,
-    paid: 0,
-    balance: 320000,
-    status: "Processing",
-    paymentType: "Credit",
-  },
-];
+// Types for API data
+interface Customer {
+  name: string;
+  phone: string | null;
+}
 
-// Mock customers for filter
-const mockCustomers = [
-  { id: 1, name: "Perera Hardware" },
-  { id: 2, name: "Silva Electricals" },
-  { id: 3, name: "Fernando Constructions" },
-  { id: 4, name: "Jayasinghe Hardware Store" },
-  { id: 5, name: "Mendis Electrician Services" },
-];
+interface Order {
+  id: string;
+  order_number: string;
+  order_date: string;
+  customer_id: string;
+  subtotal: number;
+  discount_amount: number;
+  total_amount: number;
+  payment_status: "unpaid" | "partial" | "paid";
+  payment_method: string | null;
+  customers: Customer;
+}
 
 export default function BillsPage() {
-  const [bills, setBills] = useState(mockBills);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [customers, setCustomers] = useState<{ id: string; name: string }[]>(
+    []
+  );
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [customerFilter, setCustomerFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
 
-  // Filter bills
-  const filteredBills = bills.filter((bill) => {
+  // Fetch orders from API
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const response = await fetch("/api/orders");
+        const data = await response.json();
+
+        if (data.orders) {
+          setOrders(data.orders);
+        } else {
+          console.error("Failed to fetch orders:", data.error);
+        }
+      } catch (error) {
+        console.error("Network error fetching orders:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOrders();
+  }, []);
+
+  // Fetch customers for filter
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        const response = await fetch("/api/customers");
+        const data = await response.json();
+
+        if (data.customers) {
+          setCustomers(data.customers);
+        }
+      } catch (error) {
+        console.error("Error fetching customers:", error);
+      }
+    };
+
+    fetchCustomers();
+  }, []);
+
+  // Filter orders
+  const filteredOrders = orders.filter((order) => {
     const matchesSearch =
-      bill.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      bill.customer.toLowerCase().includes(searchQuery.toLowerCase());
+      order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.customers.name.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesCustomer =
-      customerFilter === "all" || bill.customerId.toString() === customerFilter;
+      customerFilter === "all" || order.customer_id === customerFilter;
 
-    const matchesStatus =
-      statusFilter === "all" || bill.status === statusFilter;
+    const matchesPaymentStatus =
+      paymentStatusFilter === "all" ||
+      order.payment_status === paymentStatusFilter;
+
+    const matchesPaymentMethod =
+      paymentMethodFilter === "all" ||
+      order.payment_method === paymentMethodFilter;
 
     let matchesDate = true;
     if (dateFilter !== "all") {
-      const billDate = new Date(bill.date);
+      const orderDate = new Date(order.order_date);
       const now = new Date();
 
       if (dateFilter === "today") {
-        matchesDate = billDate.toDateString() === now.toDateString();
+        matchesDate = orderDate.toDateString() === now.toDateString();
       } else if (dateFilter === "week") {
         const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        matchesDate = billDate >= weekAgo;
+        matchesDate = orderDate >= weekAgo;
       } else if (dateFilter === "month") {
         matchesDate =
-          billDate.getMonth() === now.getMonth() &&
-          billDate.getFullYear() === now.getFullYear();
+          orderDate.getMonth() === now.getMonth() &&
+          orderDate.getFullYear() === now.getFullYear();
       }
     }
 
-    return matchesSearch && matchesCustomer && matchesStatus && matchesDate;
+    return (
+      matchesSearch &&
+      matchesCustomer &&
+      matchesPaymentStatus &&
+      matchesPaymentMethod &&
+      matchesDate
+    );
   });
 
   // Calculate stats
-  const totalBills = bills.length;
-  const totalRevenue = bills.reduce((sum, b) => sum + b.total, 0);
-  const totalBalance = bills.reduce((sum, b) => sum + b.balance, 0);
-  const pendingBills = bills.filter((b) => b.balance > 0).length;
+  const totalBills = orders.length;
+  const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
 
-  const getStatusColor = (status: string) => {
+  // Calculate total balance (unpaid + partial amounts)
+  const totalBalance = orders.reduce((sum, o) => {
+    if (o.payment_status === "unpaid") {
+      return sum + o.total_amount;
+    } else if (o.payment_status === "partial") {
+      // For partial, we'd need the paid amount from payments table
+      // For now, estimate as half the total
+      return sum + o.total_amount / 2;
+    }
+    return sum;
+  }, 0);
+
+  const pendingBills = orders.filter((o) => o.payment_status !== "paid").length;
+
+  const getPaymentStatusColor = (status: string) => {
     switch (status) {
-      case "Delivered":
+      case "paid":
         return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
-      case "Checking":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
-      case "Processing":
+      case "partial":
         return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+      case "unpaid":
+        return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
       default:
         return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
     }
   };
+
+  const getPaymentMethodBadge = (method: string | null) => {
+    if (!method) return "-";
+
+    const colors: { [key: string]: string } = {
+      cash: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+      credit:
+        "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+      bank: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+      cheque:
+        "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400",
+    };
+
+    const color = colors[method.toLowerCase()] || colors.cash;
+
+    return (
+      <span
+        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}
+      >
+        {method.charAt(0).toUpperCase() + method.slice(1)}
+      </span>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -247,32 +287,47 @@ export default function BillsPage() {
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Select value={customerFilter} onValueChange={setCustomerFilter}>
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Filter by customer" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Customers</SelectItem>
-                  {mockCustomers.map((customer) => (
-                    <SelectItem
-                      key={customer.id}
-                      value={customer.id.toString()}
-                    >
+                  {customers.map((customer) => (
+                    <SelectItem key={customer.id} value={customer.id}>
                       {customer.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select
+                value={paymentStatusFilter}
+                onValueChange={setPaymentStatusFilter}
+              >
                 <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder="Payment Status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="Processing">Processing</SelectItem>
-                  <SelectItem value="Checking">Checking</SelectItem>
-                  <SelectItem value="Delivered">Delivered</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="partial">Partial</SelectItem>
+                  <SelectItem value="unpaid">Unpaid</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={paymentMethodFilter}
+                onValueChange={setPaymentMethodFilter}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Payment Method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Methods</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="credit">Credit</SelectItem>
+                  <SelectItem value="bank">Bank Transfer</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={dateFilter} onValueChange={setDateFilter}>
@@ -298,62 +353,51 @@ export default function BillsPage() {
                 <TableHead>Invoice No</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead className="text-right">Discount</TableHead>
-                <TableHead className="text-right">Paid</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Payment Method</TableHead>
+                <TableHead>Payment Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredBills.length === 0 ? (
+              {filteredOrders.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={9}
+                    colSpan={8}
                     className="text-center py-8 text-muted-foreground"
                   >
                     No bills found
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredBills.map((bill) => (
-                  <TableRow key={bill.id}>
+                filteredOrders.map((order) => (
+                  <TableRow key={order.id}>
                     <TableCell>
                       <div className="flex items-center gap-2 text-sm">
                         <Calendar className="w-3 h-3 text-muted-foreground" />
-                        {new Date(bill.date).toLocaleDateString()}
+                        {new Date(order.order_date).toLocaleDateString()}
                       </div>
                     </TableCell>
                     <TableCell className="font-medium">
-                      {bill.customer}
+                      {order.customers.name}
                     </TableCell>
-                    <TableCell>{bill.id}</TableCell>
+                    <TableCell>{order.order_number}</TableCell>
                     <TableCell className="text-right font-medium">
-                      LKR {bill.total.toLocaleString()}
+                      LKR {order.total_amount.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right text-green-600">
-                      -LKR {bill.discount.toLocaleString()}
+                      -LKR {order.discount_amount.toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-right">
-                      LKR {bill.paid.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span
-                        className={
-                          bill.balance > 0
-                            ? "text-destructive font-medium"
-                            : "text-muted-foreground"
-                        }
-                      >
-                        LKR {bill.balance.toLocaleString()}
-                      </span>
+                    <TableCell>
+                      {getPaymentMethodBadge(order.payment_method)}
                     </TableCell>
                     <TableCell>
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                          bill.status
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(
+                          order.payment_status
                         )}`}
                       >
-                        {bill.status}
+                        {order.payment_status.charAt(0).toUpperCase() +
+                          order.payment_status.slice(1)}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
@@ -361,7 +405,7 @@ export default function BillsPage() {
                         variant="ghost"
                         size="icon-sm"
                         onClick={() =>
-                          (window.location.href = `/bills/${bill.id}`)
+                          (window.location.href = `/bills/${order.id}`)
                         }
                       >
                         <Eye className="w-4 h-4" />
