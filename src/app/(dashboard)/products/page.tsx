@@ -64,6 +64,7 @@ interface Product {
   minStock: number; // Maps to DB: reorder_level
   mrp: number; // Maps to DB: unit_price / mrp
   costPrice: number; // Maps to DB: cost_price
+  discountPercent: number; // Standard discount percentage for this product
   totalValue: number; // Calculated: stock × MRP
   totalCost: number; // Calculated: stock × cost_price
   profitMargin: number; // Calculated: ((MRP - cost_price) / MRP) × 100
@@ -83,6 +84,7 @@ function mapDbProductToUiProduct(dbProduct: any): Product {
   const costPrice = dbProduct.cost_price ?? 0;
   const stock = dbProduct.stock_quantity ?? 0;
   const minStock = dbProduct.reorder_level ?? 0;
+  const discountPercent = dbProduct.discount_percent ?? 0;
 
   const totalValue = stock * mrp;
   const totalCost = stock * costPrice;
@@ -101,6 +103,7 @@ function mapDbProductToUiProduct(dbProduct: any): Product {
     minStock: minStock,
     mrp: mrp,
     costPrice: costPrice,
+    discountPercent: discountPercent,
     totalValue: totalValue,
     totalCost: totalCost,
     profitMargin: profitMargin,
@@ -478,8 +481,7 @@ export default function ProductsPage() {
                     <TableHead className="text-right">Stock</TableHead>
                     <TableHead className="text-right">Cost Price</TableHead>
                     <TableHead className="text-right">MRP</TableHead>
-                    <TableHead className="text-right">Margin %</TableHead>
-                    <TableHead className="text-right">Total Value</TableHead>
+                    <TableHead className="text-right">Total Cost</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -487,7 +489,7 @@ export default function ProductsPage() {
                   {filteredProducts.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={10}
+                        colSpan={9}
                         className="text-center py-8 text-muted-foreground"
                       >
                         No products found
@@ -535,15 +537,6 @@ export default function ProductsPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           LKR {product.mrp.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <span
-                            className={`font-bold ${getProfitMarginColor(
-                              product.profitMargin
-                            )}`}
-                          >
-                            {product.profitMargin.toFixed(1)}%
-                          </span>
                         </TableCell>
                         <TableCell className="text-right font-medium">
                           LKR {product.totalCost.toLocaleString()}
@@ -737,32 +730,6 @@ export default function ProductsPage() {
                 Selling price to customers
               </p>
             </div>
-            {formData.mrp > 0 && formData.costPrice > 0 && (
-              <div className="col-span-2 p-3 bg-muted/50 rounded-md">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Profit per Roll:
-                  </span>
-                  <span className="font-medium text-green-600">
-                    LKR {(formData.mrp - formData.costPrice).toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm mt-1">
-                  <span className="text-muted-foreground">Profit Margin:</span>
-                  <span
-                    className={`font-bold ${getProfitMarginColor(
-                      ((formData.mrp - formData.costPrice) / formData.mrp) * 100
-                    )}`}
-                  >
-                    {(
-                      ((formData.mrp - formData.costPrice) / formData.mrp) *
-                      100
-                    ).toFixed(1)}
-                    %
-                  </span>
-                </div>
-              </div>
-            )}
             <div className="space-y-2">
               <Label htmlFor="stock">Current Stock (rolls) *</Label>
               <Input
