@@ -56,7 +56,7 @@ interface Purchase {
   subtotal: number;
   totalDiscount: number;
   invoiceNumber?: string;
-  paymentStatus: "unpaid" | "paid"; // Only Unpaid and Paid
+  paymentStatus: "unpaid" | "paid";
 }
 
 interface Supplier {
@@ -158,10 +158,6 @@ export default function PurchasesPage() {
   // Calculate stats
   const totalPurchases = purchases.length;
   const totalSpent = purchases.reduce((sum, p) => sum + p.total, 0);
-  const totalDiscount = purchases.reduce(
-    (sum, p) => sum + (p.totalDiscount || 0),
-    0
-  );
   const unpaidPurchases = purchases.filter((p) => p.paymentStatus === "unpaid");
   const totalUnpaid = unpaidPurchases.reduce((sum, p) => sum + p.total, 0);
 
@@ -201,7 +197,7 @@ export default function PurchasesPage() {
     setIsPaymentDialogOpen(true);
   };
 
-  // Update payment status - FIXED to refresh immediately
+  // Update payment status
   const handleUpdatePayment = async () => {
     if (!selectedPurchase) return;
 
@@ -216,13 +212,8 @@ export default function PurchasesPage() {
       });
 
       if (response.ok) {
-        // Close dialog first
         setIsPaymentDialogOpen(false);
-
-        // Show success message
         alert("Payment status updated successfully");
-
-        // Refresh purchases list to show updated status
         await fetchPurchases();
       } else {
         const data = await response.json();
@@ -234,7 +225,7 @@ export default function PurchasesPage() {
     }
   };
 
-  // Get payment status badge - Only Unpaid and Paid
+  // Get payment status badge
   const getPaymentBadge = (status: string) => {
     switch (status) {
       case "paid":
@@ -281,8 +272,8 @@ export default function PurchasesPage() {
         </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* Stats Cards - Removed Total Savings Card */}
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
@@ -309,17 +300,6 @@ export default function PurchasesPage() {
             <p className="text-xs text-muted-foreground mt-1">
               Total expenditure
             </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Savings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              LKR {totalDiscount.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">From discounts</p>
           </CardContent>
         </Card>
         <Card>
@@ -386,7 +366,6 @@ export default function PurchasesPage() {
                 <TableHead>Invoice #</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-right">Items</TableHead>
-                <TableHead className="text-right">Discount</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Payment Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -396,7 +375,7 @@ export default function PurchasesPage() {
               {filteredPurchases.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={7}
                     className="text-center py-8 text-muted-foreground"
                   >
                     No purchases found
@@ -429,9 +408,6 @@ export default function PurchasesPage() {
                       <span className="text-xs text-muted-foreground">
                         {purchase.totalItems} units
                       </span>
-                    </TableCell>
-                    <TableCell className="text-right text-green-600">
-                      LKR {(purchase.totalDiscount || 0).toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       LKR {purchase.total.toLocaleString()}
@@ -472,7 +448,7 @@ export default function PurchasesPage() {
         </CardContent>
       </Card>
 
-      {/* Payment Status Update Dialog - Only Unpaid and Paid */}
+      {/* Payment Status Update Dialog */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent>
           <DialogHeader>
