@@ -311,6 +311,11 @@ export default function AddPurchasePage() {
     }
   };
 
+  // Get available products (filter out already added ones)
+  const availableProducts = products.filter(
+    (product) => !items.some((item) => item.productId === product.id)
+  );
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-full min-h-64">
@@ -399,16 +404,22 @@ export default function AddPurchasePage() {
                       value={currentItem.productId}
                       onValueChange={handleProductSelect}
                     >
-                      <SelectTrigger id="product" className="h-10">
+                      <SelectTrigger id="product" className="h-10 w-full">
                         <SelectValue placeholder="Select product" />
                       </SelectTrigger>
-                      <SelectContent>
-                        {products.map((product) => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name} - MRP: LKR {product.unit_price}{" "}
-                            (Stock: {product.stock_quantity})
-                          </SelectItem>
-                        ))}
+                      <SelectContent className="w-full min-w-[400px]">
+                        {availableProducts.length === 0 ? (
+                          <div className="p-4 text-center text-sm text-muted-foreground">
+                            All products have been added
+                          </div>
+                        ) : (
+                          availableProducts.map((product) => (
+                            <SelectItem key={product.id} value={product.id}>
+                              {product.name} - MRP: LKR {product.unit_price}{" "}
+                              (Stock: {product.stock_quantity})
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -482,7 +493,11 @@ export default function AddPurchasePage() {
                   </div>
 
                   <div className="col-span-3">
-                    <Button onClick={handleAddItem} className="w-full h-10">
+                    <Button
+                      onClick={handleAddItem}
+                      className="w-full h-10"
+                      disabled={availableProducts.length === 0}
+                    >
                       <Plus className="w-4 h-4 mr-2" />
                       Add Item
                     </Button>
