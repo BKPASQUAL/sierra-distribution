@@ -62,7 +62,8 @@ interface Product {
   rollLength: number; // Derived from unit_of_measure
   stock: number; // Maps to DB: stock_quantity
   minStock: number; // Maps to DB: reorder_level
-  mrp: number; // Maps to DB: unit_price / mrp
+  mrp: number; // Maps to DB: mrp
+  sellingPrice: number; // Maps to DB: unit_price (optional default selling price)
   costPrice: number; // Maps to DB: cost_price
   discountPercent: number; // Standard discount percentage for this product
   totalValue: number; // Calculated: stock × MRP
@@ -80,7 +81,9 @@ function mapDbProductToUiProduct(dbProduct: any): Product {
     dbProduct.name.match(/(\d+\.\d+|\d+)mm/i) ||
     dbProduct.description?.match(/Size: (\d+\.\d+|\d+)/i);
 
-  const mrp = dbProduct.unit_price ?? 0;
+  const mrp = dbProduct.mrp ?? 0;
+  // Use selling_price column from database (new column)
+  const sellingPrice = dbProduct.selling_price ?? mrp; // Default to MRP if no selling price set
   const costPrice = dbProduct.cost_price ?? 0;
   const stock = dbProduct.stock_quantity ?? 0;
   const minStock = dbProduct.reorder_level ?? 0;
@@ -94,14 +97,15 @@ function mapDbProductToUiProduct(dbProduct: any): Product {
     id: dbProduct.id.toString(),
     sku: dbProduct.sku,
     name: dbProduct.name,
-    type: dbProduct.category || "Other", // UI 'type' maps to DB 'category'
+    type: dbProduct.category || "Other",
     size: sizeMatch
       ? sizeMatch[1] + (dbProduct.name.includes("mm") ? "mm" : "")
       : "N/A",
-    rollLength: rollLengthMatch ? parseInt(rollLengthMatch[1]) : 100, // Default to 100m
+    rollLength: rollLengthMatch ? parseInt(rollLengthMatch[1]) : 100,
     stock: stock,
     minStock: minStock,
     mrp: mrp,
+    sellingPrice: sellingPrice,
     costPrice: costPrice,
     discountPercent: discountPercent,
     totalValue: totalValue,
@@ -129,6 +133,7 @@ export default function ProductsPage() {
     stock: 0,
     minStock: 0,
     mrp: 0,
+    sellingPrice: 0, // NEW: Optional selling price field
     costPrice: 0,
   });
 
@@ -186,16 +191,21 @@ export default function ProductsPage() {
         ? formData.customRollLength
         : formData.rollLength;
 
+    // If selling price is not set or is 0, default it to MRP
+    const finalSellingPrice =
+      formData.sellingPrice > 0 ? formData.sellingPrice : formData.mrp;
+
     // Map UI fields to DB schema (ProductInsert/ProductUpdate)
     const payload = {
       name: formData.name,
-      category: formData.type, // UI 'type' maps to DB 'category'
-      unit_price: formData.mrp,
-      cost_price: formData.costPrice, // Added cost_price
+      category: formData.type,
+      unit_price: finalSellingPrice, // Keep for backward compatibility
+      selling_price: finalSellingPrice, // NEW: Save to selling_price column
+      cost_price: formData.costPrice,
       stock_quantity: formData.stock,
       reorder_level: formData.minStock,
-      unit_of_measure: `${finalRollLength}m Roll`, // Store full unit_of_measure
-      description: `Size: ${formData.size}, Length: ${finalRollLength}m`, // Keep detailed description
+      unit_of_measure: `${finalRollLength}m Roll`,
+      description: `Size: ${formData.size}, Length: ${finalRollLength}m`,
       is_active: true,
       mrp: formData.mrp,
     };
@@ -216,7 +226,6 @@ export default function ProductsPage() {
         // POST: Add new product
         const insertPayload: ProductInsert = {
           ...payload,
-          // Placeholder SKU - ideally from server-side logic
           sku: `SKU-${Date.now().toString().slice(-6)}`,
         } as ProductInsert;
 
@@ -277,6 +286,7 @@ export default function ProductsPage() {
       stock: 0,
       minStock: 0,
       mrp: 0,
+      sellingPrice: 0,
       costPrice: 0,
     });
   };
@@ -292,6 +302,7 @@ export default function ProductsPage() {
       stock: product.stock,
       minStock: product.minStock,
       mrp: product.mrp,
+      sellingPrice: product.sellingPrice,
       costPrice: product.costPrice,
     });
     setSelectedProduct(product);
@@ -480,6 +491,7 @@ export default function ProductsPage() {
                     <TableHead className="text-right">Roll Length</TableHead>
                     <TableHead className="text-right">Stock</TableHead>
                     <TableHead className="text-right">Cost Price</TableHead>
+                    <TableHead className="text-right">Selling Price</TableHead>
                     <TableHead className="text-right">MRP</TableHead>
                     <TableHead className="text-right">Total Cost</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -489,7 +501,7 @@ export default function ProductsPage() {
                   {filteredProducts.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={9}
+                        colSpan={10}
                         className="text-center py-8 text-muted-foreground"
                       >
                         No products found
@@ -534,6 +546,9 @@ export default function ProductsPage() {
                         </TableCell>
                         <TableCell className="text-right text-blue-600">
                           LKR {product.costPrice.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right text-green-600 font-medium">
+                          LKR {product.sellingPrice.toLocaleString()}
                         </TableCell>
                         <TableCell className="text-right">
                           LKR {product.mrp.toLocaleString()}
@@ -727,9 +742,53 @@ export default function ProductsPage() {
                 className="w-full"
               />
               <p className="text-xs text-muted-foreground">
-                Selling price to customers
+                Maximum Retail Price
               </p>
             </div>
+
+            {/* NEW: Optional Selling Price Field */}
+            <div className="col-span-2 space-y-2 border-t pt-4">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="sellingPrice">
+                  Default Selling Price (LKR)
+                </Label>
+                <span className="text-xs text-muted-foreground italic">
+                  Optional
+                </span>
+              </div>
+              <Input
+                id="sellingPrice"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Leave empty to use MRP"
+                value={formData.sellingPrice || ""}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    sellingPrice: parseFloat(e.target.value) || 0,
+                  })
+                }
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                💡 If you want a different default price than MRP, enter it
+                here. Leave empty to use MRP as selling price.
+              </p>
+              {formData.sellingPrice > 0 && formData.mrp > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded p-2 mt-2">
+                  <p className="text-xs text-blue-700">
+                    <strong>Discount:</strong>{" "}
+                    {(
+                      ((formData.mrp - formData.sellingPrice) / formData.mrp) *
+                      100
+                    ).toFixed(1)}
+                    % off MRP
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="stock">Current Stock (rolls) *</Label>
               <Input

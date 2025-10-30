@@ -101,6 +101,7 @@ export interface Database {
           unit_price: number;
           cost_price: number | null;
           stock_quantity: number;
+          selling_price: number; // NEW: Default selling price column
           reorder_level: number;
           unit_of_measure: string;
           is_active: boolean;
@@ -117,6 +118,7 @@ export interface Database {
           unit_price: number;
           cost_price?: number | null;
           stock_quantity?: number;
+          selling_price: number; // NEW: Default selling price column
           reorder_level?: number;
           unit_of_measure?: string;
           is_active?: boolean;
@@ -133,6 +135,7 @@ export interface Database {
           unit_price?: number;
           cost_price?: number | null;
           stock_quantity?: number;
+          selling_price: number; // NEW: Default selling price column
           reorder_level?: number;
           unit_of_measure?: string;
           is_active?: boolean;
