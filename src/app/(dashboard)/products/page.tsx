@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Package,
   Loader2,
+  DollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,7 +63,10 @@ interface Product {
   stock: number; // Maps to DB: stock_quantity
   minStock: number; // Maps to DB: reorder_level
   mrp: number; // Maps to DB: unit_price / mrp
-  totalValue: number; // Calculated
+  costPrice: number; // Maps to DB: cost_price
+  totalValue: number; // Calculated: stock × MRP
+  totalCost: number; // Calculated: stock × cost_price
+  profitMargin: number; // Calculated: ((MRP - cost_price) / MRP) × 100
 }
 
 function mapDbProductToUiProduct(dbProduct: any): Product {
@@ -76,8 +80,13 @@ function mapDbProductToUiProduct(dbProduct: any): Product {
     dbProduct.description?.match(/Size: (\d+\.\d+|\d+)/i);
 
   const mrp = dbProduct.unit_price ?? 0;
+  const costPrice = dbProduct.cost_price ?? 0;
   const stock = dbProduct.stock_quantity ?? 0;
   const minStock = dbProduct.reorder_level ?? 0;
+
+  const totalValue = stock * mrp;
+  const totalCost = stock * costPrice;
+  const profitMargin = mrp > 0 ? ((mrp - costPrice) / mrp) * 100 : 0;
 
   return {
     id: dbProduct.id.toString(),
@@ -91,7 +100,10 @@ function mapDbProductToUiProduct(dbProduct: any): Product {
     stock: stock,
     minStock: minStock,
     mrp: mrp,
-    totalValue: stock * mrp,
+    costPrice: costPrice,
+    totalValue: totalValue,
+    totalCost: totalCost,
+    profitMargin: profitMargin,
   };
 }
 // --- END: DB-UI Interface and Mapping ---
@@ -114,6 +126,7 @@ export default function ProductsPage() {
     stock: 0,
     minStock: 0,
     mrp: 0,
+    costPrice: 0,
   });
 
   // -----------------------------------------------------------
@@ -175,14 +188,13 @@ export default function ProductsPage() {
       name: formData.name,
       category: formData.type, // UI 'type' maps to DB 'category'
       unit_price: formData.mrp,
+      cost_price: formData.costPrice, // Added cost_price
       stock_quantity: formData.stock,
       reorder_level: formData.minStock,
       unit_of_measure: `${finalRollLength}m Roll`, // Store full unit_of_measure
       description: `Size: ${formData.size}, Length: ${finalRollLength}m`, // Keep detailed description
       is_active: true,
       mrp: formData.mrp,
-      // NOTE: Removed barcode, type, size, roll_length from payload, as per the request
-      // and updated database schema.
     };
 
     try {
@@ -262,6 +274,7 @@ export default function ProductsPage() {
       stock: 0,
       minStock: 0,
       mrp: 0,
+      costPrice: 0,
     });
   };
 
@@ -276,6 +289,7 @@ export default function ProductsPage() {
       stock: product.stock,
       minStock: product.minStock,
       mrp: product.mrp,
+      costPrice: product.costPrice,
     });
     setSelectedProduct(product);
     setIsAddDialogOpen(true);
@@ -307,7 +321,15 @@ export default function ProductsPage() {
 
   const totalProducts = products.length;
   const totalStockValue = products.reduce((sum, p) => sum + p.totalValue, 0);
+  const totalCostValue = products.reduce((sum, p) => sum + p.totalCost, 0);
   const lowStockProducts = products.filter((p) => p.stock < p.minStock).length;
+
+  const getProfitMarginColor = (margin: number) => {
+    if (margin >= 30) return "text-green-600";
+    if (margin >= 20) return "text-blue-600";
+    if (margin >= 10) return "text-yellow-600";
+    return "text-red-600";
+  };
 
   return (
     <div className="space-y-6">
@@ -350,7 +372,7 @@ export default function ProductsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
-              Total Stock Value
+              Stock Value (MRP)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -358,27 +380,44 @@ export default function ProductsPage() {
               LKR {totalStockValue.toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Current inventory worth
+              At selling price
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Low Stock Items
-            </CardTitle>
-            <AlertTriangle className="w-4 h-4 text-destructive" />
+            <CardTitle className="text-sm font-medium">Stock Cost</CardTitle>
+            <DollarSign className="w-4 h-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">
-              {lowStockProducts}
+            <div className="text-2xl font-bold text-blue-600">
+              LKR {totalCostValue.toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Need reordering
+              Acquisition cost
             </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Low Stock Alert */}
+      {lowStockProducts > 0 && (
+        <Card className="border-destructive">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              <AlertTriangle className="w-8 h-8 text-destructive" />
+              <div>
+                <h3 className="font-semibold text-destructive">
+                  {lowStockProducts} Products Need Reordering
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Stock levels are below minimum threshold
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Search and Filters */}
       <Card>
@@ -428,114 +467,130 @@ export default function ProductsPage() {
               <span className="text-muted-foreground">Loading products...</span>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead className="text-right">Roll Length (m)</TableHead>
-                  <TableHead className="text-right">Stock</TableHead>
-                  <TableHead className="text-right">MRP</TableHead>
-                  <TableHead className="text-right">Total Value</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProducts.length === 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell
-                      colSpan={8}
-                      className="text-center py-8 text-muted-foreground"
-                    >
-                      No products found
-                    </TableCell>
+                    <TableHead>Product Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Size</TableHead>
+                    <TableHead className="text-right">Roll Length</TableHead>
+                    <TableHead className="text-right">Stock</TableHead>
+                    <TableHead className="text-right">Cost Price</TableHead>
+                    <TableHead className="text-right">MRP</TableHead>
+                    <TableHead className="text-right">Margin %</TableHead>
+                    <TableHead className="text-right">Total Value</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  filteredProducts.map((product) => (
-                    <TableRow key={product.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {product.name}
-                          {product.stock < product.minStock && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive">
-                              <AlertTriangle className="w-3 h-3 mr-1" />
-                              Low Stock
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                          {product.type}
-                        </span>
-                      </TableCell>
-                      <TableCell>{product.size}</TableCell>
-                      <TableCell className="text-right">
-                        {product.rollLength}m
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span
-                          className={
-                            product.stock < product.minStock
-                              ? "text-destructive font-medium"
-                              : ""
-                          }
-                        >
-                          {product.stock} rolls
-                        </span>
-                        <span className="text-xs text-muted-foreground block">
-                          Min: {product.minStock}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        LKR {product.mrp.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        LKR {product.totalValue.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() =>
-                              (window.location.href = `/products/${product.id}`)
-                            }
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => openEditDialog(product)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => {
-                              setSelectedProduct(product);
-                              setIsDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </div>
+                </TableHeader>
+                <TableBody>
+                  {filteredProducts.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={10}
+                        className="text-center py-8 text-muted-foreground"
+                      >
+                        No products found
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    filteredProducts.map((product) => (
+                      <TableRow key={product.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {product.name}
+                            {product.stock < product.minStock && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive">
+                                <AlertTriangle className="w-3 h-3 mr-1" />
+                                Low Stock
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                            {product.type}
+                          </span>
+                        </TableCell>
+                        <TableCell>{product.size}</TableCell>
+                        <TableCell className="text-right">
+                          {product.rollLength}m
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span
+                            className={
+                              product.stock < product.minStock
+                                ? "text-destructive font-medium"
+                                : ""
+                            }
+                          >
+                            {product.stock} rolls
+                          </span>
+                          <span className="text-xs text-muted-foreground block">
+                            Min: {product.minStock}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right text-blue-600">
+                          LKR {product.costPrice.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          LKR {product.mrp.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span
+                            className={`font-bold ${getProfitMarginColor(
+                              product.profitMargin
+                            )}`}
+                          >
+                            {product.profitMargin.toFixed(1)}%
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          LKR {product.totalCost.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() =>
+                                (window.location.href = `/products/${product.id}`)
+                              }
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => openEditDialog(product)}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => {
+                                setSelectedProduct(product);
+                                setIsDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
 
       {/* Add/Edit Product Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {selectedProduct ? "Edit Product" : "Add New Product"}
@@ -641,15 +696,36 @@ export default function ProductsPage() {
               </div>
             )}
             <div className="space-y-2">
+              <Label htmlFor="costPrice">Cost Price per Roll (LKR)</Label>
+              <Input
+                id="costPrice"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0"
+                value={formData.costPrice}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    costPrice: parseFloat(e.target.value) || 0,
+                  })
+                }
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                What you paid to supplier
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="mrp">MRP per Roll (LKR) *</Label>
               <Input
                 id="mrp"
                 type="number"
                 min="0"
+                step="0.01"
                 placeholder="0"
                 value={formData.mrp}
                 onChange={(e) =>
-                  // Robust float parsing, defaults to 0 if input is empty string or NaN
                   setFormData({
                     ...formData,
                     mrp: parseFloat(e.target.value) || 0,
@@ -657,7 +733,36 @@ export default function ProductsPage() {
                 }
                 className="w-full"
               />
+              <p className="text-xs text-muted-foreground">
+                Selling price to customers
+              </p>
             </div>
+            {formData.mrp > 0 && formData.costPrice > 0 && (
+              <div className="col-span-2 p-3 bg-muted/50 rounded-md">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Profit per Roll:
+                  </span>
+                  <span className="font-medium text-green-600">
+                    LKR {(formData.mrp - formData.costPrice).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm mt-1">
+                  <span className="text-muted-foreground">Profit Margin:</span>
+                  <span
+                    className={`font-bold ${getProfitMarginColor(
+                      ((formData.mrp - formData.costPrice) / formData.mrp) * 100
+                    )}`}
+                  >
+                    {(
+                      ((formData.mrp - formData.costPrice) / formData.mrp) *
+                      100
+                    ).toFixed(1)}
+                    %
+                  </span>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="stock">Current Stock (rolls) *</Label>
               <Input
@@ -667,7 +772,6 @@ export default function ProductsPage() {
                 placeholder="0"
                 value={formData.stock}
                 onChange={(e) =>
-                  // Robust integer parsing, defaults to 0
                   setFormData({
                     ...formData,
                     stock: parseInt(e.target.value) || 0,
@@ -685,7 +789,6 @@ export default function ProductsPage() {
                 placeholder="0"
                 value={formData.minStock}
                 onChange={(e) =>
-                  // Robust integer parsing, defaults to 0
                   setFormData({
                     ...formData,
                     minStock: parseInt(e.target.value) || 0,
