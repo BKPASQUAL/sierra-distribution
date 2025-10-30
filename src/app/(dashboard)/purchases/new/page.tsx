@@ -34,7 +34,10 @@ interface Product {
   id: string;
   sku: string;
   name: string;
-  unit_price: number;
+  unit_price: number; // This is selling_price in new schema
+  selling_price?: number; // Optional for new schema
+  cost_price?: number; // Cost price from supplier
+  mrp: number; // Maximum Retail Price
   stock_quantity: number;
   unit_of_measure: string;
 }
@@ -46,11 +49,13 @@ interface PurchaseItem {
   quantity: number;
   unit: string;
   mrp: number;
+  costPrice: number; // NEW: Cost price (what we pay supplier)
   discountPercent: number;
   discountAmount: number;
-  finalPrice: number;
+  finalPrice: number; // Same as costPrice after discount
   total: number;
   mrpChanged: boolean;
+  sellingPriceChanged: boolean; // NEW: Track if selling price changed
 }
 
 export default function AddPurchasePage() {
@@ -65,12 +70,14 @@ export default function AddPurchasePage() {
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [paymentStatus, setPaymentStatus] = useState<"unpaid" | "paid">(
     "unpaid"
-  ); // Only Unpaid and Paid
+  );
   const [items, setItems] = useState<PurchaseItem[]>([]);
   const [currentItem, setCurrentItem] = useState({
     productId: "",
     quantity: 1,
     mrp: 0,
+    sellingPrice: 0, // NEW: Selling price (editable)
+    costPrice: 0, // NEW: Cost price (what we pay)
     discountPercent: 0,
   });
 
@@ -109,26 +116,56 @@ export default function AddPurchasePage() {
   const handleProductSelect = (productId: string) => {
     const product = products.find((p) => p.id === productId);
     if (product) {
+      const sellingPrice = product.selling_price || product.unit_price;
+      const costPrice = product.cost_price || 0;
+
+      // Auto-calculate discount % based on current prices
+      const autoDiscount =
+        costPrice > 0 && product.mrp > 0
+          ? ((product.mrp - costPrice) / product.mrp) * 100
+          : 0;
+
       setCurrentItem({
         ...currentItem,
         productId: productId,
-        mrp: product.unit_price,
+        mrp: product.mrp,
+        sellingPrice: sellingPrice,
+        costPrice: costPrice,
+        discountPercent: autoDiscount,
       });
     }
   };
 
-  const calculateItemPrices = (
-    mrp: number,
-    discountPercent: number,
-    quantity: number
-  ) => {
-    const discountAmount = (mrp * discountPercent) / 100;
-    const finalPrice = mrp - discountAmount;
-    const total = finalPrice * quantity;
+  // NEW: When cost price changes, recalculate discount %
+  const handleCostPriceChange = (newCostPrice: number) => {
+    const newDiscount =
+      currentItem.mrp > 0
+        ? ((currentItem.mrp - newCostPrice) / currentItem.mrp) * 100
+        : 0;
+
+    setCurrentItem({
+      ...currentItem,
+      costPrice: newCostPrice,
+      discountPercent: Math.max(0, Math.min(100, newDiscount)), // Keep between 0-100
+    });
+  };
+
+  // NEW: When discount % changes, recalculate cost price
+  const handleDiscountChange = (newDiscount: number) => {
+    const newCostPrice =
+      currentItem.mrp - (currentItem.mrp * newDiscount) / 100;
+
+    setCurrentItem({
+      ...currentItem,
+      discountPercent: newDiscount,
+      costPrice: Math.max(0, newCostPrice),
+    });
+  };
+
+  const calculateItemPrices = (costPrice: number, quantity: number) => {
+    const total = costPrice * quantity;
 
     return {
-      discountAmount,
-      finalPrice,
       total,
     };
   };
@@ -137,20 +174,23 @@ export default function AddPurchasePage() {
     if (
       !currentItem.productId ||
       currentItem.quantity <= 0 ||
-      currentItem.mrp <= 0
+      currentItem.costPrice <= 0
     ) {
-      alert("Please fill all item details");
+      alert("Please fill all item details with valid cost price");
       return;
     }
 
     const product = products.find((p) => p.id === currentItem.productId);
     if (!product) return;
 
-    const { discountAmount, finalPrice, total } = calculateItemPrices(
-      currentItem.mrp,
-      currentItem.discountPercent,
+    const { total } = calculateItemPrices(
+      currentItem.costPrice,
       currentItem.quantity
     );
+
+    const originalSellingPrice = product.selling_price || product.unit_price;
+    const discountAmount =
+      (currentItem.mrp * currentItem.discountPercent) / 100;
 
     const newItem: PurchaseItem = {
       id: Date.now().toString(),
@@ -159,19 +199,24 @@ export default function AddPurchasePage() {
       quantity: currentItem.quantity,
       unit: product.unit_of_measure,
       mrp: currentItem.mrp,
+      costPrice: currentItem.costPrice,
       discountPercent: currentItem.discountPercent,
       discountAmount: discountAmount,
-      finalPrice: finalPrice,
+      finalPrice: currentItem.costPrice,
       total: total,
-      mrpChanged: currentItem.mrp !== product.unit_price,
+      mrpChanged: currentItem.mrp !== product.mrp,
+      sellingPriceChanged: currentItem.sellingPrice !== originalSellingPrice,
     };
 
     setItems([...items, newItem]);
 
+    // Reset form
     setCurrentItem({
       productId: "",
       quantity: 1,
       mrp: 0,
+      sellingPrice: 0,
+      costPrice: 0,
       discountPercent: 0,
     });
   };
@@ -202,17 +247,23 @@ export default function AddPurchasePage() {
     }
 
     try {
+      // Update products and create inventory transactions
       const transactionAndProductUpdatePromises = items.map(async (item) => {
         const currentProduct = products.find((p) => p.id === item.productId);
         if (!currentProduct) return;
 
         const newStock = currentProduct.stock_quantity + item.quantity;
-        const newCostPrice = item.finalPrice;
 
         const productUpdatePayload = {
-          unit_price: item.mrpChanged ? item.mrp : currentProduct.unit_price,
+          mrp: item.mrpChanged ? item.mrp : currentProduct.mrp,
+          selling_price: item.sellingPriceChanged
+            ? currentItem.sellingPrice
+            : currentProduct.selling_price || currentProduct.unit_price,
+          unit_price: item.sellingPriceChanged
+            ? currentItem.sellingPrice
+            : currentProduct.selling_price || currentProduct.unit_price,
           stock_quantity: newStock,
-          cost_price: newCostPrice,
+          cost_price: item.costPrice, // Update cost price from purchase
         };
 
         await fetch(`/api/products/${item.productId}`, {
@@ -236,6 +287,7 @@ export default function AddPurchasePage() {
 
       await Promise.all(transactionAndProductUpdatePromises);
 
+      // Create purchase record
       const purchaseData = {
         supplier_id: supplierId,
         purchase_date: purchaseDate,
@@ -247,7 +299,7 @@ export default function AddPurchasePage() {
           mrp: item.mrp,
           discount_percent: item.discountPercent,
           discount_amount: item.discountAmount,
-          unit_price: item.finalPrice,
+          unit_price: item.costPrice, // Cost price is the unit price in purchase
           line_total: item.total,
         })),
         subtotal: subtotal,
@@ -378,12 +430,13 @@ export default function AddPurchasePage() {
             <CardHeader>
               <CardTitle>Add Items</CardTitle>
               <CardDescription>
-                Add products with MRP and discount
+                Add products with cost price and discount
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="grid grid-cols-12 gap-3 items-end">
+                  {/* Product Selection */}
                   <div className="col-span-3">
                     <Label htmlFor="product" className="mb-2 block">
                       Product
@@ -403,8 +456,16 @@ export default function AddPurchasePage() {
                         ) : (
                           availableProducts.map((product) => (
                             <SelectItem key={product.id} value={product.id}>
-                              {product.name} - MRP: LKR {product.unit_price}{" "}
-                              (Stock: {product.stock_quantity})
+                              <div className="flex flex-col">
+                                <span className="font-medium">
+                                  {product.name}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  MRP: {product.mrp} | Cost:{" "}
+                                  {product.cost_price || "N/A"} | Stock:{" "}
+                                  {product.stock_quantity}
+                                </span>
+                              </div>
                             </SelectItem>
                           ))
                         )}
@@ -412,6 +473,7 @@ export default function AddPurchasePage() {
                     </Select>
                   </div>
 
+                  {/* Quantity */}
                   <div className="col-span-2">
                     <Label htmlFor="quantity" className="mb-2 block">
                       Quantity
@@ -431,6 +493,7 @@ export default function AddPurchasePage() {
                     />
                   </div>
 
+                  {/* MRP (Disabled - Read Only) */}
                   <div className="col-span-2">
                     <Label htmlFor="mrp" className="mb-2 block">
                       MRP (LKR)
@@ -438,26 +501,33 @@ export default function AddPurchasePage() {
                     <Input
                       id="mrp"
                       type="number"
-                      min="0"
-                      step="0.01"
-                      value={currentItem.mrp}
-                      onChange={(e) =>
-                        setCurrentItem({
-                          ...currentItem,
-                          mrp: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      className={`h-10 ${
-                        currentItem.productId &&
-                        currentItem.mrp !==
-                          products.find((p) => p.id === currentItem.productId)
-                            ?.unit_price
-                          ? "border-orange-500"
-                          : ""
-                      }`}
+                      value={currentItem.mrp || ""}
+                      disabled
+                      className="h-10 bg-muted cursor-not-allowed"
+                      placeholder="Auto"
                     />
                   </div>
 
+                  {/* Cost Price (Editable) */}
+                  <div className="col-span-2">
+                    <Label htmlFor="costPrice" className="mb-2 block">
+                      Cost Price (LKR)
+                    </Label>
+                    <Input
+                      id="costPrice"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={currentItem.costPrice || ""}
+                      onChange={(e) =>
+                        handleCostPriceChange(parseFloat(e.target.value) || 0)
+                      }
+                      placeholder="What you pay"
+                      className="h-10"
+                    />
+                  </div>
+
+                  {/* Discount % (Editable) */}
                   <div className="col-span-2">
                     <Label htmlFor="discount" className="mb-2 block">
                       Discount (%)
@@ -468,86 +538,37 @@ export default function AddPurchasePage() {
                       min="0"
                       max="100"
                       step="0.01"
-                      value={currentItem.discountPercent}
-                      onChange={(e) =>
-                        setCurrentItem({
-                          ...currentItem,
-                          discountPercent: parseFloat(e.target.value) || 0,
-                        })
+                      value={
+                        currentItem.discountPercent > 0
+                          ? currentItem.discountPercent.toFixed(2)
+                          : ""
                       }
-                      placeholder="0"
+                      onChange={(e) =>
+                        handleDiscountChange(parseFloat(e.target.value) || 0)
+                      }
+                      placeholder="Auto"
                       className="h-10"
                     />
                   </div>
 
-                  <div className="col-span-3">
+                  {/* Add Button */}
+                  <div className="col-span-1">
                     <Button
                       onClick={handleAddItem}
                       className="w-full h-10"
                       disabled={availableProducts.length === 0}
                     >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Item
+                      <Plus className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
 
-                {currentItem.productId &&
-                  currentItem.mrp !==
-                    products.find((p) => p.id === currentItem.productId)
-                      ?.unit_price && (
-                    <p className="text-xs text-orange-600">
-                      ⚠️ MRP will be updated in the database
+                {currentItem.productId && (
+                  <div className="text-xs text-muted-foreground">
+                    <p>
+                      💡 <strong>Tip:</strong> Change Cost Price or Discount % -
+                      the other updates automatically
                     </p>
-                  )}
-
-                {currentItem.productId && currentItem.mrp > 0 && (
-                  <div className="p-3 bg-muted/50 rounded-md text-sm space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">
-                        MRP per Unit:
-                      </span>
-                      <span>LKR {currentItem.mrp.toLocaleString()}</span>
-                    </div>
-                    {currentItem.discountPercent > 0 && (
-                      <>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">
-                            Discount ({currentItem.discountPercent}%):
-                          </span>
-                          <span className="text-green-600">
-                            - LKR{" "}
-                            {(
-                              (currentItem.mrp * currentItem.discountPercent) /
-                              100
-                            ).toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="flex justify-between font-medium pt-1 border-t">
-                          <span>Price per Unit After Discount:</span>
-                          <span>
-                            LKR{" "}
-                            {(
-                              currentItem.mrp -
-                              (currentItem.mrp * currentItem.discountPercent) /
-                                100
-                            ).toLocaleString()}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                    <div className="flex justify-between font-bold pt-1 border-t">
-                      <span>Total for {currentItem.quantity} units:</span>
-                      <span className="text-primary">
-                        LKR{" "}
-                        {(
-                          (currentItem.mrp -
-                            (currentItem.mrp * currentItem.discountPercent) /
-                              100) *
-                          currentItem.quantity
-                        ).toLocaleString()}
-                      </span>
-                    </div>
                   </div>
                 )}
               </div>
@@ -573,11 +594,9 @@ export default function AddPurchasePage() {
                         <TableHead>Product</TableHead>
                         <TableHead className="text-right">Quantity</TableHead>
                         <TableHead className="text-right">MRP</TableHead>
+                        <TableHead className="text-right">Cost Price</TableHead>
                         <TableHead className="text-right">Discount %</TableHead>
-                        <TableHead className="text-right">
-                          Final Price (Cost)
-                        </TableHead>
-                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="text-right">Total Cost</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -598,11 +617,11 @@ export default function AddPurchasePage() {
                           <TableCell className="text-right">
                             LKR {item.mrp.toLocaleString()}
                           </TableCell>
-                          <TableCell className="text-right text-green-600">
-                            {item.discountPercent}%
+                          <TableCell className="text-right text-blue-600 font-medium">
+                            LKR {item.costPrice.toLocaleString()}
                           </TableCell>
-                          <TableCell className="text-right font-medium">
-                            LKR {item.finalPrice.toLocaleString()}
+                          <TableCell className="text-right text-green-600">
+                            {item.discountPercent.toFixed(1)}%
                           </TableCell>
                           <TableCell className="text-right font-bold">
                             LKR {item.total.toLocaleString()}
@@ -663,9 +682,7 @@ export default function AddPurchasePage() {
 
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Before Discount:
-                  </span>
+                  <span className="text-muted-foreground">MRP Value:</span>
                   <span>LKR {totalBeforeDiscount.toLocaleString()}</span>
                 </div>
                 {totalDiscount > 0 && (
@@ -679,11 +696,14 @@ export default function AddPurchasePage() {
                   </div>
                 )}
                 <div className="flex justify-between items-center pt-2 border-t">
-                  <span className="font-semibold">Final Amount:</span>
+                  <span className="font-semibold">Total Cost:</span>
                   <span className="text-2xl font-bold text-primary">
                     LKR {subtotal.toLocaleString()}
                   </span>
                 </div>
+                <p className="text-xs text-muted-foreground pt-2">
+                  This is what you will pay to the supplier
+                </p>
               </div>
 
               {items.some((item) => item.mrpChanged) && (
