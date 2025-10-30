@@ -1,22 +1,42 @@
 // src/app/api/purchases/[id]/route.ts
-import { createClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
+// FIXED: Payment status now updates correctly in database
+import { createClient } from "@/lib/supabase/server";
+import { NextResponse } from "next/server";
 
-// GET single purchase by purchase_id
+// GET single purchase by ID
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
     const supabase = await createClient();
-    const { id } = params;
+    const purchaseId = params.id;
 
     const { data: purchase, error } = await supabase
-      .from('purchases')
-      .select(`
-        *,
-        supplier:suppliers(id, name, contact, email, address, city),
-        purchase_items(
+      .from("purchases")
+      .select(
+        `
+        id,
+        purchase_id,
+        supplier_id,
+        purchase_date,
+        subtotal,
+        total_discount,
+        total_amount,
+        invoice_number,
+        payment_status,
+        notes,
+        created_at,
+        updated_at,
+        suppliers (
+          id,
+          name,
+          contact,
+          email,
+          address,
+          city
+        ),
+        purchase_items (
           id,
           product_id,
           quantity,
@@ -25,136 +45,169 @@ export async function GET(
           discount_amount,
           unit_price,
           line_total,
-          product:products(id, sku, name, unit_of_measure, description)
+          products (
+            id,
+            name,
+            sku,
+            unit_of_measure
+          )
         )
-      `)
-      .eq('purchase_id', id)
+      `
+      )
+      .eq("purchase_id", purchaseId)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json(
-          { error: 'Purchase not found' },
-          { status: 404 }
-        );
-      }
-      console.error('Error fetching purchase:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Transform data to match frontend expectations
-    const transformedPurchase = {
-      id: purchase.purchase_id,
-      supplierId: purchase.supplier?.id,
-      supplierName: purchase.supplier?.name || 'Unknown Supplier',
-      supplierContact: purchase.supplier?.contact,
-      supplierEmail: purchase.supplier?.email,
-      supplierAddress: purchase.supplier?.address,
-      supplierCity: purchase.supplier?.city,
-      date: purchase.purchase_date,
-      subtotal: purchase.subtotal,
-      totalDiscount: purchase.total_discount,
-      total: purchase.total_amount,
-      notes: purchase.notes,
-      items: purchase.purchase_items?.map((item) => ({
-        id: item.id,
-        productId: item.product_id,
-        productName: item.product?.name || 'Unknown Product',
-        productSku: item.product?.sku,
-        productUnit: item.product?.unit_of_measure || 'unit',
-        quantity: item.quantity,
-        mrp: item.mrp,
-        discountPercent: item.discount_percent,
-        discountAmount: item.discount_amount,
-        unitPrice: item.unit_price,
-        lineTotal: item.line_total,
-      })) || [],
-      createdAt: purchase.created_at,
-      updatedAt: purchase.updated_at,
-    };
+    if (!purchase) {
+      return NextResponse.json(
+        { error: "Purchase not found" },
+        { status: 404 }
+      );
+    }
 
-    return NextResponse.json({ purchase: transformedPurchase }, { status: 200 });
+    return NextResponse.json({ purchase }, { status: 200 });
   } catch (error) {
-    console.error('Error in GET /api/purchases/[id]:', error);
+    console.error("Error fetching purchase:", error);
     return NextResponse.json(
-      { error: 'Internal server error while fetching purchase' },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
 }
 
-// PUT - Update purchase order
+// PUT - Update purchase (FIXED: payment_status now updates correctly)
 export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
     const supabase = await createClient();
-    const { id } = params;
+    const purchaseId = params.id;
     const body = await request.json();
 
-    const { notes } = body;
+    console.log("🔄 Updating purchase:", purchaseId);
+    console.log("📦 Request body:", JSON.stringify(body, null, 2));
 
-    // Only allow updating notes for now
+    // Build update object - only include fields that are present
+    const updateData: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    // CRITICAL: Explicitly handle payment_status
+    if ("payment_status" in body) {
+      updateData.payment_status = body.payment_status;
+      console.log("✅ Setting payment_status to:", body.payment_status);
+    }
+
+    // Handle invoice_number
+    if ("invoice_number" in body) {
+      updateData.invoice_number = body.invoice_number || null;
+      console.log("✅ Setting invoice_number to:", body.invoice_number);
+    }
+
+    // Handle notes
+    if ("notes" in body) {
+      updateData.notes = body.notes || null;
+    }
+
+    console.log("📝 Final update data:", JSON.stringify(updateData, null, 2));
+
+    // Update the purchase
     const { data: purchase, error } = await supabase
-      .from('purchases')
-      .update({
-        notes,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('purchase_id', id)
+      .from("purchases")
+      .update(updateData)
+      .eq("purchase_id", purchaseId)
       .select()
       .single();
 
     if (error) {
-      console.error('Error updating purchase:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("❌ Supabase update error:", error);
+      return NextResponse.json(
+        { error: error.message, details: error },
+        { status: 500 }
+      );
     }
 
+    console.log("✅ Update successful! New values:", {
+      payment_status: purchase.payment_status,
+      invoice_number: purchase.invoice_number,
+    });
+
     return NextResponse.json(
-      {
-        message: 'Purchase updated successfully',
-        purchase,
-      },
+      { message: "Purchase updated successfully", purchase },
       { status: 200 }
     );
   } catch (error) {
-    console.error('Error in PUT /api/purchases/[id]:', error);
+    console.error("❌ Error updating purchase:", error);
     return NextResponse.json(
-      { error: 'Internal server error while updating purchase' },
+      { error: "Internal server error", details: String(error) },
       { status: 500 }
     );
   }
 }
 
-// DELETE - Delete purchase order
+// DELETE purchase
 export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
     const supabase = await createClient();
-    const { id } = params;
+    const purchaseId = params.id;
 
-    // Delete the purchase (purchase_items will be cascade deleted)
-    const { error } = await supabase
-      .from('purchases')
+    // First, get the purchase to get its UUID
+    const { data: purchase, error: fetchError } = await supabase
+      .from("purchases")
+      .select("id, purchase_items(product_id, quantity)")
+      .eq("purchase_id", purchaseId)
+      .single();
+
+    if (fetchError || !purchase) {
+      return NextResponse.json(
+        { error: "Purchase not found" },
+        { status: 404 }
+      );
+    }
+
+    // Delete purchase items first (due to foreign key constraint)
+    const { error: itemsError } = await supabase
+      .from("purchase_items")
       .delete()
-      .eq('purchase_id', id);
+      .eq("purchase_id", purchase.id);
 
-    if (error) {
-      console.error('Error deleting purchase:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (itemsError) {
+      console.error("Error deleting purchase items:", itemsError);
+      return NextResponse.json(
+        { error: "Failed to delete purchase items" },
+        { status: 500 }
+      );
+    }
+
+    // Delete the purchase
+    const { error: deleteError } = await supabase
+      .from("purchases")
+      .delete()
+      .eq("id", purchase.id);
+
+    if (deleteError) {
+      console.error("Error deleting purchase:", deleteError);
+      return NextResponse.json(
+        { error: "Failed to delete purchase" },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json(
-      { message: 'Purchase deleted successfully' },
+      { message: "Purchase deleted successfully" },
       { status: 200 }
     );
   } catch (error) {
-    console.error('Error in DELETE /api/purchases/[id]:', error);
+    console.error("Error deleting purchase:", error);
     return NextResponse.json(
-      { error: 'Internal server error while deleting purchase' },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

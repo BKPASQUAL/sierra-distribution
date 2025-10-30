@@ -14,7 +14,6 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
-  Clock,
   Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -57,7 +56,7 @@ interface Purchase {
   subtotal: number;
   totalDiscount: number;
   invoiceNumber?: string;
-  paymentStatus: "unpaid" | "partial" | "paid";
+  paymentStatus: "unpaid" | "paid"; // Only Unpaid and Paid
 }
 
 interface Supplier {
@@ -82,9 +81,9 @@ export default function PurchasesPage() {
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(
     null
   );
-  const [newPaymentStatus, setNewPaymentStatus] = useState<
-    "unpaid" | "partial" | "paid"
-  >("unpaid");
+  const [newPaymentStatus, setNewPaymentStatus] = useState<"unpaid" | "paid">(
+    "unpaid"
+  );
   const [newInvoiceNumber, setNewInvoiceNumber] = useState("");
 
   // Fetch primary supplier and purchases
@@ -202,7 +201,7 @@ export default function PurchasesPage() {
     setIsPaymentDialogOpen(true);
   };
 
-  // Update payment status
+  // Update payment status - FIXED to refresh immediately
   const handleUpdatePayment = async () => {
     if (!selectedPurchase) return;
 
@@ -217,9 +216,14 @@ export default function PurchasesPage() {
       });
 
       if (response.ok) {
-        alert("Payment status updated successfully");
-        fetchPurchases();
+        // Close dialog first
         setIsPaymentDialogOpen(false);
+
+        // Show success message
+        alert("Payment status updated successfully");
+
+        // Refresh purchases list to show updated status
+        await fetchPurchases();
       } else {
         const data = await response.json();
         alert(`Failed to update payment status: ${data.error}`);
@@ -230,7 +234,7 @@ export default function PurchasesPage() {
     }
   };
 
-  // Get payment status badge
+  // Get payment status badge - Only Unpaid and Paid
   const getPaymentBadge = (status: string) => {
     switch (status) {
       case "paid":
@@ -238,16 +242,6 @@ export default function PurchasesPage() {
           <Badge variant="default" className="bg-green-600 hover:bg-green-700">
             <CheckCircle2 className="w-3 h-3 mr-1" />
             Paid
-          </Badge>
-        );
-      case "partial":
-        return (
-          <Badge
-            variant="default"
-            className="bg-yellow-600 hover:bg-yellow-700"
-          >
-            <Clock className="w-3 h-3 mr-1" />
-            Partial
           </Badge>
         );
       case "unpaid":
@@ -367,7 +361,6 @@ export default function PurchasesPage() {
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="paid">Paid</SelectItem>
-                  <SelectItem value="partial">Partial</SelectItem>
                   <SelectItem value="unpaid">Unpaid</SelectItem>
                 </SelectContent>
               </Select>
@@ -479,7 +472,7 @@ export default function PurchasesPage() {
         </CardContent>
       </Card>
 
-      {/* Payment Status Update Dialog */}
+      {/* Payment Status Update Dialog - Only Unpaid and Paid */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -513,7 +506,6 @@ export default function PurchasesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unpaid">Unpaid</SelectItem>
-                  <SelectItem value="partial">Partial Payment</SelectItem>
                   <SelectItem value="paid">Paid</SelectItem>
                 </SelectContent>
               </Select>

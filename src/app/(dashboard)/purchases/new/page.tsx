@@ -30,13 +30,11 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
-// SINGLE SUPPLIER SYSTEM - Sierra Cables Ltd
-
 interface Product {
   id: string;
   sku: string;
   name: string;
-  unit_price: number; // MRP
+  unit_price: number;
   stock_quantity: number;
   unit_of_measure: string;
 }
@@ -47,12 +45,12 @@ interface PurchaseItem {
   productName: string;
   quantity: number;
   unit: string;
-  mrp: number; // Maximum Retail Price (unit_price)
-  discountPercent: number; // Discount percentage
-  discountAmount: number; // Calculated discount in LKR (per unit)
-  finalPrice: number; // Price after discount (per unit) - This is the new COST PRICE
-  total: number; // Final line total
-  mrpChanged: boolean; // Track if MRP was modified
+  mrp: number;
+  discountPercent: number;
+  discountAmount: number;
+  finalPrice: number;
+  total: number;
+  mrpChanged: boolean;
 }
 
 export default function AddPurchasePage() {
@@ -65,9 +63,9 @@ export default function AddPurchasePage() {
     new Date().toISOString().split("T")[0]
   );
   const [invoiceNumber, setInvoiceNumber] = useState("");
-  const [paymentStatus, setPaymentStatus] = useState<
-    "unpaid" | "partial" | "paid"
-  >("unpaid");
+  const [paymentStatus, setPaymentStatus] = useState<"unpaid" | "paid">(
+    "unpaid"
+  ); // Only Unpaid and Paid
   const [items, setItems] = useState<PurchaseItem[]>([]);
   const [currentItem, setCurrentItem] = useState({
     productId: "",
@@ -76,7 +74,6 @@ export default function AddPurchasePage() {
     discountPercent: 0,
   });
 
-  // Fetch products and supplier from database
   useEffect(() => {
     fetchProductsAndSupplier();
   }, []);
@@ -84,7 +81,6 @@ export default function AddPurchasePage() {
   const fetchProductsAndSupplier = async () => {
     setLoading(true);
     try {
-      // Fetch products
       const productsResponse = await fetch("/api/products");
       const productsData = await productsResponse.json();
 
@@ -92,7 +88,6 @@ export default function AddPurchasePage() {
         setProducts(productsData.products as Product[]);
       }
 
-      // Fetch supplier (Sierra Cables)
       const supplierResponse = await fetch("/api/suppliers");
       const supplierData = await supplierResponse.json();
 
@@ -111,7 +106,6 @@ export default function AddPurchasePage() {
     }
   };
 
-  // When product is selected, auto-fill MRP
   const handleProductSelect = (productId: string) => {
     const product = products.find((p) => p.id === productId);
     if (product) {
@@ -123,7 +117,6 @@ export default function AddPurchasePage() {
     }
   };
 
-  // Calculate discount and final price
   const calculateItemPrices = (
     mrp: number,
     discountPercent: number,
@@ -140,7 +133,6 @@ export default function AddPurchasePage() {
     };
   };
 
-  // Add item to purchase with calculations
   const handleAddItem = () => {
     if (
       !currentItem.productId ||
@@ -176,7 +168,6 @@ export default function AddPurchasePage() {
 
     setItems([...items, newItem]);
 
-    // Reset form
     setCurrentItem({
       productId: "",
       quantity: 1,
@@ -185,12 +176,10 @@ export default function AddPurchasePage() {
     });
   };
 
-  // Remove item from purchase
   const handleRemoveItem = (id: string) => {
     setItems(items.filter((item) => item.id !== id));
   };
 
-  // Calculate totals
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
   const totalDiscount = items.reduce(
     (sum, item) => sum + item.discountAmount * item.quantity,
@@ -213,7 +202,6 @@ export default function AddPurchasePage() {
     }
 
     try {
-      // Step 1: Update Product Stock, Cost Price, and MRP
       const transactionAndProductUpdatePromises = items.map(async (item) => {
         const currentProduct = products.find((p) => p.id === item.productId);
         if (!currentProduct) return;
@@ -233,7 +221,6 @@ export default function AddPurchasePage() {
           body: JSON.stringify(productUpdatePayload),
         });
 
-        // Create Inventory Transaction
         await fetch("/api/inventory-transactions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -249,7 +236,6 @@ export default function AddPurchasePage() {
 
       await Promise.all(transactionAndProductUpdatePromises);
 
-      // Step 2: Save Purchase Order with items
       const purchaseData = {
         supplier_id: supplierId,
         purchase_date: purchaseDate,
@@ -281,7 +267,6 @@ export default function AddPurchasePage() {
         throw new Error(errorData.error || "Failed to save Purchase Order");
       }
 
-      const responseData = await savePurchaseResponse.json();
       alert(`Purchase order created successfully!`);
       router.push("/purchases");
     } catch (error) {
@@ -290,7 +275,6 @@ export default function AddPurchasePage() {
     }
   };
 
-  // Get available products (filter out already added ones)
   const availableProducts = products.filter(
     (product) => !items.some((item) => item.productId === product.id)
   );
@@ -306,7 +290,6 @@ export default function AddPurchasePage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
@@ -330,9 +313,7 @@ export default function AddPurchasePage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Purchase Details */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Supplier & Date Card */}
           <Card>
             <CardHeader>
               <CardTitle>Purchase Details</CardTitle>
@@ -385,7 +366,6 @@ export default function AddPurchasePage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="unpaid">Unpaid</SelectItem>
-                      <SelectItem value="partial">Partial Payment</SelectItem>
                       <SelectItem value="paid">Paid</SelectItem>
                     </SelectContent>
                   </Select>
@@ -394,7 +374,6 @@ export default function AddPurchasePage() {
             </CardContent>
           </Card>
 
-          {/* Add Items Card */}
           <Card>
             <CardHeader>
               <CardTitle>Add Items</CardTitle>
@@ -575,7 +554,6 @@ export default function AddPurchasePage() {
             </CardContent>
           </Card>
 
-          {/* Items List */}
           <Card>
             <CardHeader>
               <CardTitle>Purchase Items</CardTitle>
@@ -648,7 +626,6 @@ export default function AddPurchasePage() {
           </Card>
         </div>
 
-        {/* Summary Sidebar */}
         <div className="lg:col-span-1">
           <Card className="sticky top-6">
             <CardHeader>
