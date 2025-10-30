@@ -31,7 +31,6 @@ import {
 import { Label } from "@/components/ui/label";
 
 // SINGLE SUPPLIER SYSTEM - Sierra Cables Ltd
-const SIERRA_CABLES_ID = "1"; // Will fetch from database
 
 interface Product {
   id: string;
@@ -65,6 +64,10 @@ export default function AddPurchasePage() {
   const [purchaseDate, setPurchaseDate] = useState(
     new Date().toISOString().split("T")[0]
   );
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState<
+    "unpaid" | "partial" | "paid"
+  >("unpaid");
   const [items, setItems] = useState<PurchaseItem[]>([]);
   const [currentItem, setCurrentItem] = useState({
     productId: "",
@@ -86,7 +89,6 @@ export default function AddPurchasePage() {
       const productsData = await productsResponse.json();
 
       if (productsResponse.ok && productsData.products) {
-        // NOTE: Coerce the fetched products array to the local interface
         setProducts(productsData.products as Product[]);
       }
 
@@ -128,7 +130,7 @@ export default function AddPurchasePage() {
     quantity: number
   ) => {
     const discountAmount = (mrp * discountPercent) / 100;
-    const finalPrice = mrp - discountAmount; // This is the new Cost Price per unit
+    const finalPrice = mrp - discountAmount;
     const total = finalPrice * quantity;
 
     return {
@@ -166,8 +168,8 @@ export default function AddPurchasePage() {
       unit: product.unit_of_measure,
       mrp: currentItem.mrp,
       discountPercent: currentItem.discountPercent,
-      discountAmount: discountAmount, // This is the unit discount amount
-      finalPrice: finalPrice, // This is the unit price after discount
+      discountAmount: discountAmount,
+      finalPrice: finalPrice,
       total: total,
       mrpChanged: currentItem.mrp !== product.unit_price,
     };
@@ -199,12 +201,6 @@ export default function AddPurchasePage() {
     0
   );
 
-  /**
-   * UPDATED LOGIC:
-   * 1. Update Product Stock (+= quantity) and Cost Price (finalPrice) via PUT /api/products/[id]
-   * 2. Create Inventory Transaction log via POST /api/inventory-transactions
-   * 3. Save the main Purchase Order Document via POST /api/purchases
-   */
   const handleSavePurchase = async () => {
     if (items.length === 0) {
       alert("Please add at least one item");
@@ -217,37 +213,27 @@ export default function AddPurchasePage() {
     }
 
     try {
-      const purchaseId = `PUR-${Date.now().toString().slice(-6)}`;
-
-      // --- Step 1 & 2: Update Product Stock, Cost Price, and MRP (if changed) + Create Inventory Transaction ---
+      // Step 1: Update Product Stock, Cost Price, and MRP
       const transactionAndProductUpdatePromises = items.map(async (item) => {
         const currentProduct = products.find((p) => p.id === item.productId);
         if (!currentProduct) return;
 
-        // Calculate New Stock Quantity by adding received quantity
         const newStock = currentProduct.stock_quantity + item.quantity;
-
-        // Final Price is the new acquisition cost (Cost Price)
         const newCostPrice = item.finalPrice;
 
-        // Prepare Product Update Payload
         const productUpdatePayload = {
-          // 1. Update MRP (unit_price) if changed
           unit_price: item.mrpChanged ? item.mrp : currentProduct.unit_price,
-          // 2. Update stock_quantity (current stock) by adding received quantity
           stock_quantity: newStock,
-          // 3. Update cost_price with the unit price after discount
           cost_price: newCostPrice,
         };
 
-        // Send PUT request to update product
         await fetch(`/api/products/${item.productId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(productUpdatePayload),
         });
 
-        // --- Step 3: Create Inventory Transaction Entry ---
+        // Create Inventory Transaction
         await fetch("/api/inventory-transactions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -255,37 +241,34 @@ export default function AddPurchasePage() {
             product_id: item.productId,
             transaction_type: "purchase",
             quantity: item.quantity,
-            reference_id: purchaseId,
             reference_type: "purchase",
-            notes: `Stock addition from purchase order ${purchaseId}`,
+            notes: `Stock addition from purchase order`,
           }),
         });
       });
 
-      // Wait for all product updates and inventory transactions to complete
       await Promise.all(transactionAndProductUpdatePromises);
 
-      // --- Step 4: Save the main Purchase Order Document (Mocking API call) ---
+      // Step 2: Save Purchase Order with items
       const purchaseData = {
-        purchase_id: purchaseId, // Using the generated ID
         supplier_id: supplierId,
         purchase_date: purchaseDate,
+        invoice_number: invoiceNumber || null,
+        payment_status: paymentStatus,
         items: items.map((item) => ({
           product_id: item.productId,
           quantity: item.quantity,
           mrp: item.mrp,
           discount_percent: item.discountPercent,
           discount_amount: item.discountAmount,
-          unit_price: item.finalPrice, // Price actually paid per unit
+          unit_price: item.finalPrice,
           line_total: item.total,
         })),
         subtotal: subtotal,
         total_discount: totalDiscount,
         total_amount: subtotal,
-        status: "Received", // Assuming stock is updated instantly upon saving
       };
 
-      // Assuming a POST /api/purchases endpoint exists to save the document:
       const savePurchaseResponse = await fetch("/api/purchases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -293,17 +276,13 @@ export default function AddPurchasePage() {
       });
 
       if (!savePurchaseResponse.ok) {
-        console.error(
-          "Failed to save Purchase Order document:",
-          await savePurchaseResponse.json()
-        );
-        throw new Error("Failed to save Purchase Order document.");
+        const errorData = await savePurchaseResponse.json();
+        console.error("Failed to save Purchase Order:", errorData);
+        throw new Error(errorData.error || "Failed to save Purchase Order");
       }
 
-      alert(
-        `Purchase order ${purchaseId} created and inventory updated successfully!`
-      );
-
+      const responseData = await savePurchaseResponse.json();
+      alert(`Purchase order created successfully!`);
       router.push("/purchases");
     } catch (error) {
       console.error("Error saving purchase:", error);
@@ -357,7 +336,9 @@ export default function AddPurchasePage() {
           <Card>
             <CardHeader>
               <CardTitle>Purchase Details</CardTitle>
-              <CardDescription>Supplier and date information</CardDescription>
+              <CardDescription>
+                Supplier and invoice information
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -381,10 +362,39 @@ export default function AddPurchasePage() {
                   />
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="invoice">Invoice Number</Label>
+                  <Input
+                    id="invoice"
+                    placeholder="Supplier's invoice/bill number"
+                    value={invoiceNumber}
+                    onChange={(e) => setInvoiceNumber(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="payment">Payment Status</Label>
+                  <Select
+                    value={paymentStatus}
+                    onValueChange={(value: any) => setPaymentStatus(value)}
+                  >
+                    <SelectTrigger id="payment">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unpaid">Unpaid</SelectItem>
+                      <SelectItem value="partial">Partial Payment</SelectItem>
+                      <SelectItem value="paid">Paid</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Add Items Card - SIMPLIFIED WITH ONLY MRP AND DISCOUNT */}
+          {/* Add Items Card */}
           <Card>
             <CardHeader>
               <CardTitle>Add Items</CardTitle>
@@ -394,7 +404,6 @@ export default function AddPurchasePage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {/* Single Row: All fields and button aligned with same height */}
                 <div className="grid grid-cols-12 gap-3 items-end">
                   <div className="col-span-3">
                     <Label htmlFor="product" className="mb-2 block">
@@ -504,7 +513,6 @@ export default function AddPurchasePage() {
                   </div>
                 </div>
 
-                {/* MRP Update Warning - appears below if needed */}
                 {currentItem.productId &&
                   currentItem.mrp !==
                     products.find((p) => p.id === currentItem.productId)
@@ -514,7 +522,6 @@ export default function AddPurchasePage() {
                     </p>
                   )}
 
-                {/* Calculation Preview */}
                 {currentItem.productId && currentItem.mrp > 0 && (
                   <div className="p-3 bg-muted/50 rounded-md text-sm space-y-1">
                     <div className="flex justify-between">
@@ -568,7 +575,7 @@ export default function AddPurchasePage() {
             </CardContent>
           </Card>
 
-          {/* Items List - SIMPLIFIED TABLE */}
+          {/* Items List */}
           <Card>
             <CardHeader>
               <CardTitle>Purchase Items</CardTitle>
@@ -657,6 +664,18 @@ export default function AddPurchasePage() {
                   <span className="text-muted-foreground">Date:</span>
                   <span className="font-medium">
                     {new Date(purchaseDate).toLocaleDateString()}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Invoice #:</span>
+                  <span className="font-medium">
+                    {invoiceNumber || "Not set"}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Payment:</span>
+                  <span className="font-medium capitalize">
+                    {paymentStatus}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">

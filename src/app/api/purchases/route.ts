@@ -1,53 +1,58 @@
 // src/app/api/purchases/route.ts
+// Single Supplier System - Handles purchase AND items creation
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-// Type definitions
-interface PurchaseItem {
-  id: string;
-  product_id: string;
-  quantity: number;
-  mrp: number;
-  discount_percent: number;
-  discount_amount: number;
-  unit_price: number;
-  line_total: number;
-  product?: {
-    id: string;
-    sku: string;
-    name: string;
-    unit_of_measure: string;
-  };
+// Generate unique purchase ID
+async function generatePurchaseId(supabase: any): Promise<string> {
+  const { data: latestPurchase } = await supabase
+    .from("purchases")
+    .select("purchase_id")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (latestPurchase && latestPurchase.purchase_id) {
+    const match = latestPurchase.purchase_id.match(/(\d+)$/);
+    if (match) {
+      const nextNumber = parseInt(match[1]) + 1;
+      return `PO-${nextNumber.toString().padStart(3, "0")}`;
+    }
+  }
+
+  return "PO-001";
 }
 
-interface PurchaseItemInput {
-  product_id: string;
-  quantity: number;
-  mrp: number;
-  discount_percent?: number;
-  discount_amount?: number;
-  unit_price: number;
-  line_total: number;
-}
-
-// GET all purchases with their items
-export async function GET(request: Request) {
+// GET all purchases
+export async function GET() {
   try {
     const supabase = await createClient();
-    const { searchParams } = new URL(request.url);
 
-    // Optional query parameters for filtering
-    const startDate = searchParams.get("start_date");
-    const endDate = searchParams.get("end_date");
-
-    // Build the query
-    let query = supabase
+    const { data: purchases, error } = await supabase
       .from("purchases")
       .select(
         `
-        *,
-        supplier:suppliers(id, name, contact, email),
-        purchase_items(
+        id,
+        purchase_id,
+        supplier_id,
+        purchase_date,
+        subtotal,
+        total_discount,
+        total_amount,
+        invoice_number,
+        payment_status,
+        notes,
+        created_at,
+        updated_at,
+        suppliers (
+          id,
+          name,
+          contact,
+          email,
+          address,
+          city
+        ),
+        purchase_items (
           id,
           product_id,
           quantity,
@@ -56,158 +61,139 @@ export async function GET(request: Request) {
           discount_amount,
           unit_price,
           line_total,
-          product:products(id, sku, name, unit_of_measure)
+          products (
+            id,
+            name,
+            sku,
+            unit_of_measure
+          )
         )
       `
       )
-      .order("purchase_date", { ascending: false });
-
-    // Apply date filters if provided
-    if (startDate) {
-      query = query.gte("purchase_date", startDate);
-    }
-    if (endDate) {
-      query = query.lte("purchase_date", endDate);
-    }
-
-    const { data: purchases, error } = await query;
+      .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching purchases:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Transform data to match frontend expectations
-    const transformedPurchases =
-      purchases?.map((purchase) => ({
-        id: purchase.purchase_id,
-        supplierId: purchase.supplier?.id,
-        supplierName: purchase.supplier?.name || "Unknown Supplier",
-        date: purchase.purchase_date,
-        items: purchase.purchase_items?.length || 0,
-        totalItems:
-          purchase.purchase_items?.reduce(
-            (sum: number, item: PurchaseItem) => sum + item.quantity,
-            0
-          ) || 0,
-        total: purchase.total_amount,
-        subtotal: purchase.subtotal,
-        totalDiscount: purchase.total_discount,
-        notes: purchase.notes,
-        createdAt: purchase.created_at,
-        updatedAt: purchase.updated_at,
-      })) || [];
+    const formattedPurchases = purchases?.map((purchase) => ({
+      id: purchase.purchase_id,
+      supplierId: purchase.supplier_id,
+      supplierName: purchase.suppliers?.name || "Unknown",
+      date: purchase.purchase_date,
+      items: purchase.purchase_items?.length || 0,
+      totalItems:
+        purchase.purchase_items?.reduce(
+          (sum: number, item: any) => sum + item.quantity,
+          0
+        ) || 0,
+      total: purchase.total_amount,
+      subtotal: purchase.subtotal,
+      totalDiscount: purchase.total_discount,
+      invoiceNumber: purchase.invoice_number,
+      paymentStatus: purchase.payment_status,
+      notes: purchase.notes,
+      createdAt: purchase.created_at,
+      updatedAt: purchase.updated_at,
+    }));
 
     return NextResponse.json(
-      { purchases: transformedPurchases },
+      { purchases: formattedPurchases },
       { status: 200 }
     );
   } catch (error) {
-    console.error("Error in GET /api/purchases:", error);
+    console.error("Error fetching purchases:", error);
     return NextResponse.json(
-      { error: "Internal server error while fetching purchases" },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
 }
 
-// POST - Create new purchase order
+// POST - Create new purchase with items
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
     const body = await request.json();
 
-    const {
-      purchase_id,
-      supplier_id,
-      purchase_date,
-      items,
-      subtotal,
-      total_discount,
-      total_amount,
-      notes,
-    } = body;
+    // Get the primary supplier
+    const { data: supplier, error: supplierError } = await supabase
+      .from("suppliers")
+      .select("id")
+      .limit(1)
+      .single();
 
-    // Validate required fields
-    if (!purchase_id || !supplier_id || !items || items.length === 0) {
+    if (supplierError || !supplier) {
       return NextResponse.json(
-        {
-          error:
-            "Missing required fields: purchase_id, supplier_id, and items are required",
-        },
+        { error: "Supplier not found. Please set up a supplier first." },
         { status: 400 }
       );
     }
 
-    // Get current user
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Generate unique purchase ID
+    const purchaseId = await generatePurchaseId(supabase);
 
-    // Start a transaction by inserting the purchase first
+    // Create purchase
     const { data: purchase, error: purchaseError } = await supabase
       .from("purchases")
       .insert([
         {
-          purchase_id,
-          supplier_id,
-          purchase_date:
-            purchase_date || new Date().toISOString().split("T")[0],
-          subtotal: subtotal || 0,
-          total_discount: total_discount || 0,
-          total_amount: total_amount || 0,
-          notes: notes || null,
-          created_by: user?.id,
+          purchase_id: purchaseId,
+          supplier_id: supplier.id,
+          purchase_date: body.purchase_date,
+          subtotal: body.subtotal || 0,
+          total_discount: body.total_discount || 0,
+          total_amount: body.total_amount || body.subtotal || 0,
+          invoice_number: body.invoice_number || null,
+          payment_status: body.payment_status || "unpaid",
+          notes: body.notes || null,
         },
       ])
       .select()
       .single();
 
     if (purchaseError) {
-      console.error("Error creating purchase:", purchaseError);
+      console.error("Purchase creation error:", purchaseError);
       return NextResponse.json(
         { error: purchaseError.message },
         { status: 500 }
       );
     }
 
-    // Insert purchase items
-    const purchaseItems = items.map((item: PurchaseItemInput) => ({
-      purchase_id: purchase.id,
-      product_id: item.product_id,
-      quantity: item.quantity,
-      mrp: item.mrp,
-      discount_percent: item.discount_percent || 0,
-      discount_amount: item.discount_amount || 0,
-      unit_price: item.unit_price,
-      line_total: item.line_total,
-    }));
+    // Create purchase items if provided
+    if (body.items && Array.isArray(body.items) && body.items.length > 0) {
+      const purchaseItems = body.items.map((item: any) => ({
+        purchase_id: purchase.id, // Use the UUID, not purchase_id text
+        product_id: item.product_id,
+        quantity: item.quantity,
+        mrp: item.mrp,
+        discount_percent: item.discount_percent || 0,
+        discount_amount: item.discount_amount || 0,
+        unit_price: item.unit_price,
+        line_total: item.line_total,
+      }));
 
-    const { error: itemsError } = await supabase
-      .from("purchase_items")
-      .insert(purchaseItems);
+      const { error: itemsError } = await supabase
+        .from("purchase_items")
+        .insert(purchaseItems);
 
-    if (itemsError) {
-      console.error("Error creating purchase items:", itemsError);
-      // Rollback by deleting the purchase
-      await supabase.from("purchases").delete().eq("id", purchase.id);
-      return NextResponse.json({ error: itemsError.message }, { status: 500 });
+      if (itemsError) {
+        console.error("Purchase items creation error:", itemsError);
+        // Rollback: delete the purchase if items creation fails
+        await supabase.from("purchases").delete().eq("id", purchase.id);
+
+        return NextResponse.json(
+          { error: `Failed to create purchase items: ${itemsError.message}` },
+          { status: 500 }
+        );
+      }
     }
 
-    return NextResponse.json(
-      {
-        message: "Purchase order created successfully",
-        purchase: {
-          id: purchase.id,
-          purchase_id: purchase.purchase_id,
-        },
-      },
-      { status: 201 }
-    );
+    return NextResponse.json({ purchase }, { status: 201 });
   } catch (error) {
-    console.error("Error in POST /api/purchases:", error);
+    console.error("Error creating purchase:", error);
     return NextResponse.json(
-      { error: "Internal server error while creating purchase order" },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
