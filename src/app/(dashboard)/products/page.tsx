@@ -12,6 +12,8 @@ import {
   Package,
   Loader2,
   DollarSign,
+  CheckCircle2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 // --- START: DB-UI Interface and Mapping ---
 import { Database } from "@/types/database.types";
@@ -136,6 +139,8 @@ export default function ProductsPage() {
     sellingPrice: 0, // NEW: Optional selling price field
     costPrice: 0,
   });
+  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   // -----------------------------------------------------------
   // 1. Data Fetching
@@ -221,7 +226,7 @@ export default function ProductsPage() {
         });
 
         if (!response.ok) throw new Error("Failed to update product");
-        alert("Product updated successfully!");
+        setSuccessMessage(`Product "${formData.name}" updated successfully!`);
       } else {
         // POST: Add new product
         const insertPayload: ProductInsert = {
@@ -240,8 +245,14 @@ export default function ProductsPage() {
           console.error("API Error Response:", errorData);
           throw new Error(errorData.error || "Failed to add new product");
         }
-        alert("Product added successfully!");
+        setSuccessMessage(`Product "${formData.name}" added successfully!`);
       }
+
+      // Show success alert and auto-close after 3 seconds
+      setShowSuccessAlert(true);
+      setTimeout(() => {
+        setShowSuccessAlert(false);
+      }, 3000);
 
       // Refresh data to update UI
       await fetchProducts();
@@ -265,7 +276,14 @@ export default function ProductsPage() {
 
       if (!response.ok) throw new Error("Failed to delete product");
 
-      alert(`Product ${selectedProduct.name} deleted successfully!`);
+      setSuccessMessage(
+        `Product "${selectedProduct.name}" deleted successfully!`
+      );
+      setShowSuccessAlert(true);
+      setTimeout(() => {
+        setShowSuccessAlert(false);
+      }, 3000);
+
       await fetchProducts();
     } catch (error) {
       console.error("Error deleting product:", error);
@@ -347,6 +365,25 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Success Alert - Fixed Position Right Side */}
+      {showSuccessAlert && (
+        <div className="fixed top-4 right-4 z-50 w-96 animate-in slide-in-from-right">
+          <Alert className="bg-green-50 border-green-200">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <AlertTitle className="text-green-800">Success!</AlertTitle>
+            <AlertDescription className="text-green-700">
+              {successMessage}
+            </AlertDescription>
+            <button
+              onClick={() => setShowSuccessAlert(false)}
+              className="absolute top-2 right-2 rounded-md p-1 hover:bg-green-100"
+            >
+              <X className="h-4 w-4 text-green-600" />
+            </button>
+          </Alert>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
@@ -635,6 +672,7 @@ export default function ProductsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Single Core">Single Core</SelectItem>
+                  <SelectItem value="Twin">Twin</SelectItem>
                   <SelectItem value="Multi-strand">Multi-strand</SelectItem>
                   <SelectItem value="Flexible">Flexible</SelectItem>
                   <SelectItem value="Armoured">Armoured</SelectItem>
