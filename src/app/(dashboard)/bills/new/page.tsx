@@ -78,7 +78,7 @@ export default function CreateBillPage() {
   const [billNo, setBillNo] = useState("");
   const [items, setItems] = useState<BillItem[]>([]);
   const [billDiscount, setBillDiscount] = useState(0);
-  const [paymentType, setPaymentType] = useState("cash");
+  const [paymentType, setPaymentType] = useState("credit");
   const [paidAmount, setPaidAmount] = useState(0);
 
   // API data states
@@ -279,7 +279,7 @@ export default function CreateBillPage() {
   const finalTotal = subtotal - billDiscountAmount;
   const balance = finalTotal - paidAmount;
 
-  // Auto-set paid amount for cash
+  // Auto-set paid amount for cash only
   useEffect(() => {
     if (paymentType === "cash") {
       setPaidAmount(finalTotal);
@@ -498,10 +498,13 @@ export default function CreateBillPage() {
                     }
                   />
                 </SelectTrigger>
-               <SelectContent>
+                <SelectContent>
                   {products
                     .filter((product) => product.stock_quantity > 0)
-                    .filter((product) => !items.some((item) => item.productId === product.id))
+                    .filter(
+                      (product) =>
+                        !items.some((item) => item.productId === product.id)
+                    )
                     .map((product) => (
                       <SelectItem key={product.id} value={product.id}>
                         {product.name} - {product.sku} (Stock:{" "}
