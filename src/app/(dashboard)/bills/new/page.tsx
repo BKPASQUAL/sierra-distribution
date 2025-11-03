@@ -498,9 +498,10 @@ export default function CreateBillPage() {
                     }
                   />
                 </SelectTrigger>
-                <SelectContent>
+               <SelectContent>
                   {products
                     .filter((product) => product.stock_quantity > 0)
+                    .filter((product) => !items.some((item) => item.productId === product.id))
                     .map((product) => (
                       <SelectItem key={product.id} value={product.id}>
                         {product.name} - {product.sku} (Stock:{" "}
