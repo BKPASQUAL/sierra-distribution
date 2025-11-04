@@ -20,6 +20,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -170,6 +172,10 @@ export default function ProductsPage() {
   // Sorting state (removed selection state)
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 7;
 
   // -----------------------------------------------------------
   // 1. Data Fetching
@@ -421,6 +427,34 @@ export default function ProductsPage() {
     (p) => p.stock > 0 && p.stock < p.minStock
   ).length;
   const outOfStockProducts = products.filter((p) => p.stock === 0).length;
+
+  // Pagination calculations
+  const totalPages = Math.ceil(sortedProducts.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentPageProducts = sortedProducts.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, typeFilter, stockFilter, sortField, sortOrder]);
+
+  // Pagination handlers
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
 
   // -----------------------------------------------------------
   // 5. Report Generation Functions (Updated - All Products)
@@ -841,7 +875,7 @@ export default function ProductsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedProducts.length === 0 ? (
+                  {currentPageProducts.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={10}
@@ -851,7 +885,7 @@ export default function ProductsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    sortedProducts.map((product) => (
+                    currentPageProducts.map((product) => (
                       <TableRow key={product.id}>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
@@ -941,6 +975,99 @@ export default function ProductsPage() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {!loading && sortedProducts.length > 0 && (
+            <div className="flex items-center justify-between px-2 py-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to{" "}
+                {Math.min(endIndex, sortedProducts.length)} of{" "}
+                {sortedProducts.length} products
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToPreviousPage}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Previous
+                </Button>
+
+                <div className="flex items-center gap-1">
+                  {/* First page */}
+                  {currentPage > 3 && (
+                    <>
+                      <Button
+                        variant={currentPage === 1 ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => goToPage(1)}
+                        className="w-9"
+                      >
+                        1
+                      </Button>
+                      {currentPage > 4 && (
+                        <span className="px-2 text-muted-foreground">...</span>
+                      )}
+                    </>
+                  )}
+
+                  {/* Pages around current */}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(
+                      (page) =>
+                        page === currentPage ||
+                        page === currentPage - 1 ||
+                        page === currentPage + 1 ||
+                        page === currentPage - 2 ||
+                        page === currentPage + 2
+                    )
+                    .filter((page) => page > 0 && page <= totalPages)
+                    .map((page) => (
+                      <Button
+                        key={page}
+                        variant={currentPage === page ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => goToPage(page)}
+                        className="w-9"
+                      >
+                        {page}
+                      </Button>
+                    ))}
+
+                  {/* Last page */}
+                  {currentPage < totalPages - 2 && (
+                    <>
+                      {currentPage < totalPages - 3 && (
+                        <span className="px-2 text-muted-foreground">...</span>
+                      )}
+                      <Button
+                        variant={
+                          currentPage === totalPages ? "default" : "outline"
+                        }
+                        size="sm"
+                        onClick={() => goToPage(totalPages)}
+                        className="w-9"
+                      >
+                        {totalPages}
+                      </Button>
+                    </>
+                  )}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToNextPage}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
