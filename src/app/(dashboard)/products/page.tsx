@@ -14,6 +14,12 @@ import {
   DollarSign,
   CheckCircle2,
   X,
+  FileSpreadsheet,
+  FileText,
+  Download,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +55,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+// Import export libraries
+import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 // --- START: DB-UI Interface and Mapping ---
 import { Database } from "@/types/database.types";
@@ -60,33 +77,30 @@ interface Product {
   id: string;
   sku: string;
   name: string;
-  type: string; // Maps to DB: category
-  size: string; // Derived from name/description
-  rollLength: number; // Derived from unit_of_measure
-  stock: number; // Maps to DB: stock_quantity
-  minStock: number; // Maps to DB: reorder_level
-  mrp: number; // Maps to DB: mrp
-  sellingPrice: number; // Maps to DB: unit_price (optional default selling price)
-  costPrice: number; // Maps to DB: cost_price
-  discountPercent: number; // Standard discount percentage for this product
-  totalValue: number; // Calculated: stock × MRP
-  totalCost: number; // Calculated: stock × cost_price
-  profitMargin: number; // Calculated: ((MRP - cost_price) / MRP) × 100
+  type: string;
+  size: string;
+  rollLength: number;
+  stock: number;
+  minStock: number;
+  mrp: number;
+  sellingPrice: number;
+  costPrice: number;
+  discountPercent: number;
+  totalValue: number;
+  totalCost: number;
+  profitMargin: number;
 }
 
 function mapDbProductToUiProduct(dbProduct: any): Product {
-  // Extract length from unit_of_measure (e.g., "100m Roll" -> 100)
   const unitOfMeasure = dbProduct.unit_of_measure || dbProduct.name;
   const rollLengthMatch = unitOfMeasure?.match(/(\d+)(?:m| meter)/i);
 
-  // Extract size (e.g., "2.5mm") from name or description
   const sizeMatch =
     dbProduct.name.match(/(\d+\.\d+|\d+)mm/i) ||
     dbProduct.description?.match(/Size: (\d+\.\d+|\d+)/i);
 
   const mrp = dbProduct.mrp ?? 0;
-  // Use selling_price column from database (new column)
-  const sellingPrice = dbProduct.selling_price ?? mrp; // Default to MRP if no selling price set
+  const sellingPrice = dbProduct.selling_price ?? mrp;
   const costPrice = dbProduct.cost_price ?? 0;
   const stock = dbProduct.stock_quantity ?? 0;
   const minStock = dbProduct.reorder_level ?? 0;
@@ -118,6 +132,17 @@ function mapDbProductToUiProduct(dbProduct: any): Product {
 }
 // --- END: DB-UI Interface and Mapping ---
 
+type SortField =
+  | "name"
+  | "type"
+  | "size"
+  | "stock"
+  | "costPrice"
+  | "sellingPrice"
+  | "mrp"
+  | "totalCost";
+type SortOrder = "asc" | "desc";
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,6 +166,10 @@ export default function ProductsPage() {
   });
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+
+  // Sorting state (removed selection state)
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
 
   // -----------------------------------------------------------
   // 1. Data Fetching
@@ -177,7 +206,6 @@ export default function ProductsPage() {
   // -----------------------------------------------------------
 
   const handleAddProduct = async () => {
-    // Basic form validation
     if (
       !formData.name ||
       !formData.type ||
@@ -196,16 +224,14 @@ export default function ProductsPage() {
         ? formData.customRollLength
         : formData.rollLength;
 
-    // If selling price is not set or is 0, default it to MRP
     const finalSellingPrice =
       formData.sellingPrice > 0 ? formData.sellingPrice : formData.mrp;
 
-    // Map UI fields to DB schema (ProductInsert/ProductUpdate)
     const payload = {
       name: formData.name,
       category: formData.type,
-      unit_price: finalSellingPrice, // Keep for backward compatibility
-      selling_price: finalSellingPrice, // NEW: Save to selling_price column
+      unit_price: finalSellingPrice,
+      selling_price: finalSellingPrice,
       cost_price: formData.costPrice,
       stock_quantity: formData.stock,
       reorder_level: formData.minStock,
@@ -218,7 +244,6 @@ export default function ProductsPage() {
     try {
       let response;
       if (selectedProduct) {
-        // PUT: Update existing product
         response = await fetch(`/api/products/${selectedProduct.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -228,7 +253,6 @@ export default function ProductsPage() {
         if (!response.ok) throw new Error("Failed to update product");
         setSuccessMessage(`Product "${formData.name}" updated successfully!`);
       } else {
-        // POST: Add new product
         const insertPayload: ProductInsert = {
           ...payload,
           sku: `SKU-${Date.now().toString().slice(-6)}`,
@@ -248,13 +272,11 @@ export default function ProductsPage() {
         setSuccessMessage(`Product "${formData.name}" added successfully!`);
       }
 
-      // Show success alert and auto-close after 3 seconds
       setShowSuccessAlert(true);
       setTimeout(() => {
         setShowSuccessAlert(false);
       }, 3000);
 
-      // Refresh data to update UI
       await fetchProducts();
     } catch (error) {
       console.error("Error saving product:", error);
@@ -328,7 +350,31 @@ export default function ProductsPage() {
   };
 
   // -----------------------------------------------------------
-  // 3. Filtering and Calculations (FIXED VERSION)
+  // 3. Sorting Handlers
+  // -----------------------------------------------------------
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-4 h-4 ml-1 opacity-40" />;
+    }
+    return sortOrder === "asc" ? (
+      <ArrowUp className="w-4 h-4 ml-1" />
+    ) : (
+      <ArrowDown className="w-4 h-4 ml-1" />
+    );
+  };
+
+  // -----------------------------------------------------------
+  // 4. Filtering and Sorting
   // -----------------------------------------------------------
 
   const filteredProducts = products.filter((product) => {
@@ -337,10 +383,8 @@ export default function ProductsPage() {
       product.size.includes(searchQuery) ||
       product.type.toLowerCase().includes(searchQuery.toLowerCase());
 
-    // FIXED: Proper type filter comparison
     const matchesType = typeFilter === "all" || product.type === typeFilter;
 
-    // FIXED: Proper stock filtering with "out-of-stock" option
     let matchesStock = true;
     if (stockFilter === "out-of-stock") {
       matchesStock = product.stock === 0;
@@ -353,6 +397,21 @@ export default function ProductsPage() {
     return matchesSearch && matchesType && matchesStock;
   });
 
+  // Apply sorting
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    let aValue: any = a[sortField];
+    let bValue: any = b[sortField];
+
+    if (typeof aValue === "string") {
+      aValue = aValue.toLowerCase();
+      bValue = bValue.toLowerCase();
+    }
+
+    if (aValue < bValue) return sortOrder === "asc" ? -1 : 1;
+    if (aValue > bValue) return sortOrder === "asc" ? 1 : -1;
+    return 0;
+  });
+
   const types = ["all", ...new Set(products.map((p) => p.type))];
 
   const totalProducts = products.length;
@@ -363,16 +422,205 @@ export default function ProductsPage() {
   ).length;
   const outOfStockProducts = products.filter((p) => p.stock === 0).length;
 
-  const getProfitMarginColor = (margin: number) => {
-    if (margin >= 30) return "text-green-600";
-    if (margin >= 20) return "text-blue-600";
-    if (margin >= 10) return "text-yellow-600";
-    return "text-red-600";
+  // -----------------------------------------------------------
+  // 5. Report Generation Functions (Updated - All Products)
+  // -----------------------------------------------------------
+
+  const generateExcelReport = () => {
+    if (sortedProducts.length === 0) {
+      alert("No products to export. Please adjust your filters.");
+      return;
+    }
+
+    // Use sortedProducts (all filtered and sorted products)
+    const excelData = sortedProducts.map((product) => ({
+      SKU: product.sku,
+      "Product Name": product.name,
+      Type: product.type,
+      Size: product.size,
+      "Roll Length (m)": product.rollLength,
+      "Stock (rolls)": product.stock,
+      "Min Stock": product.minStock,
+      "Selling Price (LKR)": product.sellingPrice,
+      "MRP (LKR)": product.mrp,
+    }));
+
+    // Add summary row with only Stock total
+    const totalStockAll = sortedProducts.reduce((sum, p) => sum + p.stock, 0);
+
+    excelData.push({
+      SKU: "",
+      "Product Name": "TOTAL",
+      Type: "",
+      Size: "",
+      "Roll Length (m)": "",
+      "Stock (rolls)": totalStockAll,
+      "Min Stock": "",
+      "Selling Price (LKR)": "",
+      "MRP (LKR)": "",
+    } as any);
+
+    // Create workbook and worksheet
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Products Report");
+
+    // Auto-width columns
+    const maxWidth = excelData.reduce((w: any, r: any) => {
+      return Object.keys(r).map((k, i) => {
+        const currentWidth = w[i] || 10;
+        const cellValue = String(r[k] || "");
+        return Math.max(currentWidth, cellValue.length + 2);
+      });
+    }, []);
+
+    ws["!cols"] = maxWidth.map((w: number) => ({ width: w }));
+
+    // Generate file
+    const fileName = `Products_Report_${
+      new Date().toISOString().split("T")[0]
+    }.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    setSuccessMessage(
+      `Excel report generated successfully! (${sortedProducts.length} products)`
+    );
+    setShowSuccessAlert(true);
+    setTimeout(() => setShowSuccessAlert(false), 3000);
+  };
+
+  const generatePDFReport = () => {
+    if (sortedProducts.length === 0) {
+      alert("No products to export. Please adjust your filters.");
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+
+    // Add title
+    doc.setFontSize(16);
+    doc.setTextColor(40);
+    doc.text("Sierra Distribution", 14, 15);
+    doc.setFontSize(12);
+    doc.text("Products Report", 14, 22);
+
+    // Add metadata
+    doc.setFontSize(8);
+    doc.setTextColor(100);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
+    doc.text(`Total Products: ${sortedProducts.length}`, 14, 33);
+
+    // Prepare table data (removed Cost Price, Total Cost, Total Value, Profit Margin)
+    const tableData = sortedProducts.map((product) => [
+      product.sku,
+      product.name,
+      product.type,
+      product.size,
+      `${product.rollLength}m`,
+      product.stock.toString(),
+      product.minStock.toString(),
+      product.sellingPrice.toLocaleString(),
+      product.mrp.toLocaleString(),
+    ]);
+
+    // Add totals row (only Stock total)
+    const totalStockAll = sortedProducts.reduce((sum, p) => sum + p.stock, 0);
+
+    tableData.push([
+      "",
+      "TOTAL",
+      "",
+      "",
+      "",
+      totalStockAll.toString(),
+      "",
+      "",
+      "",
+    ]);
+
+    // Generate table using autoTable
+    autoTable(doc, {
+      head: [
+        [
+          "SKU",
+          "Product Name",
+          "Type",
+          "Size",
+          "Length",
+          "Stock",
+          "Min",
+          "Sell Price",
+          "MRP",
+        ],
+      ],
+      body: tableData,
+      startY: 38,
+      theme: "grid",
+      headStyles: {
+        fillColor: [79, 70, 229],
+        textColor: 255,
+        fontSize: 7,
+        fontStyle: "bold",
+        halign: "center",
+      },
+      bodyStyles: {
+        fontSize: 7,
+      },
+      columnStyles: {
+        0: { cellWidth: 18, halign: "left" }, // SKU
+        1: { cellWidth: 45, halign: "left" }, // Product Name
+        2: { cellWidth: 20, halign: "center" }, // Type
+        3: { cellWidth: 13, halign: "center" }, // Size
+        4: { cellWidth: 15, halign: "center" }, // Length
+        5: { cellWidth: 15, halign: "center" }, // Stock
+        6: { cellWidth: 12, halign: "center" }, // Min
+        7: { cellWidth: 20, halign: "right" }, // Sell Price
+        8: { cellWidth: 20, halign: "right" }, // MRP
+      },
+      didParseCell: (data: any) => {
+        // Bold the total row
+        if (data.row.index === tableData.length - 1) {
+          data.cell.styles.fontStyle = "bold";
+          data.cell.styles.fillColor = [240, 240, 240];
+        }
+      },
+      margin: { left: 14, right: 14 },
+    });
+
+    // Add footer
+    const pageCount = doc.getNumberOfPages();
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.text(
+        `Page ${i} of ${pageCount}`,
+        doc.internal.pageSize.getWidth() / 2,
+        doc.internal.pageSize.getHeight() - 10,
+        { align: "center" }
+      );
+    }
+
+    // Save PDF
+    const fileName = `Products_Report_${
+      new Date().toISOString().split("T")[0]
+    }.pdf`;
+    doc.save(fileName);
+
+    setSuccessMessage(
+      `PDF report generated successfully! (${sortedProducts.length} products)`
+    );
+    setShowSuccessAlert(true);
+    setTimeout(() => setShowSuccessAlert(false), 3000);
   };
 
   return (
     <div className="space-y-6">
-      {/* Success Alert - Fixed Position Right Side */}
+      {/* Success Alert */}
       {showSuccessAlert && (
         <div className="fixed top-4 right-4 z-50 w-96 animate-in slide-in-from-right">
           <Alert className="bg-green-50 border-green-200">
@@ -399,16 +647,37 @@ export default function ProductsPage() {
             Manage wire products and inventory
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setSelectedProduct(null);
-            resetForm();
-            setIsAddDialogOpen(true);
-          }}
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add New Product
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Report Generation Button */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Download className="w-4 h-4 mr-2" />
+                Generate Report
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={generateExcelReport}>
+                <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" />
+                Export to Excel (.xlsx)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={generatePDFReport}>
+                <FileText className="w-4 h-4 mr-2 text-red-600" />
+                Export to PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            onClick={() => {
+              setSelectedProduct(null);
+              resetForm();
+              setIsAddDialogOpen(true);
+            }}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add New Product
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -511,20 +780,68 @@ export default function ProductsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Product Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Size</TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleSort("name")}
+                    >
+                      <div className="flex items-center">
+                        Product Name
+                        {getSortIcon("name")}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleSort("type")}
+                    >
+                      <div className="flex items-center">
+                        Type
+                        {getSortIcon("type")}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleSort("size")}
+                    >
+                      <div className="flex items-center">
+                        Size
+                        {getSortIcon("size")}
+                      </div>
+                    </TableHead>
                     <TableHead className="text-right">Roll Length</TableHead>
-                    <TableHead className="text-right">Stock</TableHead>
+                    <TableHead
+                      className="text-right cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleSort("stock")}
+                    >
+                      <div className="flex items-center justify-end">
+                        Stock
+                        {getSortIcon("stock")}
+                      </div>
+                    </TableHead>
                     <TableHead className="text-right">Cost Price</TableHead>
-                    <TableHead className="text-right">Selling Price</TableHead>
-                    <TableHead className="text-right">MRP</TableHead>
+                    <TableHead
+                      className="text-right cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleSort("sellingPrice")}
+                    >
+                      <div className="flex items-center justify-end">
+                        Selling Price
+                        {getSortIcon("sellingPrice")}
+                      </div>
+                    </TableHead>
+                    <TableHead
+                      className="text-right cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleSort("mrp")}
+                    >
+                      <div className="flex items-center justify-end">
+                        MRP
+                        {getSortIcon("mrp")}
+                      </div>
+                    </TableHead>
                     <TableHead className="text-right">Total Cost</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredProducts.length === 0 ? (
+                  {sortedProducts.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={10}
@@ -534,7 +851,7 @@ export default function ProductsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredProducts.map((product) => (
+                    sortedProducts.map((product) => (
                       <TableRow key={product.id}>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
@@ -779,8 +1096,6 @@ export default function ProductsPage() {
                 Maximum Retail Price
               </p>
             </div>
-
-            {/* NEW: Optional Selling Price Field */}
             <div className="col-span-2 space-y-2 border-t pt-4">
               <div className="flex items-center justify-between">
                 <Label htmlFor="sellingPrice">
@@ -822,7 +1137,6 @@ export default function ProductsPage() {
                 </div>
               )}
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="stock">Current Stock (rolls) *</Label>
               <Input
