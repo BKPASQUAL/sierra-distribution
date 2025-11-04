@@ -136,7 +136,7 @@ export default function ProductsPage() {
     stock: 0,
     minStock: 0,
     mrp: 0,
-    sellingPrice: 0, // NEW: Optional selling price field
+    sellingPrice: 0,
     costPrice: 0,
   });
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
@@ -328,7 +328,7 @@ export default function ProductsPage() {
   };
 
   // -----------------------------------------------------------
-  // 3. Filtering and Calculations (Using fetched data)
+  // 3. Filtering and Calculations (FIXED VERSION)
   // -----------------------------------------------------------
 
   const filteredProducts = products.filter((product) => {
@@ -337,13 +337,17 @@ export default function ProductsPage() {
       product.size.includes(searchQuery) ||
       product.type.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesType = typeFilter === "all" || product.type === product.type;
+    // FIXED: Proper type filter comparison
+    const matchesType = typeFilter === "all" || product.type === typeFilter;
 
+    // FIXED: Proper stock filtering with "out-of-stock" option
     let matchesStock = true;
-    if (stockFilter === "low") {
-      matchesStock = product.stock < product.minStock;
+    if (stockFilter === "out-of-stock") {
+      matchesStock = product.stock === 0;
+    } else if (stockFilter === "low") {
+      matchesStock = product.stock > 0 && product.stock < product.minStock;
     } else if (stockFilter === "in-stock") {
-      matchesStock = product.stock >= product.minStock;
+      matchesStock = product.stock > 0 && product.stock >= product.minStock;
     }
 
     return matchesSearch && matchesType && matchesStock;
@@ -354,7 +358,10 @@ export default function ProductsPage() {
   const totalProducts = products.length;
   const totalStockValue = products.reduce((sum, p) => sum + p.totalValue, 0);
   const totalCostValue = products.reduce((sum, p) => sum + p.totalCost, 0);
-  const lowStockProducts = products.filter((p) => p.stock < p.minStock).length;
+  const lowStockProducts = products.filter(
+    (p) => p.stock > 0 && p.stock < p.minStock
+  ).length;
+  const outOfStockProducts = products.filter((p) => p.stock === 0).length;
 
   const getProfitMarginColor = (margin: number) => {
     if (margin >= 30) return "text-green-600";
@@ -451,25 +458,6 @@ export default function ProductsPage() {
         </Card>
       </div>
 
-      {/* Low Stock Alert */}
-      {lowStockProducts > 0 && (
-        <Card className="border-destructive">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <AlertTriangle className="w-8 h-8 text-destructive" />
-              <div>
-                <h3 className="font-semibold text-destructive">
-                  {lowStockProducts} Products Need Reordering
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Stock levels are below minimum threshold
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Search and Filters */}
       <Card>
         <CardHeader>
@@ -506,6 +494,7 @@ export default function ProductsPage() {
                   <SelectItem value="all">All Stock</SelectItem>
                   <SelectItem value="in-stock">In Stock</SelectItem>
                   <SelectItem value="low">Low Stock</SelectItem>
+                  <SelectItem value="out-of-stock">Out of Stock</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -550,12 +539,17 @@ export default function ProductsPage() {
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             {product.name}
-                            {product.stock < product.minStock && (
+                            {product.stock === 0 ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                <AlertTriangle className="w-3 h-3 mr-1" />
+                                Out of Stock
+                              </span>
+                            ) : product.stock < product.minStock ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive">
                                 <AlertTriangle className="w-3 h-3 mr-1" />
                                 Low Stock
                               </span>
-                            )}
+                            ) : null}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -570,7 +564,9 @@ export default function ProductsPage() {
                         <TableCell className="text-right">
                           <span
                             className={
-                              product.stock < product.minStock
+                              product.stock === 0
+                                ? "text-red-600 font-bold"
+                                : product.stock < product.minStock
                                 ? "text-destructive font-medium"
                                 : ""
                             }
