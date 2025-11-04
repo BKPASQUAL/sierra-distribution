@@ -1,15 +1,17 @@
-import { createClient } from "@/lib/supabase/server";
-import { NextResponse } from "next/server";
+// src/app/api/products/[id]/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
 
-// GET single product by ID
 export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient();
-    const { id } = await params;
+    const supabase = createRouteHandlerClient({ cookies });
+    const { id } = params;
 
+    // Fetch single product
     const { data: product, error } = await supabase
       .from("products")
       .select("*")
@@ -17,7 +19,11 @@ export async function GET(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("Database error:", error);
+      return NextResponse.json(
+        { error: "Failed to fetch product", details: error.message },
+        { status: 500 }
+      );
     }
 
     if (!product) {
@@ -26,6 +32,7 @@ export async function GET(
 
     return NextResponse.json({ product }, { status: 200 });
   } catch (error) {
+    console.error("Unexpected error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -33,14 +40,13 @@ export async function GET(
   }
 }
 
-// PUT - Update product
 export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient();
-    const { id } = await params;
+    const supabase = createRouteHandlerClient({ cookies });
+    const { id } = params;
     const body = await request.json();
 
     const { data: product, error } = await supabase
@@ -51,11 +57,16 @@ export async function PUT(
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("Database error:", error);
+      return NextResponse.json(
+        { error: "Failed to update product", details: error.message },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ product }, { status: 200 });
   } catch (error) {
+    console.error("Unexpected error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -63,19 +74,22 @@ export async function PUT(
   }
 }
 
-// DELETE product
 export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient();
-    const { id } = await params;
+    const supabase = createRouteHandlerClient({ cookies });
+    const { id } = params;
 
     const { error } = await supabase.from("products").delete().eq("id", id);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("Database error:", error);
+      return NextResponse.json(
+        { error: "Failed to delete product", details: error.message },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json(
@@ -83,6 +97,7 @@ export async function DELETE(
       { status: 200 }
     );
   } catch (error) {
+    console.error("Unexpected error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
