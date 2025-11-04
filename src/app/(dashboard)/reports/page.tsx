@@ -16,6 +16,8 @@ import {
   TrendingDown,
   Percent,
   CheckCircle,
+  Lock,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,8 +48,6 @@ import {
 import {
   BarChart,
   Bar,
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -58,20 +58,21 @@ import {
   Cell,
   Legend,
 } from "recharts";
+import { createClient } from "@/lib/supabase/client";
 
 interface OrderWithProfit {
   id: string;
   order_number: string;
   order_date: string;
   customer_id: string;
-  subtotal: number; // Total before discount
-  discount: number; // Discount amount
-  total_amount: number; // Final amount after discount
-  total_cost: number; // Cost of goods
-  gross_profit: number; // Profit before discount
-  net_profit: number; // Profit after discount
-  profit_margin: number; // Net profit / total_amount
-  discount_impact: number; // How much discount reduced profit
+  subtotal: number;
+  discount: number;
+  total_amount: number;
+  total_cost: number;
+  gross_profit: number;
+  net_profit: number;
+  profit_margin: number;
+  discount_impact: number;
   payment_status: string;
   customers: {
     name: string;
@@ -98,6 +99,12 @@ interface DueInvoice {
 }
 
 export default function ReportsPage() {
+  // Auth state
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userName, setUserName] = useState("");
+
+  // Data state
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<OrderWithProfit[]>([]);
   const [customerSummary, setCustomerSummary] = useState<
@@ -105,6 +112,7 @@ export default function ReportsPage() {
   >([]);
   const [dueInvoices, setDueInvoices] = useState<DueInvoice[]>([]);
 
+  // Filter state
   const [dateFrom, setDateFrom] = useState(() => {
     const date = new Date();
     date.setDate(date.getDate() - 30);
@@ -115,15 +123,63 @@ export default function ReportsPage() {
   );
   const [selectedPeriod, setSelectedPeriod] = useState("month");
 
+  // Check user role on mount
   useEffect(() => {
-    fetchReportData();
+    checkUserRole();
   }, []);
+
+  // Fetch data only if user is admin
+  useEffect(() => {
+    if (isAdmin) {
+      fetchReportData();
+    }
+  }, [isAdmin]);
+
+  const checkUserRole = async () => {
+    try {
+      setIsCheckingAuth(true);
+      const supabase = createClient();
+
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+
+      if (error || !user) {
+        setIsAdmin(false);
+        return;
+      }
+
+      const userRole = user.user_metadata?.role;
+      const userNameFromMeta = user.user_metadata?.name;
+
+      setUserName(userNameFromMeta || user.email || "User");
+      setIsAdmin(userRole === "Admin");
+
+      if (!userRole) {
+        const { data: userData } = await supabase
+          .from("users")
+          .select("role, name")
+          .eq("id", user.id)
+          .single();
+
+        if (userData) {
+          setUserName(userData.name || user.email || "User");
+          setIsAdmin(userData.role === "Admin");
+        }
+      }
+    } catch (error) {
+      console.error("Error checking user role:", error);
+      setIsAdmin(false);
+    } finally {
+      setIsCheckingAuth(false);
+    }
+  };
 
   const fetchReportData = async () => {
     try {
       setLoading(true);
 
-      // Fetch orders with items
       const ordersResponse = await fetch("/api/orders");
       const ordersData = await ordersResponse.json();
 
@@ -132,39 +188,26 @@ export default function ReportsPage() {
         return;
       }
 
-      // Fetch payments
       const paymentsResponse = await fetch("/api/payments");
       const paymentsData = await paymentsResponse.json();
 
-      // Calculate profit for each order
       const ordersWithProfit: OrderWithProfit[] = ordersData.orders.map(
         (order: any) => {
-          // Calculate subtotal (selling price × quantity for all items)
           const subtotal =
             order.order_items?.reduce((sum: number, item: any) => {
               return sum + item.unit_price * item.quantity;
             }, 0) || 0;
 
-          // Calculate total cost (cost price × quantity for all items)
           const totalCost =
             order.order_items?.reduce((sum: number, item: any) => {
               return sum + item.cost_price * item.quantity;
             }, 0) || 0;
 
-          // Get discount amount (subtotal - total_amount)
           const discountAmount = subtotal - order.total_amount;
-
-          // Calculate gross profit (before discount impact)
           const grossProfit = subtotal - totalCost;
-
-          // Calculate net profit (after discount reduces profit)
           const netProfit = order.total_amount - totalCost;
-
-          // Profit margin based on final amount
           const profitMargin =
             order.total_amount > 0 ? (netProfit / order.total_amount) * 100 : 0;
-
-          // Discount impact (how much profit was lost due to discount)
           const discountImpact = grossProfit - netProfit;
 
           return {
@@ -188,7 +231,6 @@ export default function ReportsPage() {
 
       setOrders(ordersWithProfit);
 
-      // Calculate customer-wise summary
       const customerMap = new Map<string, CustomerProfitSummary>();
 
       ordersWithProfit.forEach((order) => {
@@ -214,14 +256,12 @@ export default function ReportsPage() {
         summary.total_profit += order.net_profit;
       });
 
-      // Calculate average profit margin for each customer
       customerMap.forEach((summary) => {
         summary.avg_profit_margin =
           summary.total_sales > 0
             ? (summary.total_profit / summary.total_sales) * 100
             : 0;
 
-        // Calculate outstanding balance
         const customerOrders = ordersWithProfit.filter(
           (o) => o.customer_id === summary.customer_id
         );
@@ -248,10 +288,8 @@ export default function ReportsPage() {
       const customerArray = Array.from(customerMap.values()).sort(
         (a, b) => b.total_profit - a.total_profit
       );
-
       setCustomerSummary(customerArray);
 
-      // Fetch due invoices
       const unpaidOrders = ordersWithProfit.filter(
         (order) =>
           order.payment_status === "unpaid" ||
@@ -296,7 +334,6 @@ export default function ReportsPage() {
     }
   };
 
-  // Filter orders by date range
   const filteredOrders = orders.filter((order) => {
     const orderDate = new Date(order.order_date);
     const from = new Date(dateFrom);
@@ -304,7 +341,6 @@ export default function ReportsPage() {
     return orderDate >= from && orderDate <= to;
   });
 
-  // Calculate overall statistics
   const totalSales = filteredOrders.reduce((sum, o) => sum + o.total_amount, 0);
   const totalCost = filteredOrders.reduce((sum, o) => sum + o.total_cost, 0);
   const totalProfit = totalSales - totalCost;
@@ -313,7 +349,6 @@ export default function ReportsPage() {
   const totalOrders = filteredOrders.length;
   const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
 
-  // Calculate paid vs unpaid
   const paidAmount = filteredOrders
     .filter((o) => o.payment_status === "paid")
     .reduce((sum, o) => sum + o.total_amount, 0);
@@ -377,15 +412,74 @@ export default function ReportsPage() {
     return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
   };
 
-  if (loading) {
+  // Loading state while checking auth
+  if (isCheckingAuth) {
     return (
       <div className="flex items-center justify-center h-96">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        <div className="text-center space-y-3">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto" />
+          <p className="text-sm text-muted-foreground">
+            Checking permissions...
+          </p>
+        </div>
       </div>
     );
   }
 
-  // Prepare chart data
+  // Access denied for non-admin users
+  if (!isAdmin) {
+    return (
+      <div className="flex items-center justify-center min-h-[600px]">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="text-center space-y-4">
+              <div className="mx-auto w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
+                <ShieldAlert className="w-8 h-8 text-destructive" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold">Access Restricted</h2>
+                <p className="text-muted-foreground">
+                  Sorry, <strong>{userName}</strong>! Only administrators can
+                  access the Reports page.
+                </p>
+              </div>
+              <div className="pt-4 space-y-2 text-sm text-muted-foreground">
+                <div className="flex items-center justify-center gap-2">
+                  <Lock className="w-4 h-4" />
+                  <span>This page contains sensitive financial data</span>
+                </div>
+                <p>If you need access, please contact your administrator</p>
+              </div>
+              <div className="pt-4">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => window.history.back()}
+                >
+                  Go Back
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Loading data state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center space-y-3">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto" />
+          <p className="text-sm text-muted-foreground">
+            Loading reports data...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const profitByCustomer = customerSummary.slice(0, 10);
 
   const COLORS = [
