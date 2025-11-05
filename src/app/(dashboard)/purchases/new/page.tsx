@@ -1,4 +1,9 @@
-// src/app/(dashboard)/purchases/new/page.tsx
+// COMPLETE FIX for src/app/(dashboard)/purchases/new/page.tsx
+// Fixes:
+// 1. ✅ Creates purchase FIRST, then inventory transactions with reference_id
+// 2. ✅ Fixes TypeScript error - adds sellingPrice to PurchaseItem interface
+// 3. ✅ Properly stores and uses sellingPrice
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -34,10 +39,10 @@ interface Product {
   id: string;
   sku: string;
   name: string;
-  unit_price: number; // This is selling_price in new schema
-  selling_price?: number; // Optional for new schema
-  cost_price?: number; // Cost price from supplier
-  mrp: number; // Maximum Retail Price
+  unit_price: number;
+  selling_price?: number;
+  cost_price?: number;
+  mrp: number;
   stock_quantity: number;
   unit_of_measure: string;
 }
@@ -49,13 +54,14 @@ interface PurchaseItem {
   quantity: number;
   unit: string;
   mrp: number;
-  costPrice: number; // NEW: Cost price (what we pay supplier)
+  sellingPrice: number; // ✅ ADDED: Selling price value
+  costPrice: number;
   discountPercent: number;
   discountAmount: number;
-  finalPrice: number; // Same as costPrice after discount
+  finalPrice: number;
   total: number;
   mrpChanged: boolean;
-  sellingPriceChanged: boolean; // NEW: Track if selling price changed
+  sellingPriceChanged: boolean;
 }
 
 export default function AddPurchasePage() {
@@ -76,8 +82,8 @@ export default function AddPurchasePage() {
     productId: "",
     quantity: 1,
     mrp: 0,
-    sellingPrice: 0, // NEW: Selling price (editable)
-    costPrice: 0, // NEW: Cost price (what we pay)
+    sellingPrice: 0,
+    costPrice: 0,
     discountPercent: 0,
   });
 
@@ -119,7 +125,6 @@ export default function AddPurchasePage() {
       const sellingPrice = product.selling_price || product.unit_price;
       const costPrice = product.cost_price || 0;
 
-      // Auto-calculate discount % based on current prices
       const autoDiscount =
         costPrice > 0 && product.mrp > 0
           ? ((product.mrp - costPrice) / product.mrp) * 100
@@ -136,7 +141,6 @@ export default function AddPurchasePage() {
     }
   };
 
-  // NEW: When cost price changes, recalculate discount %
   const handleCostPriceChange = (newCostPrice: number) => {
     const newDiscount =
       currentItem.mrp > 0
@@ -146,11 +150,10 @@ export default function AddPurchasePage() {
     setCurrentItem({
       ...currentItem,
       costPrice: newCostPrice,
-      discountPercent: Math.max(0, Math.min(100, newDiscount)), // Keep between 0-100
+      discountPercent: Math.max(0, Math.min(100, newDiscount)),
     });
   };
 
-  // NEW: When discount % changes, recalculate cost price
   const handleDiscountChange = (newDiscount: number) => {
     const newCostPrice =
       currentItem.mrp - (currentItem.mrp * newDiscount) / 100;
@@ -164,10 +167,7 @@ export default function AddPurchasePage() {
 
   const calculateItemPrices = (costPrice: number, quantity: number) => {
     const total = costPrice * quantity;
-
-    return {
-      total,
-    };
+    return { total };
   };
 
   const handleAddItem = () => {
@@ -199,6 +199,7 @@ export default function AddPurchasePage() {
       quantity: currentItem.quantity,
       unit: product.unit_of_measure,
       mrp: currentItem.mrp,
+      sellingPrice: currentItem.sellingPrice, // ✅ STORE sellingPrice
       costPrice: currentItem.costPrice,
       discountPercent: currentItem.discountPercent,
       discountAmount: discountAmount,
@@ -210,7 +211,6 @@ export default function AddPurchasePage() {
 
     setItems([...items, newItem]);
 
-    // Reset form
     setCurrentItem({
       productId: "",
       quantity: 1,
@@ -247,47 +247,7 @@ export default function AddPurchasePage() {
     }
 
     try {
-      // Update products and create inventory transactions
-      const transactionAndProductUpdatePromises = items.map(async (item) => {
-        const currentProduct = products.find((p) => p.id === item.productId);
-        if (!currentProduct) return;
-
-        const newStock = currentProduct.stock_quantity + item.quantity;
-
-        const productUpdatePayload = {
-          mrp: item.mrpChanged ? item.mrp : currentProduct.mrp,
-          selling_price: item.sellingPriceChanged
-            ? currentItem.sellingPrice
-            : currentProduct.selling_price || currentProduct.unit_price,
-          unit_price: item.sellingPriceChanged
-            ? currentItem.sellingPrice
-            : currentProduct.selling_price || currentProduct.unit_price,
-          stock_quantity: newStock,
-          cost_price: item.costPrice, // Update cost price from purchase
-        };
-
-        await fetch(`/api/products/${item.productId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(productUpdatePayload),
-        });
-
-        await fetch("/api/inventory-transactions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            product_id: item.productId,
-            transaction_type: "purchase",
-            quantity: item.quantity,
-            reference_type: "purchase",
-            notes: `Stock addition from purchase order`,
-          }),
-        });
-      });
-
-      await Promise.all(transactionAndProductUpdatePromises);
-
-      // Create purchase record
+      // ✅ STEP 1: Create purchase record FIRST
       const purchaseData = {
         supplier_id: supplierId,
         purchase_date: purchaseDate,
@@ -299,7 +259,7 @@ export default function AddPurchasePage() {
           mrp: item.mrp,
           discount_percent: item.discountPercent,
           discount_amount: item.discountAmount,
-          unit_price: item.costPrice, // Cost price is the unit price in purchase
+          unit_price: item.costPrice,
           line_total: item.total,
         })),
         subtotal: subtotal,
@@ -307,6 +267,7 @@ export default function AddPurchasePage() {
         total_amount: subtotal,
       };
 
+      console.log("Creating purchase record...");
       const savePurchaseResponse = await fetch("/api/purchases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -319,6 +280,72 @@ export default function AddPurchasePage() {
         throw new Error(errorData.error || "Failed to save Purchase Order");
       }
 
+      const purchaseResult = await savePurchaseResponse.json();
+      const purchaseId = purchaseResult.purchase?.id;
+
+      if (!purchaseId) {
+        console.error("Purchase created but no ID returned:", purchaseResult);
+        alert("Purchase created but ID not returned");
+        return;
+      }
+
+      console.log("✅ Purchase created with ID:", purchaseId);
+
+      // ✅ STEP 2: Update products and create inventory transactions WITH reference_id
+      const transactionAndProductUpdatePromises = items.map(async (item) => {
+        const currentProduct = products.find((p) => p.id === item.productId);
+        if (!currentProduct) {
+          console.warn("Product not found:", item.productId);
+          return;
+        }
+
+        const newStock = currentProduct.stock_quantity + item.quantity;
+
+        // ✅ FIX: Use item.sellingPrice instead of currentItem.sellingPrice
+        const productUpdatePayload = {
+          mrp: item.mrpChanged ? item.mrp : currentProduct.mrp,
+          selling_price: item.sellingPriceChanged
+            ? item.sellingPrice // ✅ FIXED: Use item.sellingPrice
+            : currentProduct.selling_price || currentProduct.unit_price,
+          unit_price: item.sellingPriceChanged
+            ? item.sellingPrice // ✅ FIXED: Use item.sellingPrice
+            : currentProduct.selling_price || currentProduct.unit_price,
+          stock_quantity: newStock,
+          cost_price: item.costPrice,
+        };
+
+        console.log(
+          `Updating product ${item.productId}, new stock: ${newStock}`
+        );
+
+        await fetch(`/api/products/${item.productId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(productUpdatePayload),
+        });
+
+        // ✅ FIX: Create transaction WITH reference_id linking to purchase
+        const transactionPayload = {
+          product_id: item.productId,
+          transaction_type: "purchase",
+          quantity: item.quantity,
+          reference_id: purchaseId, // ✅ KEY FIX: Link to purchase!
+          reference_type: "purchase",
+          notes: `Stock addition from purchase ${invoiceNumber || purchaseId}`,
+        };
+
+        console.log("Creating transaction with reference_id:", purchaseId);
+
+        await fetch("/api/inventory-transactions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(transactionPayload),
+        });
+      });
+
+      await Promise.all(transactionAndProductUpdatePromises);
+
+      console.log("✅ All updates completed successfully");
       alert(`Purchase order created successfully!`);
       router.push("/purchases");
     } catch (error) {
@@ -436,7 +463,6 @@ export default function AddPurchasePage() {
             <CardContent>
               <div className="space-y-4">
                 <div className="grid grid-cols-12 gap-3 items-end">
-                  {/* Product Selection */}
                   <div className="col-span-3">
                     <Label htmlFor="product" className="mb-2 block">
                       Product
@@ -473,7 +499,6 @@ export default function AddPurchasePage() {
                     </Select>
                   </div>
 
-                  {/* Quantity */}
                   <div className="col-span-2">
                     <Label htmlFor="quantity" className="mb-2 block">
                       Quantity
@@ -493,7 +518,6 @@ export default function AddPurchasePage() {
                     />
                   </div>
 
-                  {/* MRP (Disabled - Read Only) */}
                   <div className="col-span-2">
                     <Label htmlFor="mrp" className="mb-2 block">
                       MRP (LKR)
@@ -508,7 +532,6 @@ export default function AddPurchasePage() {
                     />
                   </div>
 
-                  {/* Cost Price (Editable) */}
                   <div className="col-span-2">
                     <Label htmlFor="costPrice" className="mb-2 block">
                       Cost Price (LKR)
@@ -527,7 +550,6 @@ export default function AddPurchasePage() {
                     />
                   </div>
 
-                  {/* Discount % (Editable) */}
                   <div className="col-span-2">
                     <Label htmlFor="discount" className="mb-2 block">
                       Discount (%)
@@ -551,7 +573,6 @@ export default function AddPurchasePage() {
                     />
                   </div>
 
-                  {/* Add Button */}
                   <div className="col-span-1">
                     <Button
                       onClick={handleAddItem}
