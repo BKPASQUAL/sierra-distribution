@@ -16,7 +16,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
+          cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
           supabaseResponse = NextResponse.next({
@@ -30,40 +30,41 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session if expired
+  // Get the current user
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protected routes
-  const protectedRoutes = [
-    "/dashboard",
-    "/customers",
-    "/suppliers",
-    "/products",
-    "/purchases",
-    "/bills",
-    "/payments",
-    "/due-invoices",
-    "/reports",
-    "/settings",
-  ];
-  const isProtectedRoute = protectedRoutes.some((route) =>
-    request.nextUrl.pathname.startsWith(route)
-  );
+  // If user is logged in, check their status in the users table
+  if (user) {
+    const { data: userData, error } = await supabase
+      .from("users")
+      .select("status")
+      .eq("id", user.id)
+      .single();
 
-  // If user is not logged in and trying to access protected route
-  if (!user && isProtectedRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
+    // If user is Inactive, sign them out and redirect to login
+    if (userData && userData.status === "Inactive") {
+      // Sign out the user
+      await supabase.auth.signOut();
 
-  // If user is logged in and trying to access login page
-  if (user && request.nextUrl.pathname === "/login") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
+      // Redirect to login with a message
+      const redirectUrl = new URL("/login", request.url);
+      redirectUrl.searchParams.set(
+        "message",
+        "Your account has been deactivated. Please contact an administrator."
+      );
+
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    // If there was an error fetching user data (user might be deleted)
+    if (error && error.code === "PGRST116") {
+      await supabase.auth.signOut();
+      const redirectUrl = new URL("/login", request.url);
+      redirectUrl.searchParams.set("message", "Your account no longer exists.");
+      return NextResponse.redirect(redirectUrl);
+    }
   }
 
   return supabaseResponse;
@@ -71,13 +72,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
-     */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

@@ -50,6 +50,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
 // User type
@@ -70,6 +71,7 @@ export default function SettingsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<SystemUser | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -118,12 +120,52 @@ export default function SettingsPage() {
 
       const data = await response.json();
       setUsers(data.users || []);
-      toast.success("Users loaded successfully");
     } catch (error) {
       console.error("Error fetching users:", error);
       toast.error("Failed to load users");
     } finally {
       setIsLoadingUsers(false);
+    }
+  };
+
+  // Toggle user status (Active/Inactive)
+  const handleToggleUserStatus = async (user: SystemUser) => {
+    const newStatus = user.status === "Active" ? "Inactive" : "Active";
+    setTogglingUserId(user.id);
+
+    try {
+      const response = await fetch(`/api/users/${user.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: user.name,
+          role: user.role,
+          status: newStatus,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update user status");
+      }
+
+      // Update local state
+      setUsers(
+        users.map((u) => (u.id === user.id ? { ...u, status: newStatus } : u))
+      );
+
+      toast.success(
+        `User ${
+          newStatus === "Active" ? "activated" : "deactivated"
+        } successfully`
+      );
+    } catch (error) {
+      console.error("Error toggling user status:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update user status"
+      );
+    } finally {
+      setTogglingUserId(null);
     }
   };
 
@@ -417,15 +459,22 @@ export default function SettingsPage() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              user.status === "Active"
-                                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                                : "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400"
-                            }`}
-                          >
-                            {user.status}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={user.status === "Active"}
+                              onCheckedChange={() =>
+                                handleToggleUserStatus(user)
+                              }
+                              disabled={togglingUserId === user.id}
+                            />
+                            <span className="text-sm text-muted-foreground">
+                              {togglingUserId === user.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                user.status
+                              )}
+                            </span>
+                          </div>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {formatDate(user.created_at)}

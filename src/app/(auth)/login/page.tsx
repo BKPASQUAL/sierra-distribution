@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Eye, EyeOff, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,46 +13,63 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
   const router = useRouter();
-  const supabase = createClient();
+  const searchParams = useSearchParams();
+
+  // Check for messages from URL params (like after auto-logout)
+  useEffect(() => {
+    const message = searchParams.get("message");
+    if (message === "account_deactivated") {
+      toast.error(
+        "Your account has been deactivated. Please contact an administrator."
+      );
+    } else if (message) {
+      toast.info(decodeURIComponent(message));
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError("");
 
     try {
-      // Sign in with Supabase
-      const { data, error: signInError } =
-        await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+      // Call the login API that checks user status
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-      if (signInError) {
-        setError(signInError.message);
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Show error toast with specific message
+        toast.error(data.error || "Login failed. Please try again.");
         setIsLoading(false);
         return;
       }
 
-      if (data.user) {
-        // Redirect to dashboard
+      // Success! Show success toast
+      toast.success("Login successful! Welcome back.", {
+        description: `Signed in as ${data.user.name || email}`,
+      });
+
+      // Small delay to show the toast before redirect
+      setTimeout(() => {
         router.push("/dashboard");
         router.refresh();
-      }
+      }, 500);
     } catch (err) {
-      setError("An unexpected error occurred. Please try again.");
       console.error("Login error:", err);
-    } finally {
+      toast.error("An unexpected error occurred. Please try again.");
       setIsLoading(false);
     }
   };
@@ -83,13 +100,6 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Error Message */}
-              {error && (
-                <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-lg text-sm">
-                  {error}
-                </div>
-              )}
-
               {/* Email Input */}
               <div className="space-y-2">
                 <Label htmlFor="email">Email Address</Label>
