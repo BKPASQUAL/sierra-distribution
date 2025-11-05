@@ -1,3 +1,4 @@
+// src/components/layout/sidebar.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 
+// Define navigation items with optional role restrictions
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Customers", href: "/customers", icon: Users },
@@ -29,8 +31,18 @@ const navigation = [
   { name: "Bills", href: "/bills", icon: FileText },
   { name: "Payments", href: "/payments", icon: DollarSign },
   { name: "Due Invoices", href: "/due-invoices", icon: AlertCircle },
-  { name: "Reports", href: "/reports", icon: TrendingUp },
-  { name: "Settings", href: "/settings", icon: Settings },
+  {
+    name: "Reports",
+    href: "/reports",
+    icon: TrendingUp,
+    adminOnly: true, // Only show to admins
+  },
+  {
+    name: "Settings",
+    href: "/settings",
+    icon: Settings,
+    adminOnly: true, // Only show to admins
+  },
 ];
 
 export function Sidebar() {
@@ -38,15 +50,36 @@ export function Sidebar() {
   const router = useRouter();
   const supabase = createClient();
   const [user, setUser] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
-    // Get current user
+    // Get current user and their role
     const getUser = async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      setUser(user);
+
+      if (user) {
+        setUser(user);
+
+        // Get role from user metadata
+        const role = user.user_metadata?.role;
+        setUserRole(role);
+
+        // If no role in metadata, fetch from users table
+        if (!role) {
+          const { data: userData } = await supabase
+            .from("users")
+            .select("role")
+            .eq("id", user.id)
+            .single();
+
+          if (userData) {
+            setUserRole(userData.role);
+          }
+        }
+      }
     };
     getUser();
   }, [supabase]);
@@ -75,6 +108,15 @@ export function Sidebar() {
     }
   };
 
+  // Filter navigation items based on user role
+  const filteredNavigation = navigation.filter((item) => {
+    // If item requires admin access and user is not admin, hide it
+    if (item.adminOnly && userRole !== "Admin") {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <div className="flex h-full w-64 flex-col border-r bg-card">
       {/* Logo */}
@@ -85,7 +127,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1 p-4">
-        {navigation.map((item) => {
+        {filteredNavigation.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link

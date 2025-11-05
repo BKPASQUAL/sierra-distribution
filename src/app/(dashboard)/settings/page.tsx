@@ -14,7 +14,9 @@ import {
   Eye,
   EyeOff,
   Loader2,
+  ShieldAlert,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -65,6 +67,12 @@ interface SystemUser {
 }
 
 export default function SettingsPage() {
+  // Auth state
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userName, setUserName] = useState("");
+
+  // User management state
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
@@ -103,10 +111,58 @@ export default function SettingsPage() {
     website: "www.sierradistribution.lk",
   });
 
-  // Fetch users on component mount
+  // Check user role on mount
   useEffect(() => {
-    fetchUsers();
+    checkUserRole();
   }, []);
+
+  // Fetch users only if user is admin
+  useEffect(() => {
+    if (isAdmin) {
+      fetchUsers();
+    }
+  }, [isAdmin]);
+
+  const checkUserRole = async () => {
+    try {
+      setIsCheckingAuth(true);
+      const supabase = createClient();
+
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+
+      if (error || !user) {
+        setIsAdmin(false);
+        return;
+      }
+
+      const userRole = user.user_metadata?.role;
+      const userNameFromMeta = user.user_metadata?.name;
+
+      setUserName(userNameFromMeta || user.email || "User");
+      setIsAdmin(userRole === "Admin");
+
+      if (!userRole) {
+        const { data: userData } = await supabase
+          .from("users")
+          .select("role, name")
+          .eq("id", user.id)
+          .single();
+
+        if (userData) {
+          setUserName(userData.name || user.email || "User");
+          setIsAdmin(userData.role === "Admin");
+        }
+      }
+    } catch (error) {
+      console.error("Error checking user role:", error);
+      setIsAdmin(false);
+    } finally {
+      setIsCheckingAuth(false);
+    }
+  };
 
   // Fetch users from API
   const fetchUsers = async () => {
@@ -367,6 +423,60 @@ export default function SettingsPage() {
       return "Never";
     }
   };
+
+  // Loading state while checking auth
+  if (isCheckingAuth) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center space-y-3">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto" />
+          <p className="text-sm text-muted-foreground">
+            Checking permissions...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Access denied for non-admin users
+  if (!isAdmin) {
+    return (
+      <div className="flex items-center justify-center min-h-[600px]">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="text-center space-y-4">
+              <div className="mx-auto w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
+                <ShieldAlert className="w-8 h-8 text-destructive" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold">Access Restricted</h2>
+                <p className="text-muted-foreground">
+                  Sorry, <strong>{userName}</strong>! Only administrators can
+                  access the Settings page.
+                </p>
+              </div>
+              <div className="pt-4 space-y-2 text-sm text-muted-foreground">
+                <div className="flex items-center justify-center gap-2">
+                  <Lock className="w-4 h-4" />
+                  <span>This page contains sensitive system configuration</span>
+                </div>
+                <p>If you need access, please contact your administrator</p>
+              </div>
+              <div className="pt-4">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => window.history.back()}
+                >
+                  Go Back
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
