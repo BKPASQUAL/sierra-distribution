@@ -917,6 +917,7 @@ export default function SettingsPage() {
                   setUserForm({ ...userForm, name: e.target.value })
                 }
                 disabled={isSubmitting}
+                className="w-full"
               />
             </div>
             <div className="space-y-2">
@@ -930,6 +931,7 @@ export default function SettingsPage() {
                   setUserForm({ ...userForm, email: e.target.value })
                 }
                 disabled={isSubmitting || !!selectedUser}
+                className="w-full"
               />
               {selectedUser && (
                 <p className="text-xs text-muted-foreground">
@@ -946,7 +948,7 @@ export default function SettingsPage() {
                 }
                 disabled={isSubmitting}
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
@@ -965,7 +967,7 @@ export default function SettingsPage() {
                   }
                   disabled={isSubmitting}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -978,7 +980,7 @@ export default function SettingsPage() {
             {!selectedUser && (
               <div className="space-y-2">
                 <Label htmlFor="userPassword">Password *</Label>
-                <div className="relative">
+                <div className="relative w-full">
                   <Input
                     id="userPassword"
                     type={showUserPassword ? "text" : "password"}
@@ -988,6 +990,7 @@ export default function SettingsPage() {
                       setUserForm({ ...userForm, password: e.target.value })
                     }
                     disabled={isSubmitting}
+                    className="w-full pr-10"
                   />
                   <Button
                     type="button"
