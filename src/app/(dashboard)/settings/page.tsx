@@ -118,6 +118,7 @@ export default function SettingsPage() {
 
       const data = await response.json();
       setUsers(data.users || []);
+      toast.success("Users loaded successfully");
     } catch (error) {
       console.error("Error fetching users:", error);
       toast.error("Failed to load users");
@@ -126,28 +127,10 @@ export default function SettingsPage() {
     }
   };
 
-  // Create or update user
+  // Add or update user
   const handleAddUser = async () => {
-    // Validation
     if (!userForm.name || !userForm.email) {
       toast.error("Please fill all required fields");
-      return;
-    }
-
-    if (!selectedUser && !userForm.password) {
-      toast.error("Password is required for new users");
-      return;
-    }
-
-    if (!selectedUser && userForm.password.length < 6) {
-      toast.error("Password must be at least 6 characters long");
-      return;
-    }
-
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(userForm.email)) {
-      toast.error("Please enter a valid email address");
       return;
     }
 
@@ -155,12 +138,10 @@ export default function SettingsPage() {
 
     try {
       if (selectedUser) {
-        // Update existing user
+        // UPDATE existing user
         const response = await fetch(`/api/users/${selectedUser.id}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: userForm.name,
             role: userForm.role,
@@ -169,44 +150,68 @@ export default function SettingsPage() {
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to update user");
+          const error = await response.json();
+          throw new Error(error.error || "Failed to update user");
         }
 
-        toast.success("User updated successfully!");
+        const data = await response.json();
+
+        // Show warning if auth metadata update failed
+        if (data.warning) {
+          toast.warning(data.warning);
+        } else {
+          toast.success(
+            "User updated successfully! Changes will be reflected after user re-login."
+          );
+        }
+
+        // Refresh the users list
+        await fetchUsers();
       } else {
-        // Create new user
-        const response = await fetch("/api/users/create", {
+        // CREATE new user
+        if (!userForm.password) {
+          toast.error("Password is required for new users");
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (userForm.password.length < 6) {
+          toast.error("Password must be at least 6 characters long");
+          setIsSubmitting(false);
+          return;
+        }
+
+        const response = await fetch("/api/users", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            name: userForm.name,
             email: userForm.email,
             password: userForm.password,
-            name: userForm.name,
             role: userForm.role,
+            status: userForm.status,
           }),
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to create user");
+          const error = await response.json();
+          throw new Error(error.error || "Failed to create user");
         }
 
         toast.success("User created successfully!");
+
+        // Refresh the users list
+        await fetchUsers();
       }
 
-      // Refresh users list
-      await fetchUsers();
-
-      // Close dialog and reset form
       setIsUserDialogOpen(false);
       setSelectedUser(null);
       resetUserForm();
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error saving user:", error);
-      toast.error(error.message || "Failed to save user");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save user"
+      );
     } finally {
       setIsSubmitting(false);
     }
