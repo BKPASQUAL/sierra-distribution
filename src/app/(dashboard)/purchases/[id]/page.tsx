@@ -3,9 +3,23 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Calendar, Package, Loader2, FileText } from "lucide-react";
+import {
+  ArrowLeft,
+  Calendar,
+  Package,
+  Loader2,
+  FileText,
+  User,
+  Building2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -15,6 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 
 interface PurchaseItem {
   id: string;
@@ -42,6 +57,8 @@ interface Purchase {
   subtotal: number;
   totalDiscount: number;
   total: number;
+  invoiceNumber?: string;
+  paymentStatus?: "unpaid" | "paid";
   notes?: string;
   items: PurchaseItem[];
   createdAt: string;
@@ -100,98 +117,152 @@ export default function PurchaseDetailPage() {
       <div className="text-center py-12">
         <p className="text-lg text-muted-foreground">Purchase not found</p>
         <Button onClick={() => router.push("/purchases")} className="mt-4">
+          <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Purchases
         </Button>
       </div>
     );
   }
 
+  // Safe access to items array
+  const items = purchase.items || [];
+  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => router.push("/purchases")}
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold tracking-tight">
-            Purchase Order: {purchase.id}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            View purchase order details
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => router.push("/purchases")}
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Purchase Order {purchase.id}</h1>
+            <p className="text-muted-foreground">
+              {new Date(purchase.date).toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </p>
+          </div>
         </div>
-        <Button variant="outline" onClick={() => window.print()}>
-          <FileText className="w-4 h-4 mr-2" />
-          Print
-        </Button>
+        {purchase.paymentStatus && (
+          <Badge
+            variant={
+              purchase.paymentStatus === "paid" ? "default" : "secondary"
+            }
+          >
+            {purchase.paymentStatus === "paid" ? "Paid" : "Unpaid"}
+          </Badge>
+        )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Purchase Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Purchase Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Purchase ID</p>
-                  <p className="font-medium">{purchase.id}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Purchase Date</p>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-muted-foreground" />
-                    <p className="font-medium">
-                      {new Date(purchase.date).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </p>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Supplier</p>
-                  <p className="font-medium">{purchase.supplierName}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Items</p>
-                  <p className="font-medium">
-                    {purchase.items.length} products
-                  </p>
-                </div>
+      {/* Purchase Information */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Supplier Information */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5" />
+              Supplier Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <p className="text-sm text-muted-foreground">Name</p>
+              <p className="font-medium">{purchase.supplierName}</p>
+            </div>
+            {purchase.supplierContact && (
+              <div>
+                <p className="text-sm text-muted-foreground">Contact</p>
+                <p className="font-medium">{purchase.supplierContact}</p>
               </div>
+            )}
+            {purchase.supplierEmail && (
+              <div>
+                <p className="text-sm text-muted-foreground">Email</p>
+                <p className="font-medium">{purchase.supplierEmail}</p>
+              </div>
+            )}
+            {purchase.supplierAddress && (
+              <div>
+                <p className="text-sm text-muted-foreground">Address</p>
+                <p className="font-medium">
+                  {purchase.supplierAddress}
+                  {purchase.supplierCity && `, ${purchase.supplierCity}`}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-              {purchase.notes && (
-                <>
-                  <Separator />
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Notes</p>
-                    <p className="text-sm">{purchase.notes}</p>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
+        {/* Purchase Details */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Purchase Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <p className="text-sm text-muted-foreground">Purchase ID</p>
+              <p className="font-medium font-mono">{purchase.id}</p>
+            </div>
+            {purchase.invoiceNumber && (
+              <div>
+                <p className="text-sm text-muted-foreground">Invoice Number</p>
+                <p className="font-medium">{purchase.invoiceNumber}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-sm text-muted-foreground">Purchase Date</p>
+              <p className="font-medium">
+                {new Date(purchase.date).toLocaleDateString("en-US", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Total Items</p>
+              <p className="font-medium">
+                {items.length} {items.length === 1 ? "product" : "products"} (
+                {totalItems} {totalItems === 1 ? "roll" : "rolls"})
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-          {/* Purchase Items */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Purchase Items</CardTitle>
-            </CardHeader>
-            <CardContent>
+      {/* Purchase Items */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Purchase Items</CardTitle>
+          <CardDescription>
+            Products included in this purchase order
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {items.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p>No items found for this purchase</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Product</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Unit</TableHead>
                     <TableHead className="text-right">Quantity</TableHead>
                     <TableHead className="text-right">MRP</TableHead>
                     <TableHead className="text-right">Discount</TableHead>
@@ -200,134 +271,86 @@ export default function PurchaseDetailPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {purchase.items.map((item) => (
+                  {items.map((item) => (
                     <TableRow key={item.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{item.productName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            SKU: {item.productSku}
-                          </p>
-                        </div>
+                      <TableCell className="font-medium">
+                        {item.productName}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {item.quantity} {item.productUnit}
+                      <TableCell className="font-mono text-sm text-muted-foreground">
+                        {item.productSku}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {item.productUnit || "rolls"}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {item.quantity}
                       </TableCell>
                       <TableCell className="text-right">
                         LKR {item.mrp.toLocaleString()}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {item.discountPercent > 0 ? (
-                          <div className="text-green-600">
-                            <div>{item.discountPercent}%</div>
-                            <div className="text-xs">
-                              (LKR {item.discountAmount.toLocaleString()})
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
+                      <TableCell className="text-right text-orange-600">
+                        {item.discountPercent > 0
+                          ? `${item.discountPercent.toFixed(
+                              2
+                            )}% (LKR ${item.discountAmount.toFixed(2)})`
+                          : "-"}
                       </TableCell>
-                      <TableCell className="text-right font-medium">
+                      <TableCell className="text-right">
                         LKR {item.unitPrice.toLocaleString()}
                       </TableCell>
-                      <TableCell className="text-right font-bold">
+                      <TableCell className="text-right font-semibold">
                         LKR {item.lineTotal.toLocaleString()}
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Sidebar */}
-        <div className="lg:col-span-1 space-y-6">
-          {/* Supplier Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Supplier Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <p className="text-sm font-medium">{purchase.supplierName}</p>
-              </div>
-              {purchase.supplierContact && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Phone</p>
-                  <p className="text-sm">{purchase.supplierContact}</p>
-                </div>
-              )}
-              {purchase.supplierEmail && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Email</p>
-                  <p className="text-sm">{purchase.supplierEmail}</p>
-                </div>
-              )}
-              {purchase.supplierAddress && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Address</p>
-                  <p className="text-sm">
-                    {purchase.supplierAddress}
-                    {purchase.supplierCity && `, ${purchase.supplierCity}`}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Purchase Summary */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Purchase Summary</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal:</span>
-                <span>
-                  LKR{" "}
-                  {(
-                    purchase.subtotal + purchase.totalDiscount
-                  ).toLocaleString()}
+      {/* Purchase Summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Purchase Summary</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Subtotal</span>
+              <span className="font-medium">
+                LKR {purchase.subtotal.toLocaleString()}
+              </span>
+            </div>
+            {purchase.totalDiscount > 0 && (
+              <div className="flex justify-between text-orange-600">
+                <span>Total Discount</span>
+                <span className="font-medium">
+                  - LKR {purchase.totalDiscount.toLocaleString()}
                 </span>
               </div>
-              {purchase.totalDiscount > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Total Discount:</span>
-                  <span className="text-green-600">
-                    - LKR {purchase.totalDiscount.toLocaleString()}
-                  </span>
-                </div>
-              )}
-              <Separator />
-              <div className="flex justify-between items-center pt-2">
-                <span className="font-semibold">Total Amount:</span>
-                <span className="text-2xl font-bold text-primary">
-                  LKR {purchase.total.toLocaleString()}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+            )}
+            <Separator />
+            <div className="flex justify-between text-lg font-bold">
+              <span>Total Amount</span>
+              <span className="text-green-600">
+                LKR {purchase.total.toLocaleString()}
+              </span>
+            </div>
+          </div>
 
-          {/* Metadata */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Metadata</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
+          {purchase.notes && (
+            <>
+              <Separator className="my-4" />
               <div>
-                <p className="text-xs text-muted-foreground">Created</p>
-                <p>{new Date(purchase.createdAt).toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground mb-2">Notes</p>
+                <p className="text-sm">{purchase.notes}</p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Last Updated</p>
-                <p>{new Date(purchase.updatedAt).toLocaleString()}</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

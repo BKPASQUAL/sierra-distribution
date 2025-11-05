@@ -1,5 +1,5 @@
 // src/app/api/purchases/[id]/route.ts
-// FIXED: Payment status now updates correctly in database
+// FIXED: Properly formats purchase data to match frontend expectations
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
@@ -68,7 +68,46 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ purchase }, { status: 200 });
+    // Format the response to match frontend expectations
+    // Supabase returns suppliers as array, get first element
+    const supplier = Array.isArray(purchase.suppliers)
+      ? purchase.suppliers[0]
+      : purchase.suppliers;
+
+    const formattedPurchase = {
+      id: purchase.purchase_id,
+      supplierId: purchase.supplier_id,
+      supplierName: supplier?.name || "Unknown",
+      supplierContact: supplier?.contact,
+      supplierEmail: supplier?.email,
+      supplierAddress: supplier?.address,
+      supplierCity: supplier?.city,
+      date: purchase.purchase_date,
+      subtotal: purchase.subtotal,
+      totalDiscount: purchase.total_discount,
+      total: purchase.total_amount,
+      invoiceNumber: purchase.invoice_number,
+      paymentStatus: purchase.payment_status,
+      notes: purchase.notes,
+      items:
+        purchase.purchase_items?.map((item: any) => ({
+          id: item.id,
+          productId: item.product_id,
+          productName: item.products?.name || "Unknown Product",
+          productSku: item.products?.sku || "",
+          productUnit: item.products?.unit_of_measure || "",
+          quantity: item.quantity,
+          mrp: item.mrp,
+          discountPercent: item.discount_percent,
+          discountAmount: item.discount_amount,
+          unitPrice: item.unit_price,
+          lineTotal: item.line_total,
+        })) || [],
+      createdAt: purchase.created_at,
+      updatedAt: purchase.updated_at,
+    };
+
+    return NextResponse.json({ purchase: formattedPurchase }, { status: 200 });
   } catch (error) {
     console.error("Error fetching purchase:", error);
     return NextResponse.json(
@@ -78,7 +117,7 @@ export async function GET(
   }
 }
 
-// PUT - Update purchase (FIXED: payment_status now updates correctly)
+// PUT - Update purchase (payment_status and invoice_number)
 export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
@@ -92,28 +131,17 @@ export async function PUT(
     console.log("📦 Request body:", JSON.stringify(body, null, 2));
 
     // Build update object - only include fields that are present
-    const updateData: any = {
-      updated_at: new Date().toISOString(),
-    };
+    const updateData: any = {};
 
-    // CRITICAL: Explicitly handle payment_status
-    if ("payment_status" in body) {
+    if (body.payment_status !== undefined) {
       updateData.payment_status = body.payment_status;
-      console.log("✅ Setting payment_status to:", body.payment_status);
     }
 
-    // Handle invoice_number
-    if ("invoice_number" in body) {
-      updateData.invoice_number = body.invoice_number || null;
-      console.log("✅ Setting invoice_number to:", body.invoice_number);
+    if (body.invoice_number !== undefined) {
+      updateData.invoice_number = body.invoice_number;
     }
 
-    // Handle notes
-    if ("notes" in body) {
-      updateData.notes = body.notes || null;
-    }
-
-    console.log("📝 Final update data:", JSON.stringify(updateData, null, 2));
+    console.log("📝 Update data:", updateData);
 
     // Update the purchase
     const { data: purchase, error } = await supabase
@@ -124,14 +152,18 @@ export async function PUT(
       .single();
 
     if (error) {
-      console.error("❌ Supabase update error:", error);
+      console.error("❌ Update error:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (!purchase) {
       return NextResponse.json(
-        { error: error.message, details: error },
-        { status: 500 }
+        { error: "Purchase not found" },
+        { status: 404 }
       );
     }
 
-    console.log("✅ Update successful! New values:", {
+    console.log("✅ Update successful. New values:", {
       payment_status: purchase.payment_status,
       invoice_number: purchase.invoice_number,
     });
