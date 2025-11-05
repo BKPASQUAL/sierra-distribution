@@ -1,12 +1,15 @@
 // src/app/(dashboard)/purchases/page.tsx
 // Single Supplier System - All purchases from Sierra Cables Ltd
+// UPDATED: Added Edit functionality for Admin users
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Plus,
   Search,
   Eye,
+  Edit,
   Trash2,
   Calendar,
   ShoppingCart,
@@ -15,6 +18,7 @@ import {
   CheckCircle2,
   XCircle,
   Building2,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,12 +73,16 @@ interface Supplier {
 }
 
 export default function PurchasesPage() {
+  const router = useRouter();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
+
+  // NEW: Admin check state
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Payment status update dialog
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
@@ -88,9 +96,24 @@ export default function PurchasesPage() {
 
   // Fetch primary supplier and purchases
   useEffect(() => {
+    checkUserRole(); // NEW: Check if user is admin
     fetchSupplier();
     fetchPurchases();
   }, []);
+
+  // NEW: Check if user is admin
+  const checkUserRole = async () => {
+    try {
+      const response = await fetch("/api/auth/profile");
+      const data = await response.json();
+
+      if (data.profile && data.profile.role === "admin") {
+        setIsAdmin(true);
+      }
+    } catch (error) {
+      console.error("Error checking user role:", error);
+    }
+  };
 
   const fetchSupplier = async () => {
     try {
@@ -189,6 +212,15 @@ export default function PurchasesPage() {
     }
   };
 
+  // NEW: Handle edit purchase
+  const handleEdit = (purchaseId: string) => {
+    if (!isAdmin) {
+      alert("Only administrators can edit purchases");
+      return;
+    }
+    router.push(`/purchases/${purchaseId}/edit`);
+  };
+
   // Open payment status dialog
   const openPaymentDialog = (purchase: Purchase) => {
     setSelectedPurchase(purchase);
@@ -271,6 +303,18 @@ export default function PurchasesPage() {
           Add New Purchase
         </Button>
       </div>
+
+      {/* NEW: Admin Badge */}
+      {isAdmin && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="flex items-center gap-2 text-blue-700">
+            <Shield className="w-4 h-4" />
+            <span className="text-sm font-medium">
+              Administrator Mode: You can edit purchase orders
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards - Removed Total Savings Card */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -422,6 +466,17 @@ export default function PurchasesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {/* NEW: Edit Button - Only shown for admin */}
+                        {isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(purchase.id)}
+                            title="Edit Purchase (Admin Only)"
+                          >
+                            <Edit className="w-4 h-4 text-blue-600" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
