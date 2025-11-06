@@ -30,10 +30,15 @@ function LoginForm() {
     const message = searchParams.get("message");
     if (message === "account_deactivated") {
       toast.error(
-        "Your account has been deactivated. Please contact an administrator."
+        "Your account has been deactivated. Please contact an administrator.",
+        {
+          duration: 3000,
+        }
       );
     } else if (message) {
-      toast.info(decodeURIComponent(message));
+      toast.info(decodeURIComponent(message), {
+        duration: 3000,
+      });
     }
   }, [searchParams]);
 
@@ -49,11 +54,28 @@ function LoginForm() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await response.json();
+      // Try to parse JSON response
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        // If JSON parsing fails, the API is returning HTML or invalid data
+        console.error("Failed to parse API response:", parseError);
+        toast.error(
+          "Server error. The login API is not configured correctly. Please check your API routes.",
+          {
+            duration: 5000,
+          }
+        );
+        setIsLoading(false);
+        return;
+      }
 
       if (!response.ok) {
         // Show error toast with specific message
-        toast.error(data.error || "Login failed. Please try again.");
+        toast.error(data.error || "Login failed. Please try again.", {
+          duration: 3000,
+        });
         setIsLoading(false);
         return;
       }
@@ -61,6 +83,7 @@ function LoginForm() {
       // Success! Show success toast
       toast.success("Login successful! Welcome back.", {
         description: `Signed in as ${data.user.name || email}`,
+        duration: 3000,
       });
 
       // Small delay to show the toast before redirect
@@ -70,7 +93,9 @@ function LoginForm() {
       }, 500);
     } catch (err) {
       console.error("Login error:", err);
-      toast.error("An unexpected error occurred. Please try again.");
+      toast.error("An unexpected error occurred. Please try again.", {
+        duration: 3000,
+      });
       setIsLoading(false);
     }
   };

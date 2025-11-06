@@ -3,7 +3,15 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Trash2, Save, Printer } from "lucide-react";
+import {
+  ArrowLeft,
+  Plus,
+  Trash2,
+  Save,
+  Printer,
+  Check,
+  ChevronsUpDown,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,6 +38,20 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 // Types for API data
 interface Customer {
@@ -86,6 +108,10 @@ export default function CreateBillPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(true);
+
+  // Search dropdown states
+  const [productSearchOpen, setProductSearchOpen] = useState(false);
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
 
   const [currentItem, setCurrentItem] = useState({
     productId: "",
@@ -381,6 +407,17 @@ export default function CreateBillPage() {
     parseFloat(currentItem.additionalDiscount) || 0
   );
 
+  // Get available products (not already added to bill and in stock)
+  const availableProducts = products
+    .filter((product) => product.stock_quantity > 0)
+    .filter((product) => !items.some((item) => item.productId === product.id));
+
+  // Get selected product name for display
+  const getSelectedProductName = () => {
+    const product = products.find((p) => p.id === currentItem.productId);
+    return product ? `${product.name} - ${product.sku}` : "Select product";
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -427,28 +464,71 @@ export default function CreateBillPage() {
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="customer">Customer *</Label>
-              <Select
-                value={customerId}
-                onValueChange={setCustomerId}
-                disabled={loadingCustomers}
+              <Popover
+                open={customerSearchOpen}
+                onOpenChange={setCustomerSearchOpen}
               >
-                <SelectTrigger className="w-full h-10">
-                  <SelectValue
-                    placeholder={
-                      loadingCustomers
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={customerSearchOpen}
+                    className="w-full h-10 justify-between"
+                    disabled={loadingCustomers}
+                  >
+                    <span className="truncate">
+                      {loadingCustomers
                         ? "Loading customers..."
-                        : "Select customer"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                        : customerId
+                        ? customers.find((c) => c.id === customerId)?.name ||
+                          "Select customer"
+                        : "Select customer"}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search customer by name, phone, or city..." />
+                    <CommandList>
+                      <CommandEmpty>No customer found.</CommandEmpty>
+                      <CommandGroup>
+                        {customers.map((customer) => (
+                          <CommandItem
+                            key={customer.id}
+                            value={`${customer.name} ${customer.phone || ""} ${
+                              customer.city || ""
+                            } ${customer.id}`}
+                            onSelect={() => {
+                              setCustomerId(customer.id);
+                              setCustomerSearchOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                customerId === customer.id
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span className="font-medium">
+                                {customer.name}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {customer.phone && `Phone: ${customer.phone}`}
+                                {customer.phone && customer.city && " | "}
+                                {customer.city && `City: ${customer.city}`}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-2">
               <Label htmlFor="date">Invoice Date *</Label>
@@ -484,35 +564,71 @@ export default function CreateBillPage() {
           <div className="grid gap-4 md:grid-cols-7">
             <div className="space-y-2">
               <Label>Product *</Label>
-              <Select
-                value={currentItem.productId}
-                onValueChange={(value) =>
-                  setCurrentItem({ ...currentItem, productId: value })
-                }
-                disabled={loadingProducts}
+              <Popover
+                open={productSearchOpen}
+                onOpenChange={setProductSearchOpen}
               >
-                <SelectTrigger className="w-full h-10">
-                  <SelectValue
-                    placeholder={
-                      loadingProducts ? "Loading products..." : "Select product"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {products
-                    .filter((product) => product.stock_quantity > 0)
-                    .filter(
-                      (product) =>
-                        !items.some((item) => item.productId === product.id)
-                    )
-                    .map((product) => (
-                      <SelectItem key={product.id} value={product.id}>
-                        {product.name} - {product.sku} (Stock:{" "}
-                        {product.stock_quantity} {product.unit_of_measure})
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={productSearchOpen}
+                    className="w-full h-10 justify-between"
+                    disabled={loadingProducts}
+                  >
+                    <span className="truncate">
+                      {loadingProducts
+                        ? "Loading products..."
+                        : currentItem.productId
+                        ? getSelectedProductName()
+                        : "Select product"}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search product by name or SKU..." />
+                    <CommandList>
+                      <CommandEmpty>No product found.</CommandEmpty>
+                      <CommandGroup>
+                        {availableProducts.map((product) => (
+                          <CommandItem
+                            key={product.id}
+                            value={`${product.name} ${product.sku} ${product.id}`}
+                            onSelect={() => {
+                              setCurrentItem({
+                                ...currentItem,
+                                productId: product.id,
+                              });
+                              setProductSearchOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                currentItem.productId === product.id
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span className="font-medium">
+                                {product.name}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                SKU: {product.sku} | Stock:{" "}
+                                {product.stock_quantity}{" "}
+                                {product.unit_of_measure}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
 
             <div className="space-y-2">
