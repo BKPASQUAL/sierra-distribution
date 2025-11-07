@@ -2,7 +2,17 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Plus, Search, Filter, Download, Receipt, Fuel, Wrench, MoreHorizontal } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Filter,
+  Download,
+  Receipt,
+  Fuel,
+  Wrench,
+  MoreHorizontal,
+  Truck,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -53,8 +63,8 @@ interface Expense {
   id: string;
   expense_number: string;
   expense_date: string;
-  category: "fuel" | "maintenance" | "other";
-  description: string;
+  category: "fuel" | "maintenance" | "delivery" | "other";
+  description: string | null;
   amount: number;
   payment_method: string;
   reference_number: string | null;
@@ -91,6 +101,7 @@ export default function ExpensesPage() {
     totalExpenses: 0,
     fuelExpenses: 0,
     maintenanceExpenses: 0,
+    deliveryExpenses: 0,
     otherExpenses: 0,
   });
 
@@ -102,7 +113,7 @@ export default function ExpensesPage() {
     try {
       let url = "/api/expenses";
       const params = new URLSearchParams();
-      
+
       if (categoryFilter !== "all") {
         params.append("category", categoryFilter);
       }
@@ -140,6 +151,9 @@ export default function ExpensesPage() {
     const maintenance = expensesData
       .filter((exp) => exp.category === "maintenance")
       .reduce((sum, exp) => sum + exp.amount, 0);
+    const delivery = expensesData
+      .filter((exp) => exp.category === "delivery")
+      .reduce((sum, exp) => sum + exp.amount, 0);
     const other = expensesData
       .filter((exp) => exp.category === "other")
       .reduce((sum, exp) => sum + exp.amount, 0);
@@ -148,6 +162,7 @@ export default function ExpensesPage() {
       totalExpenses: total,
       fuelExpenses: fuel,
       maintenanceExpenses: maintenance,
+      deliveryExpenses: delivery,
       otherExpenses: other,
     });
   };
@@ -249,7 +264,7 @@ export default function ExpensesPage() {
     setFormData({
       expense_date: expense.expense_date,
       category: expense.category,
-      description: expense.description,
+      description: expense.description || "",
       amount: expense.amount.toString(),
       payment_method: expense.payment_method,
       reference_number: expense.reference_number || "",
@@ -264,7 +279,7 @@ export default function ExpensesPage() {
     const searchLower = searchQuery.toLowerCase();
     return (
       expense.expense_number.toLowerCase().includes(searchLower) ||
-      expense.description.toLowerCase().includes(searchLower) ||
+      expense.description?.toLowerCase().includes(searchLower) ||
       expense.vendor_name?.toLowerCase().includes(searchLower) ||
       ""
     );
@@ -275,6 +290,7 @@ export default function ExpensesPage() {
     const badges = {
       fuel: <Badge className="bg-blue-500">Fuel</Badge>,
       maintenance: <Badge className="bg-orange-500">Maintenance</Badge>,
+      delivery: <Badge className="bg-green-500">Delivery</Badge>,
       other: <Badge className="bg-gray-500">Other</Badge>,
     };
     return badges[category as keyof typeof badges] || badges.other;
@@ -285,6 +301,7 @@ export default function ExpensesPage() {
     const icons = {
       fuel: <Fuel className="h-4 w-4" />,
       maintenance: <Wrench className="h-4 w-4" />,
+      delivery: <Truck className="h-4 w-4" />,
       other: <Receipt className="h-4 w-4" />,
     };
     return icons[category as keyof typeof icons] || icons.other;
@@ -297,7 +314,7 @@ export default function ExpensesPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
           <p className="text-muted-foreground">
-            Manage fuel, maintenance, and other business expenses
+            Manage fuel, maintenance, delivery, and other business expenses
           </p>
         </div>
         <Button onClick={() => setIsAddDialogOpen(true)}>
@@ -307,10 +324,12 @@ export default function ExpensesPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Expenses
+            </CardTitle>
             <Receipt className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -338,6 +357,17 @@ export default function ExpensesPage() {
           <CardContent>
             <div className="text-2xl font-bold">
               {formatCurrency(stats.maintenanceExpenses)}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Delivery</CardTitle>
+            <Truck className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(stats.deliveryExpenses)}
             </div>
           </CardContent>
         </Card>
@@ -381,6 +411,7 @@ export default function ExpensesPage() {
                 <SelectItem value="all">All Categories</SelectItem>
                 <SelectItem value="fuel">Fuel</SelectItem>
                 <SelectItem value="maintenance">Maintenance</SelectItem>
+                <SelectItem value="delivery">Delivery</SelectItem>
                 <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
@@ -424,8 +455,10 @@ export default function ExpensesPage() {
                       <TableCell>
                         {new Date(expense.expense_date).toLocaleDateString()}
                       </TableCell>
-                      <TableCell>{getCategoryBadge(expense.category)}</TableCell>
-                      <TableCell>{expense.description}</TableCell>
+                      <TableCell>
+                        {getCategoryBadge(expense.category)}
+                      </TableCell>
+                      <TableCell>{expense.description || "-"}</TableCell>
                       <TableCell>{expense.vendor_name || "-"}</TableCell>
                       <TableCell className="capitalize">
                         {expense.payment_method.replace("_", " ")}
@@ -443,7 +476,9 @@ export default function ExpensesPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => openEditDialog(expense)}>
+                            <DropdownMenuItem
+                              onClick={() => openEditDialog(expense)}
+                            >
                               Edit
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
@@ -473,9 +508,7 @@ export default function ExpensesPage() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add New Expense</DialogTitle>
-            <DialogDescription>
-              Record a new business expense
-            </DialogDescription>
+            <DialogDescription>Record a new business expense</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
@@ -500,12 +533,13 @@ export default function ExpensesPage() {
                       setFormData({ ...formData, category: value })
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="fuel">Fuel</SelectItem>
                       <SelectItem value="maintenance">Maintenance</SelectItem>
+                      <SelectItem value="delivery">Delivery Cost</SelectItem>
                       <SelectItem value="other">Other</SelectItem>
                     </SelectContent>
                   </Select>
@@ -513,15 +547,14 @@ export default function ExpensesPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="description">Description (Optional)</Label>
                 <Input
                   id="description"
                   value={formData.description}
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  placeholder="Enter expense description"
-                  required
+                  placeholder="Enter expense description (optional)"
                 />
               </div>
 
@@ -548,12 +581,14 @@ export default function ExpensesPage() {
                       setFormData({ ...formData, payment_method: value })
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="bank_transfer">
+                        Bank Transfer
+                      </SelectItem>
                       <SelectItem value="cheque">Cheque</SelectItem>
                       <SelectItem value="card">Card</SelectItem>
                     </SelectContent>
@@ -579,7 +614,10 @@ export default function ExpensesPage() {
                     id="reference_number"
                     value={formData.reference_number}
                     onChange={(e) =>
-                      setFormData({ ...formData, reference_number: e.target.value })
+                      setFormData({
+                        ...formData,
+                        reference_number: e.target.value,
+                      })
                     }
                     placeholder="Invoice/Receipt #"
                   />
@@ -621,9 +659,7 @@ export default function ExpensesPage() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Expense</DialogTitle>
-            <DialogDescription>
-              Update expense details
-            </DialogDescription>
+            <DialogDescription>Update expense details</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleEdit}>
             <div className="grid gap-4 py-4">
@@ -648,12 +684,13 @@ export default function ExpensesPage() {
                       setFormData({ ...formData, category: value })
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="fuel">Fuel</SelectItem>
                       <SelectItem value="maintenance">Maintenance</SelectItem>
+                      <SelectItem value="delivery">Delivery Cost</SelectItem>
                       <SelectItem value="other">Other</SelectItem>
                     </SelectContent>
                   </Select>
@@ -661,14 +698,14 @@ export default function ExpensesPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="edit_description">Description</Label>
+                <Label htmlFor="edit_description">Description (Optional)</Label>
                 <Input
                   id="edit_description"
                   value={formData.description}
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  required
+                  placeholder="Enter expense description (optional)"
                 />
               </div>
 
@@ -694,12 +731,14 @@ export default function ExpensesPage() {
                       setFormData({ ...formData, payment_method: value })
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="bank_transfer">
+                        Bank Transfer
+                      </SelectItem>
                       <SelectItem value="cheque">Cheque</SelectItem>
                       <SelectItem value="card">Card</SelectItem>
                     </SelectContent>
@@ -719,12 +758,17 @@ export default function ExpensesPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit_reference_number">Reference Number</Label>
+                  <Label htmlFor="edit_reference_number">
+                    Reference Number
+                  </Label>
                   <Input
                     id="edit_reference_number"
                     value={formData.reference_number}
                     onChange={(e) =>
-                      setFormData({ ...formData, reference_number: e.target.value })
+                      setFormData({
+                        ...formData,
+                        reference_number: e.target.value,
+                      })
                     }
                   />
                 </div>
@@ -766,8 +810,8 @@ export default function ExpensesPage() {
           <DialogHeader>
             <DialogTitle>Delete Expense</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this expense? This action cannot be
-              undone.
+              Are you sure you want to delete this expense? This action cannot
+              be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -352,7 +352,7 @@ export interface Database {
           expense_number: string;
           expense_date: string;
           category: "fuel" | "maintenance" | "other";
-          description: string;
+          description: string | null; // Now optional
           amount: number;
           payment_method: "cash" | "bank_transfer" | "cheque" | "card";
           reference_number: string | null;
@@ -367,7 +367,7 @@ export interface Database {
           expense_number: string;
           expense_date?: string;
           category: "fuel" | "maintenance" | "other";
-          description: string;
+          description: string | null; // Now optional
           amount: number;
           payment_method: "cash" | "bank_transfer" | "cheque" | "card";
           reference_number?: string | null;
@@ -382,7 +382,7 @@ export interface Database {
           expense_number?: string;
           expense_date?: string;
           category?: "fuel" | "maintenance" | "other";
-          description?: string;
+          description: string | null; // Now optional
           amount?: number;
           payment_method?: "cash" | "bank_transfer" | "cheque" | "card";
           reference_number?: string | null;

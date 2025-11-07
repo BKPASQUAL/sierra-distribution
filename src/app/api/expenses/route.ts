@@ -75,27 +75,22 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
-    // Validate required fields
-    if (
-      !body.category ||
-      !body.description ||
-      !body.amount ||
-      !body.payment_method
-    ) {
+    // Validate required fields (description is now optional)
+    if (!body.category || !body.amount || !body.payment_method) {
       return NextResponse.json(
-        {
-          error:
-            "Missing required fields: category, description, amount, payment_method",
-        },
+        { error: "Missing required fields: category, amount, payment_method" },
         { status: 400 }
       );
     }
 
-    // Validate category
-    const validCategories = ["fuel", "maintenance", "other"];
+    // Validate category (now includes delivery)
+    const validCategories = ["fuel", "maintenance", "delivery", "other"];
     if (!validCategories.includes(body.category)) {
       return NextResponse.json(
-        { error: "Invalid category. Must be: fuel, maintenance, or other" },
+        {
+          error:
+            "Invalid category. Must be: fuel, maintenance, delivery, or other",
+        },
         { status: 400 }
       );
     }
@@ -119,7 +114,7 @@ export async function POST(request: Request) {
       expense_number: expenseNumber,
       expense_date: body.expense_date || new Date().toISOString().split("T")[0],
       category: body.category,
-      description: body.description,
+      description: body.description || null, // Optional now
       amount: parseFloat(body.amount),
       payment_method: body.payment_method,
       reference_number: body.reference_number || null,
