@@ -1,6 +1,6 @@
 // src/app/(dashboard)/purchases/page.tsx
 // Single Supplier System - All purchases from Sierra Cables Ltd
-// UPDATED: Added Edit functionality for Admin users + Pagination
+// UPDATED: Added Edit functionality + Pagination + Date Range Filter
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -11,7 +11,7 @@ import {
   Eye,
   Edit,
   Trash2,
-  Calendar,
+  Calendar as CalendarIcon,
   ShoppingCart,
   Package,
   Loader2,
@@ -21,6 +21,7 @@ import {
   Shield,
   ChevronLeft,
   ChevronRight,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,8 +49,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 
 interface Purchase {
   id: string;
@@ -74,14 +83,25 @@ interface Supplier {
   city?: string;
 }
 
+interface DateRange {
+  from: Date | undefined;
+  to: Date | undefined;
+}
+
 export default function PurchasesPage() {
   const router = useRouter();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [dateFilter, setDateFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
+
+  // Date range filter state
+  const [dateRange, setDateRange] = useState<DateRange>({
+    from: undefined,
+    to: undefined,
+  });
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -110,7 +130,7 @@ export default function PurchasesPage() {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, dateFilter, paymentFilter, itemsPerPage]);
+  }, [searchQuery, dateRange, paymentFilter, itemsPerPage, dateFilter]);
 
   // Check if user is admin
   const checkUserRole = async () => {
@@ -157,6 +177,11 @@ export default function PurchasesPage() {
     }
   };
 
+  // Clear date range filter
+  const clearDateRange = () => {
+    setDateRange({ from: undefined, to: undefined });
+  };
+
   // Filter purchases
   const filteredPurchases = purchases.filter((purchase) => {
     const matchesSearch =
@@ -169,7 +194,24 @@ export default function PurchasesPage() {
     const matchesPayment =
       paymentFilter === "all" || purchase.paymentStatus === paymentFilter;
 
+    // Date range filter
     let matchesDate = true;
+    if (dateRange.from) {
+      const purchaseDate = new Date(purchase.date);
+      purchaseDate.setHours(0, 0, 0, 0);
+
+      const fromDate = new Date(dateRange.from);
+      fromDate.setHours(0, 0, 0, 0);
+
+      if (dateRange.to) {
+        const toDate = new Date(dateRange.to);
+        toDate.setHours(23, 59, 59, 999);
+        matchesDate = purchaseDate >= fromDate && purchaseDate <= toDate;
+      } else {
+        matchesDate = purchaseDate >= fromDate;
+      }
+    }
+
     if (dateFilter !== "all") {
       const purchaseDate = new Date(purchase.date);
       const now = new Date();
@@ -423,40 +465,102 @@ export default function PurchasesPage() {
       {/* Search and Filters */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex-1 max-w-sm">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search by Purchase ID, Invoice #..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
+          <div className="flex flex-col gap-4">
+            {/* First Row: Search and Date Range */}
+            <div className="flex flex-col md:flex-row gap-4">
+              {/* Search Bar */}
+              <div className="flex-1">
+                <div className="relative w-1/2">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by Purchase ID, Invoice #..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Select value={paymentFilter} onValueChange={setPaymentFilter}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Payment Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="paid">Paid</SelectItem>
-                  <SelectItem value="unpaid">Unpaid</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Filter by date" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Time</SelectItem>
-                  <SelectItem value="today">Today</SelectItem>
-                  <SelectItem value="week">This Week</SelectItem>
-                  <SelectItem value="month">This Month</SelectItem>
-                </SelectContent>
-              </Select>
+
+              {/* Date Range Filter */}
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-[280px] justify-start text-left font-normal",
+                        !dateRange.from && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRange.from ? (
+                        dateRange.to ? (
+                          <>
+                            {format(dateRange.from, "MMM dd, yyyy")} -{" "}
+                            {format(dateRange.to, "MMM dd, yyyy")}
+                          </>
+                        ) : (
+                          format(dateRange.from, "MMM dd, yyyy")
+                        )
+                      ) : (
+                        <span>Pick a date range</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <Calendar
+                      initialFocus
+                      mode="range"
+                      defaultMonth={dateRange.from}
+                      selected={{
+                        from: dateRange.from,
+                        to: dateRange.to,
+                      }}
+                      onSelect={(range) => {
+                        setDateRange({
+                          from: range?.from,
+                          to: range?.to,
+                        });
+                      }}
+                      numberOfMonths={2}
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                {/* Clear Date Range Button */}
+                {(dateRange.from || dateRange.to) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearDateRange}
+                    className="h-10 px-3"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+                <Select value={dateFilter} onValueChange={setDateFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Filter by date" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="week">This Week</SelectItem>
+                    <SelectItem value="month">This Month</SelectItem>
+                  </SelectContent>
+                </Select>
+                {/* Payment Status Filter */}
+                <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Payment Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="unpaid">Unpaid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -500,7 +604,7 @@ export default function PurchasesPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2 text-sm">
-                        <Calendar className="w-3 h-3 text-muted-foreground" />
+                        <CalendarIcon className="w-3 h-3 text-muted-foreground" />
                         {new Date(purchase.date).toLocaleDateString()}
                       </div>
                     </TableCell>
