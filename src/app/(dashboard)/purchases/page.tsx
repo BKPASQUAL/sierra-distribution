@@ -1,6 +1,6 @@
 // src/app/(dashboard)/purchases/page.tsx
 // Single Supplier System - All purchases from Sierra Cables Ltd
-// UPDATED: Added Edit functionality for Admin users
+// UPDATED: Added Edit functionality for Admin users + Pagination
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -19,6 +19,8 @@ import {
   XCircle,
   Building2,
   Shield,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,7 +83,11 @@ export default function PurchasesPage() {
   const [dateFilter, setDateFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
 
-  // NEW: Admin check state
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Admin check state
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Payment status update dialog
@@ -96,12 +102,17 @@ export default function PurchasesPage() {
 
   // Fetch primary supplier and purchases
   useEffect(() => {
-    checkUserRole(); // NEW: Check if user is admin
+    checkUserRole();
     fetchSupplier();
     fetchPurchases();
   }, []);
 
-  // NEW: Check if user is admin
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, dateFilter, paymentFilter, itemsPerPage]);
+
+  // Check if user is admin
   const checkUserRole = async () => {
     try {
       const response = await fetch("/api/auth/profile");
@@ -178,6 +189,65 @@ export default function PurchasesPage() {
     return matchesSearch && matchesDate && matchesPayment;
   });
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentPurchases = filteredPurchases.slice(startIndex, endIndex);
+
+  // Pagination handlers
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  // Generate page numbers for pagination
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxPagesToShow = 5;
+
+    if (totalPages <= maxPagesToShow) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) {
+          pages.push(i);
+        }
+        pages.push("...");
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1);
+        pages.push("...");
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        pages.push(1);
+        pages.push("...");
+        pages.push(currentPage - 1);
+        pages.push(currentPage);
+        pages.push(currentPage + 1);
+        pages.push("...");
+        pages.push(totalPages);
+      }
+    }
+
+    return pages;
+  };
+
   // Calculate stats
   const totalPurchases = purchases.length;
   const totalSpent = purchases.reduce((sum, p) => sum + p.total, 0);
@@ -212,7 +282,7 @@ export default function PurchasesPage() {
     }
   };
 
-  // NEW: Handle edit purchase
+  // Handle edit purchase
   const handleEdit = (purchaseId: string) => {
     if (!isAdmin) {
       alert("Only administrators can edit purchases");
@@ -303,7 +373,8 @@ export default function PurchasesPage() {
           Add New Purchase
         </Button>
       </div>
-      {/* Stats Cards - Removed Total Savings Card */}
+
+      {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -403,7 +474,7 @@ export default function PurchasesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredPurchases.length === 0 ? (
+              {currentPurchases.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={7}
@@ -413,7 +484,7 @@ export default function PurchasesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredPurchases.map((purchase) => (
+                currentPurchases.map((purchase) => (
                   <TableRow key={purchase.id}>
                     <TableCell className="font-medium">{purchase.id}</TableCell>
                     <TableCell>
@@ -453,7 +524,6 @@ export default function PurchasesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {/* NEW: Edit Button - Only shown for admin */}
                         {isAdmin && (
                           <Button
                             variant="ghost"
@@ -487,6 +557,85 @@ export default function PurchasesPage() {
               )}
             </TableBody>
           </Table>
+
+          {/* Pagination Controls */}
+          {filteredPurchases.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-4 border-t">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  Showing {startIndex + 1} to{" "}
+                  {Math.min(endIndex, filteredPurchases.length)} of{" "}
+                  {filteredPurchases.length} purchases
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    Rows per page:
+                  </span>
+                  <Select
+                    value={itemsPerPage.toString()}
+                    onValueChange={(value) => setItemsPerPage(Number(value))}
+                  >
+                    <SelectTrigger className="w-[70px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToPreviousPage}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+
+                  <div className="flex items-center gap-1">
+                    {getPageNumbers().map((page, index) => (
+                      <React.Fragment key={index}>
+                        {page === "..." ? (
+                          <span className="px-2 text-muted-foreground">
+                            ...
+                          </span>
+                        ) : (
+                          <Button
+                            variant={
+                              currentPage === page ? "default" : "outline"
+                            }
+                            size="sm"
+                            onClick={() => goToPage(page as number)}
+                            className="min-w-[36px]"
+                          >
+                            {page}
+                          </Button>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToNextPage}
+                    disabled={currentPage === totalPages}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
