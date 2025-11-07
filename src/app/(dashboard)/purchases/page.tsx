@@ -303,19 +303,6 @@ export default function PurchasesPage() {
           Add New Purchase
         </Button>
       </div>
-
-      {/* NEW: Admin Badge */}
-      {isAdmin && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <div className="flex items-center gap-2 text-blue-700">
-            <Shield className="w-4 h-4" />
-            <span className="text-sm font-medium">
-              Administrator Mode: You can edit purchase orders
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* Stats Cards - Removed Total Savings Card */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

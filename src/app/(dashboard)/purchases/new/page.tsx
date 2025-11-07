@@ -3,12 +3,22 @@
 // 1. ✅ Creates purchase FIRST, then inventory transactions with reference_id
 // 2. ✅ Fixes TypeScript error - adds sellingPrice to PurchaseItem interface
 // 3. ✅ Properly stores and uses sellingPrice
+// 4. ✅ ADDED: Searchable product dropdown with Command component
 
 "use client";
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Trash2, Save, Package, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Plus,
+  Trash2,
+  Save,
+  Package,
+  Loader2,
+  Check,
+  ChevronsUpDown,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -34,6 +44,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface Product {
   id: string;
@@ -69,6 +93,9 @@ export default function AddPurchasePage() {
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [supplierId, setSupplierId] = useState<string | null>(null);
+
+  // Product search state
+  const [productSearchOpen, setProductSearchOpen] = useState(false);
 
   const [purchaseDate, setPurchaseDate] = useState(
     new Date().toISOString().split("T")[0]
@@ -138,6 +165,9 @@ export default function AddPurchasePage() {
         costPrice: costPrice,
         discountPercent: autoDiscount,
       });
+
+      // Close the dropdown after selection
+      setProductSearchOpen(false);
     }
   };
 
@@ -358,6 +388,12 @@ export default function AddPurchasePage() {
     (product) => !items.some((item) => item.productId === product.id)
   );
 
+  // Get selected product name for display
+  const getSelectedProductName = () => {
+    const product = products.find((p) => p.id === currentItem.productId);
+    return product ? `${product.name} - ${product.sku}` : "Select product";
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-full min-h-64">
@@ -467,36 +503,70 @@ export default function AddPurchasePage() {
                     <Label htmlFor="product" className="mb-2 block">
                       Product
                     </Label>
-                    <Select
-                      value={currentItem.productId}
-                      onValueChange={handleProductSelect}
+                    <Popover
+                      open={productSearchOpen}
+                      onOpenChange={setProductSearchOpen}
                     >
-                      <SelectTrigger id="product" className="h-10 w-full">
-                        <SelectValue placeholder="Select product" />
-                      </SelectTrigger>
-                      <SelectContent className="w-full min-w-[400px]">
-                        {availableProducts.length === 0 ? (
-                          <div className="p-4 text-center text-sm text-muted-foreground">
-                            All products have been added
-                          </div>
-                        ) : (
-                          availableProducts.map((product) => (
-                            <SelectItem key={product.id} value={product.id}>
-                              <div className="flex flex-col">
-                                <span className="font-medium">
-                                  {product.name}
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                  MRP: {product.mrp} | Cost:{" "}
-                                  {product.cost_price || "N/A"} | Stock:{" "}
-                                  {product.stock_quantity}
-                                </span>
-                              </div>
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={productSearchOpen}
+                          className="w-full h-10 justify-between"
+                        >
+                          <span className="truncate">
+                            {currentItem.productId
+                              ? getSelectedProductName()
+                              : "Select product"}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[400px] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search product by name or SKU..." />
+                          <CommandList>
+                            <CommandEmpty>No product found.</CommandEmpty>
+                            <CommandGroup>
+                              {availableProducts.length === 0 ? (
+                                <div className="p-4 text-center text-sm text-muted-foreground">
+                                  All products have been added
+                                </div>
+                              ) : (
+                                availableProducts.map((product) => (
+                                  <CommandItem
+                                    key={product.id}
+                                    value={`${product.name} ${product.sku} ${product.id}`}
+                                    onSelect={() =>
+                                      handleProductSelect(product.id)
+                                    }
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        currentItem.productId === product.id
+                                          ? "opacity-100"
+                                          : "opacity-0"
+                                      )}
+                                    />
+                                    <div className="flex flex-col">
+                                      <span className="font-medium">
+                                        {product.name}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        SKU: {product.sku} | MRP: {product.mrp}{" "}
+                                        | Cost: {product.cost_price || "N/A"} |
+                                        Stock: {product.stock_quantity}
+                                      </span>
+                                    </div>
+                                  </CommandItem>
+                                ))
+                              )}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
 
                   <div className="col-span-2">
