@@ -18,6 +18,9 @@ import {
   CheckCircle,
   Lock,
   ShieldAlert,
+  Receipt,
+  Fuel,
+  Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +60,8 @@ import {
   Pie,
   Cell,
   Legend,
+  LineChart,
+  Line,
 } from "recharts";
 import { createClient } from "@/lib/supabase/client";
 
@@ -98,6 +103,39 @@ interface DueInvoice {
   balance: number;
 }
 
+interface Expense {
+  id: string;
+  expense_number: string;
+  expense_date: string;
+  category: "fuel" | "maintenance" | "other";
+  description: string;
+  amount: number;
+  payment_method: string;
+  vendor_name: string | null;
+  notes: string | null;
+  users?: {
+    name: string;
+  };
+}
+
+interface ExpenseSummary {
+  totalExpenses: number;
+  fuelExpenses: number;
+  maintenanceExpenses: number;
+  otherExpenses: number;
+  expenseCount: number;
+  avgExpense: number;
+  byPaymentMethod: { [key: string]: number };
+  byMonth: {
+    month: string;
+    amount: number;
+    fuel: number;
+    maintenance: number;
+    other: number;
+  }[];
+  topVendors: { vendor: string; total: number; count: number }[];
+}
+
 export default function ReportsPage() {
   // Auth state
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -111,6 +149,18 @@ export default function ReportsPage() {
     CustomerProfitSummary[]
   >([]);
   const [dueInvoices, setDueInvoices] = useState<DueInvoice[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expenseSummary, setExpenseSummary] = useState<ExpenseSummary>({
+    totalExpenses: 0,
+    fuelExpenses: 0,
+    maintenanceExpenses: 0,
+    otherExpenses: 0,
+    expenseCount: 0,
+    avgExpense: 0,
+    byPaymentMethod: {},
+    byMonth: [],
+    topVendors: [],
+  });
 
   // Filter state
   const [dateFrom, setDateFrom] = useState(() => {
@@ -180,6 +230,7 @@ export default function ReportsPage() {
     try {
       setLoading(true);
 
+      // Fetch orders
       const ordersResponse = await fetch("/api/orders");
       const ordersData = await ordersResponse.json();
 
@@ -327,6 +378,15 @@ export default function ReportsPage() {
         .filter((inv) => inv.daysOverdue >= 45);
 
       setDueInvoices(overdueInvoices);
+
+      // Fetch expenses
+      const expensesResponse = await fetch("/api/expenses");
+      const expensesData = await expensesResponse.json();
+
+      if (expensesData.expenses) {
+        setExpenses(expensesData.expenses);
+        calculateExpenseSummary(expensesData.expenses);
+      }
     } catch (error) {
       console.error("Error fetching report data:", error);
     } finally {
@@ -334,11 +394,95 @@ export default function ReportsPage() {
     }
   };
 
+  const calculateExpenseSummary = (expensesData: Expense[]) => {
+    const total = expensesData.reduce((sum, exp) => sum + exp.amount, 0);
+    const fuel = expensesData
+      .filter((exp) => exp.category === "fuel")
+      .reduce((sum, exp) => sum + exp.amount, 0);
+    const maintenance = expensesData
+      .filter((exp) => exp.category === "maintenance")
+      .reduce((sum, exp) => sum + exp.amount, 0);
+    const other = expensesData
+      .filter((exp) => exp.category === "other")
+      .reduce((sum, exp) => sum + exp.amount, 0);
+
+    // By payment method
+    const byPaymentMethod: { [key: string]: number } = {};
+    expensesData.forEach((exp) => {
+      byPaymentMethod[exp.payment_method] =
+        (byPaymentMethod[exp.payment_method] || 0) + exp.amount;
+    });
+
+    // By month
+    const monthMap = new Map<
+      string,
+      { amount: number; fuel: number; maintenance: number; other: number }
+    >();
+    expensesData.forEach((exp) => {
+      const month = exp.expense_date.substring(0, 7); // YYYY-MM
+      if (!monthMap.has(month)) {
+        monthMap.set(month, { amount: 0, fuel: 0, maintenance: 0, other: 0 });
+      }
+      const monthData = monthMap.get(month)!;
+      monthData.amount += exp.amount;
+      if (exp.category === "fuel") monthData.fuel += exp.amount;
+      if (exp.category === "maintenance") monthData.maintenance += exp.amount;
+      if (exp.category === "other") monthData.other += exp.amount;
+    });
+
+    const byMonth = Array.from(monthMap.entries())
+      .map(([month, data]) => ({
+        month,
+        ...data,
+      }))
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .slice(-6); // Last 6 months
+
+    // Top vendors
+    const vendorMap = new Map<string, { total: number; count: number }>();
+    expensesData.forEach((exp) => {
+      if (exp.vendor_name) {
+        const current = vendorMap.get(exp.vendor_name) || {
+          total: 0,
+          count: 0,
+        };
+        vendorMap.set(exp.vendor_name, {
+          total: current.total + exp.amount,
+          count: current.count + 1,
+        });
+      }
+    });
+
+    const topVendors = Array.from(vendorMap.entries())
+      .map(([vendor, data]) => ({ vendor, ...data }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+
+    setExpenseSummary({
+      totalExpenses: total,
+      fuelExpenses: fuel,
+      maintenanceExpenses: maintenance,
+      otherExpenses: other,
+      expenseCount: expensesData.length,
+      avgExpense: expensesData.length > 0 ? total / expensesData.length : 0,
+      byPaymentMethod,
+      byMonth,
+      topVendors,
+    });
+  };
+
   const filteredOrders = orders.filter((order) => {
     const orderDate = new Date(order.order_date);
     const from = new Date(dateFrom);
     const to = new Date(dateTo);
     return orderDate >= from && orderDate <= to;
+  });
+
+  const filteredExpenses = expenses.filter((expense) => {
+    const expenseDate = new Date(expense.expense_date);
+    const from = new Date(dateFrom);
+    const to = new Date(dateTo);
+    return expenseDate >= from && expenseDate <= to;
   });
 
   const totalSales = filteredOrders.reduce((sum, o) => sum + o.total_amount, 0);
@@ -356,6 +500,11 @@ export default function ReportsPage() {
   const unpaidAmount = filteredOrders
     .filter((o) => o.payment_status !== "paid")
     .reduce((sum, o) => sum + o.total_amount, 0);
+
+  const filteredExpenseTotal = filteredExpenses.reduce(
+    (sum, exp) => sum + exp.amount,
+    0
+  );
 
   const handleQuickPeriod = (period: string) => {
     const today = new Date();
@@ -410,6 +559,15 @@ export default function ReportsPage() {
     if (margin >= 10)
       return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
     return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+  };
+
+  const getCategoryIcon = (category: string) => {
+    const icons = {
+      fuel: <Fuel className="h-4 w-4" />,
+      maintenance: <Wrench className="h-4 w-4" />,
+      other: <Receipt className="h-4 w-4" />,
+    };
+    return icons[category as keyof typeof icons] || icons.other;
   };
 
   // Loading state while checking auth
@@ -493,6 +651,16 @@ export default function ReportsPage() {
     "#FF6B9D",
     "#C0C0C0",
     "#8A2BE2",
+  ];
+
+  const expenseCategoryData = [
+    { name: "Fuel", value: expenseSummary.fuelExpenses, color: "#3b82f6" },
+    {
+      name: "Maintenance",
+      value: expenseSummary.maintenanceExpenses,
+      color: "#f97316",
+    },
+    { name: "Other", value: expenseSummary.otherExpenses, color: "#6b7280" },
   ];
 
   return (
@@ -626,21 +794,24 @@ export default function ReportsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
-              Avg Order Value
+              Total Expenses
             </CardTitle>
+            <Receipt className="w-4 h-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              LKR {Math.round(avgOrderValue).toLocaleString()}
+            <div className="text-2xl font-bold text-red-600">
+              LKR {filteredExpenseTotal.toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Per order</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {filteredExpenses.length} expenses
+            </p>
           </CardContent>
         </Card>
       </div>
 
       {/* Reports Tabs */}
       <Tabs defaultValue="profit" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="profit">
             <TrendingUp className="w-4 h-4 mr-2" />
             Profit Analysis
@@ -652,6 +823,10 @@ export default function ReportsPage() {
           <TabsTrigger value="customers">
             <Users className="w-4 h-4 mr-2" />
             Customer Profit
+          </TabsTrigger>
+          <TabsTrigger value="expenses">
+            <Receipt className="w-4 h-4 mr-2" />
+            Expenses
           </TabsTrigger>
           <TabsTrigger value="due">
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -1112,6 +1287,391 @@ export default function ReportsPage() {
           </Card>
         </TabsContent>
 
+        {/* Expenses Tab - NEW! */}
+        <TabsContent value="expenses" className="space-y-4">
+          {/* Expense Summary Cards */}
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Total Expenses
+                </CardTitle>
+                <Receipt className="w-4 h-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-red-600">
+                  LKR {filteredExpenseTotal.toLocaleString()}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {filteredExpenses.length} expenses
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Fuel Expenses
+                </CardTitle>
+                <Fuel className="w-4 h-4 text-blue-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">
+                  LKR{" "}
+                  {filteredExpenses
+                    .filter((e) => e.category === "fuel")
+                    .reduce((sum, e) => sum + e.amount, 0)
+                    .toLocaleString()}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {filteredExpenses.filter((e) => e.category === "fuel").length}{" "}
+                  transactions
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Maintenance
+                </CardTitle>
+                <Wrench className="w-4 h-4 text-orange-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-orange-600">
+                  LKR{" "}
+                  {filteredExpenses
+                    .filter((e) => e.category === "maintenance")
+                    .reduce((sum, e) => sum + e.amount, 0)
+                    .toLocaleString()}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {
+                    filteredExpenses.filter((e) => e.category === "maintenance")
+                      .length
+                  }{" "}
+                  transactions
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Other Expenses
+                </CardTitle>
+                <Receipt className="w-4 h-4 text-gray-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-gray-600">
+                  LKR{" "}
+                  {filteredExpenses
+                    .filter((e) => e.category === "other")
+                    .reduce((sum, e) => sum + e.amount, 0)
+                    .toLocaleString()}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {
+                    filteredExpenses.filter((e) => e.category === "other")
+                      .length
+                  }{" "}
+                  transactions
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Expense by Category Pie Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Expenses by Category</CardTitle>
+                <CardDescription>
+                  Distribution of expenses across categories
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={expenseCategoryData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={80}
+                      label={(entry: any) =>
+                        `${entry.name}: ${(
+                          (entry.value / expenseSummary.totalExpenses) *
+                          100
+                        ).toFixed(1)}%`
+                      }
+                    >
+                      {expenseCategoryData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number) =>
+                        `LKR ${value.toLocaleString()}`
+                      }
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Payment Method Breakdown */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment Methods</CardTitle>
+                <CardDescription>Expenses by payment method</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {Object.entries(expenseSummary.byPaymentMethod).map(
+                    ([method, amount]) => (
+                      <div
+                        key={method}
+                        className="flex items-center justify-between p-3 rounded-lg border"
+                      >
+                        <div>
+                          <p className="font-medium capitalize">
+                            {method.replace("_", " ")}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {
+                              filteredExpenses.filter(
+                                (e) => e.payment_method === method
+                              ).length
+                            }{" "}
+                            transactions
+                          </p>
+                        </div>
+                        <p className="text-lg font-bold">
+                          LKR {amount.toLocaleString()}
+                        </p>
+                      </div>
+                    )
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Monthly Trend Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Monthly Expense Trends</CardTitle>
+              <CardDescription>
+                Expense breakdown by category over time
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={350}>
+                <LineChart data={expenseSummary.byMonth}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    className="stroke-muted"
+                  />
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                  />
+                  <YAxis
+                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--popover))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number) => [
+                      `LKR ${value.toLocaleString()}`,
+                      "",
+                    ]}
+                  />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="fuel"
+                    stroke="#3b82f6"
+                    name="Fuel"
+                    strokeWidth={2}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="maintenance"
+                    stroke="#f97316"
+                    name="Maintenance"
+                    strokeWidth={2}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="other"
+                    stroke="#6b7280"
+                    name="Other"
+                    strokeWidth={2}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="amount"
+                    stroke="#ef4444"
+                    name="Total"
+                    strokeWidth={3}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Top Vendors */}
+          {expenseSummary.topVendors.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Top Vendors</CardTitle>
+                <CardDescription>
+                  Vendors with highest expense amounts
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Vendor</TableHead>
+                      <TableHead className="text-right">Transactions</TableHead>
+                      <TableHead className="text-right">Total Amount</TableHead>
+                      <TableHead className="text-right">Avg Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {expenseSummary.topVendors.map((vendor, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-medium">
+                          {vendor.vendor}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {vendor.count}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          LKR {vendor.total.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          LKR{" "}
+                          {Math.round(
+                            vendor.total / vendor.count
+                          ).toLocaleString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="bg-muted/50 font-bold">
+                      <TableCell>Total</TableCell>
+                      <TableCell className="text-right">
+                        {expenseSummary.topVendors.reduce(
+                          (sum, v) => sum + v.count,
+                          0
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        LKR{" "}
+                        {expenseSummary.topVendors
+                          .reduce((sum, v) => sum + v.total, 0)
+                          .toLocaleString()}
+                      </TableCell>
+                      <TableCell></TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Detailed Expense List */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Expense Details</CardTitle>
+              <CardDescription>
+                All expenses in the selected period
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Expense #</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Vendor</TableHead>
+                    <TableHead>Payment Method</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Created By</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredExpenses.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={8}
+                        className="text-center py-8 text-muted-foreground"
+                      >
+                        No expenses found for the selected period
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredExpenses
+                      .sort(
+                        (a, b) =>
+                          new Date(b.expense_date).getTime() -
+                          new Date(a.expense_date).getTime()
+                      )
+                      .map((expense) => (
+                        <TableRow key={expense.id}>
+                          <TableCell className="font-medium">
+                            {expense.expense_number}
+                          </TableCell>
+                          <TableCell>
+                            {new Date(
+                              expense.expense_date
+                            ).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getCategoryIcon(expense.category)}
+                              <span className="capitalize">
+                                {expense.category}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{expense.description}</TableCell>
+                          <TableCell>{expense.vendor_name || "-"}</TableCell>
+                          <TableCell className="capitalize">
+                            {expense.payment_method.replace("_", " ")}
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-red-600">
+                            LKR {expense.amount.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            {expense.users?.name || "Unknown"}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                  )}
+                  {filteredExpenses.length > 0 && (
+                    <TableRow className="bg-muted/50 font-bold">
+                      <TableCell colSpan={6}>Total Expenses</TableCell>
+                      <TableCell className="text-right text-red-600">
+                        LKR {filteredExpenseTotal.toLocaleString()}
+                      </TableCell>
+                      <TableCell></TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Due Payments Tab */}
         <TabsContent value="due" className="space-y-4">
           <Card>
@@ -1244,16 +1804,26 @@ export default function ReportsPage() {
                     LKR {totalProfit.toLocaleString()}
                   </span>
                 </div>
+                <div className="flex items-center justify-between pb-2 border-b">
+                  <span className="text-sm text-muted-foreground">
+                    Total Expenses
+                  </span>
+                  <span className="font-bold text-orange-600">
+                    -LKR {filteredExpenseTotal.toLocaleString()}
+                  </span>
+                </div>
                 <div className="flex items-center justify-between pb-2">
                   <span className="text-sm text-muted-foreground">
-                    Profit Margin
+                    Net Profit (After Expenses)
                   </span>
                   <span
-                    className={`font-bold text-lg ${getProfitMarginColor(
-                      overallProfitMargin
-                    )}`}
+                    className={`font-bold text-lg ${
+                      totalProfit - filteredExpenseTotal > 0
+                        ? "text-green-600"
+                        : "text-red-600"
+                    }`}
                   >
-                    {overallProfitMargin.toFixed(2)}%
+                    LKR {(totalProfit - filteredExpenseTotal).toLocaleString()}
                   </span>
                 </div>
               </CardContent>
@@ -1308,7 +1878,7 @@ export default function ReportsPage() {
               <CardTitle>Key Metrics</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-4">
                 <div className="p-4 rounded-lg border">
                   <p className="text-sm text-muted-foreground">Total Orders</p>
                   <p className="text-3xl font-bold">{totalOrders}</p>
@@ -1325,6 +1895,14 @@ export default function ReportsPage() {
                   </p>
                   <p className="text-3xl font-bold">
                     LKR {Math.round(avgOrderValue).toLocaleString()}
+                  </p>
+                </div>
+                <div className="p-4 rounded-lg border">
+                  <p className="text-sm text-muted-foreground">
+                    Total Expenses
+                  </p>
+                  <p className="text-3xl font-bold text-red-600">
+                    LKR {filteredExpenseTotal.toLocaleString()}
                   </p>
                 </div>
               </div>

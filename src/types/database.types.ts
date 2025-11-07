@@ -6,6 +6,10 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+export type ExpenseCategory = "fuel" | "maintenance" | "other";
+
+export type ExpensePaymentMethod = "cash" | "bank_transfer" | "cheque" | "card";
+
 export interface Database {
   public: {
     Tables: {
@@ -342,7 +346,53 @@ export interface Database {
           cheque_status?: "pending" | "passed" | "returned" | null;
         };
       };
-
+      expenses: {
+        Row: {
+          id: string;
+          expense_number: string;
+          expense_date: string;
+          category: "fuel" | "maintenance" | "other";
+          description: string;
+          amount: number;
+          payment_method: "cash" | "bank_transfer" | "cheque" | "card";
+          reference_number: string | null;
+          vendor_name: string | null;
+          notes: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          expense_number: string;
+          expense_date?: string;
+          category: "fuel" | "maintenance" | "other";
+          description: string;
+          amount: number;
+          payment_method: "cash" | "bank_transfer" | "cheque" | "card";
+          reference_number?: string | null;
+          vendor_name?: string | null;
+          notes?: string | null;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          expense_number?: string;
+          expense_date?: string;
+          category?: "fuel" | "maintenance" | "other";
+          description?: string;
+          amount?: number;
+          payment_method?: "cash" | "bank_transfer" | "cheque" | "card";
+          reference_number?: string | null;
+          vendor_name?: string | null;
+          notes?: string | null;
+          created_by?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       suppliers: {
         Row: {
           id: string;
@@ -356,6 +406,7 @@ export interface Database {
           created_at: string;
           updated_at: string;
         };
+
         Insert: {
           id?: string;
           supplier_code?: string;
