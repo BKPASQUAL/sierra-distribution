@@ -21,7 +21,8 @@
 /build
 
 # env files (can opt-in for committing if needed)
-.env*
+.env*.local
+.env
 
 # misc
 .DS_Store
