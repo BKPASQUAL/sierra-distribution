@@ -55,6 +55,27 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { toast } from "sonner";
+
+// Bank type definition
+interface Bank {
+  id: string;
+  bank_code: string;
+  bank_name: string;
+}
 
 // Payment type definition
 interface Payment {
@@ -70,12 +91,17 @@ interface Payment {
   cheque_number: string | null;
   cheque_date: string | null;
   cheque_status: "pending" | "passed" | "returned" | null;
-  customers: {
+  bank_id: string | null;
+  customers?: {
     name: string;
   };
-  orders: {
+  orders?: {
     order_number: string;
     total_amount: number;
+  } | null;
+  banks?: {
+    bank_code: string;
+    bank_name: string;
   } | null;
 }
 
@@ -90,6 +116,7 @@ interface UnpaidOrder {
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [banks, setBanks] = useState<Bank[]>([]);
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>(
     []
   );
@@ -100,6 +127,8 @@ export default function PaymentsPage() {
   const [methodFilter, setMethodFilter] = useState("all");
   const [chequeStatusFilter, setChequeStatusFilter] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [bankSearchOpen, setBankSearchOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [chequeActionDialog, setChequeActionDialog] = useState<{
     open: boolean;
     payment: Payment | null;
@@ -111,7 +140,7 @@ export default function PaymentsPage() {
     amount: 0,
     date: new Date().toISOString().split("T")[0],
     method: "cash",
-    reference: "",
+    bankId: "",
     chequeNo: "",
     chequeDate: "",
     notes: "",
@@ -120,6 +149,7 @@ export default function PaymentsPage() {
   // Fetch payments from API
   useEffect(() => {
     fetchPayments();
+    fetchBanks();
   }, []);
 
   const fetchPayments = async () => {
@@ -131,11 +161,26 @@ export default function PaymentsPage() {
         setPayments(data.payments);
       } else {
         console.error("Failed to fetch payments:", data.error);
+        toast.error("Failed to fetch payments");
       }
     } catch (error) {
       console.error("Network error fetching payments:", error);
+      toast.error("Network error fetching payments");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchBanks = async () => {
+    try {
+      const response = await fetch("/api/banks");
+      const data = await response.json();
+
+      if (data.banks) {
+        setBanks(data.banks);
+      }
+    } catch (error) {
+      console.error("Error fetching banks:", error);
     }
   };
 
@@ -237,7 +282,9 @@ export default function PaymentsPage() {
       (payment.orders?.order_number || "")
         .toLowerCase()
         .includes(searchQuery.toLowerCase()) ||
-      payment.customers.name.toLowerCase().includes(searchQuery.toLowerCase());
+      (payment.customers?.name || "")
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase());
 
     const matchesCustomer =
       customerFilter === "all" || payment.customer_id === customerFilter;
@@ -269,14 +316,14 @@ export default function PaymentsPage() {
 
   const handleAddPayment = async () => {
     if (!formData.orderId || formData.amount <= 0) {
-      alert("Please select an order and enter valid amount");
+      toast.error("Please select an order and enter valid amount");
       return;
     }
 
     // Validate payment amount doesn't exceed balance
     const selectedOrder = unpaidOrders.find((o) => o.id === formData.orderId);
     if (selectedOrder && formData.amount > selectedOrder.balance) {
-      alert(
+      toast.error(
         `Payment amount (LKR ${formData.amount.toLocaleString()}) cannot exceed remaining balance (LKR ${selectedOrder.balance.toLocaleString()})`
       );
       return;
@@ -284,12 +331,15 @@ export default function PaymentsPage() {
 
     if (
       formData.method === "cheque" &&
-      (!formData.chequeNo || !formData.chequeDate)
+      (!formData.chequeNo || !formData.chequeDate || !formData.bankId)
     ) {
-      alert("Please provide cheque number and date for cheque payments");
+      toast.error(
+        "Please provide cheque number, date, and bank for cheque payments"
+      );
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const payment_number = `PAY-${Date.now()}`;
 
@@ -300,11 +350,12 @@ export default function PaymentsPage() {
         payment_date: formData.date,
         amount: formData.amount,
         payment_method: formData.method,
-        reference_number: formData.reference || null,
+        reference_number: null,
         notes: formData.notes || null,
         cheque_number: formData.method === "cheque" ? formData.chequeNo : null,
         cheque_date: formData.method === "cheque" ? formData.chequeDate : null,
         cheque_status: formData.method === "cheque" ? "pending" : null,
+        bank_id: formData.method === "cheque" ? formData.bankId : null,
       };
 
       const response = await fetch("/api/payments", {
@@ -319,13 +370,21 @@ export default function PaymentsPage() {
         throw new Error(result.error || "Failed to add payment");
       }
 
-      alert("Payment recorded successfully!");
-      fetchPayments(); // Refresh payments list
+      toast.success("Payment recorded successfully!");
+
+      // Refetch payments to ensure all data is up-to-date
+      await fetchPayments();
+
+      // Refetch unpaid orders to update balances
+      await fetchUnpaidOrders();
+
       setIsAddDialogOpen(false);
       resetForm();
     } catch (error) {
       console.error("Error adding payment:", error);
-      alert(`Error adding payment: ${(error as Error).message}`);
+      toast.error(`Error adding payment: ${(error as Error).message}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -335,7 +394,7 @@ export default function PaymentsPage() {
       amount: 0,
       date: new Date().toISOString().split("T")[0],
       method: "cash",
-      reference: "",
+      bankId: "",
       chequeNo: "",
       chequeDate: "",
       notes: "",
@@ -370,12 +429,15 @@ export default function PaymentsPage() {
         throw new Error(result.error || "Failed to update cheque status");
       }
 
-      alert(`Cheque marked as ${chequeActionDialog.action}!`);
-      fetchPayments(); // Refresh payments list
+      toast.success(`Cheque marked as ${chequeActionDialog.action}!`);
+
+      // Refetch payments to ensure all data is up-to-date
+      await fetchPayments();
+
       setChequeActionDialog({ open: false, payment: null, action: null });
     } catch (error) {
       console.error("Error updating cheque status:", error);
-      alert(`Error: ${(error as Error).message}`);
+      toast.error(`Error: ${(error as Error).message}`);
     }
   };
 
@@ -577,7 +639,7 @@ export default function PaymentsPage() {
                 <TableHead>Customer</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Method</TableHead>
-                <TableHead>Cheque Details</TableHead>
+                <TableHead>Cheque/Bank Details</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -604,7 +666,7 @@ export default function PaymentsPage() {
                       {payment.payment_number}
                     </TableCell>
                     <TableCell>{payment.orders?.order_number || "-"}</TableCell>
-                    <TableCell>{payment.customers.name}</TableCell>
+                    <TableCell>{payment.customers?.name || "-"}</TableCell>
                     <TableCell className="text-right font-medium text-green-600">
                       LKR {payment.amount.toLocaleString()}
                     </TableCell>
@@ -620,6 +682,12 @@ export default function PaymentsPage() {
                           <div className="text-xs font-medium">
                             {payment.cheque_number}
                           </div>
+                          {payment.banks && (
+                            <div className="text-xs text-muted-foreground">
+                              {payment.banks.bank_code} -{" "}
+                              {payment.banks.bank_name}
+                            </div>
+                          )}
                           <div className="text-xs text-muted-foreground">
                             Due:{" "}
                             {payment.cheque_date &&
@@ -675,7 +743,7 @@ export default function PaymentsPage() {
 
       {/* Add Payment Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Payment</DialogTitle>
             <DialogDescription>
@@ -760,7 +828,7 @@ export default function PaymentsPage() {
                 className="w-full h-10"
               />
             </div>
-            <div className="space-y-2">
+            <div className="col-span-2 space-y-2">
               <Label htmlFor="method">Payment Method *</Label>
               <Select
                 value={formData.method}
@@ -779,20 +847,61 @@ export default function PaymentsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="reference">Reference Number</Label>
-              <Input
-                id="reference"
-                placeholder="TXN/REF Number"
-                value={formData.reference}
-                onChange={(e) =>
-                  setFormData({ ...formData, reference: e.target.value })
-                }
-                className="w-full h-10"
-              />
-            </div>
             {formData.method === "cheque" && (
               <>
+                <div className="col-span-2 space-y-2">
+                  <Label>Bank Code & Name *</Label>
+                  <Popover
+                    open={bankSearchOpen}
+                    onOpenChange={setBankSearchOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={bankSearchOpen}
+                        className="w-full justify-between h-10"
+                      >
+                        {formData.bankId
+                          ? banks.find((bank) => bank.id === formData.bankId)
+                              ?.bank_code +
+                            " - " +
+                            banks.find((bank) => bank.id === formData.bankId)
+                              ?.bank_name
+                          : "Select bank..."}
+                        <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <Command>
+                        <CommandInput
+                          placeholder="Search bank by code or name..."
+                          className="h-9"
+                        />
+                        <CommandList>
+                          <CommandEmpty>No bank found.</CommandEmpty>
+                          <CommandGroup>
+                            {banks.map((bank) => (
+                              <CommandItem
+                                key={bank.id}
+                                value={`${bank.bank_code} ${bank.bank_name}`}
+                                onSelect={() => {
+                                  setFormData({ ...formData, bankId: bank.id });
+                                  setBankSearchOpen(false);
+                                }}
+                              >
+                                <span className="font-mono font-semibold mr-2">
+                                  {bank.bank_code}
+                                </span>
+                                <span>{bank.bank_name}</span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="chequeNo">Cheque Number *</Label>
                   <Input
@@ -844,9 +953,16 @@ export default function PaymentsPage() {
             </Button>
             <Button
               onClick={handleAddPayment}
-              disabled={unpaidOrders.length === 0}
+              disabled={unpaidOrders.length === 0 || isSubmitting}
             >
-              Add Payment
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                "Add Payment"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -879,6 +995,13 @@ export default function PaymentsPage() {
                       <strong>Cheque No:</strong>{" "}
                       {chequeActionDialog.payment?.cheque_number}
                     </div>
+                    {chequeActionDialog.payment?.banks && (
+                      <div className="text-sm">
+                        <strong>Bank:</strong>{" "}
+                        {chequeActionDialog.payment.banks.bank_code} -{" "}
+                        {chequeActionDialog.payment.banks.bank_name}
+                      </div>
+                    )}
                     <div className="text-sm">
                       <strong>Amount:</strong> LKR{" "}
                       {chequeActionDialog.payment?.amount.toLocaleString()}
@@ -892,7 +1015,7 @@ export default function PaymentsPage() {
                     </div>
                     <div className="text-sm">
                       <strong>Customer:</strong>{" "}
-                      {chequeActionDialog.payment?.customers.name}
+                      {chequeActionDialog.payment?.customers?.name || "N/A"}
                     </div>
                   </div>
                   <br />
@@ -909,6 +1032,13 @@ export default function PaymentsPage() {
                       <strong>Cheque No:</strong>{" "}
                       {chequeActionDialog.payment?.cheque_number}
                     </div>
+                    {chequeActionDialog.payment?.banks && (
+                      <div className="text-sm">
+                        <strong>Bank:</strong>{" "}
+                        {chequeActionDialog.payment.banks.bank_code} -{" "}
+                        {chequeActionDialog.payment.banks.bank_name}
+                      </div>
+                    )}
                     <div className="text-sm">
                       <strong>Amount:</strong> LKR{" "}
                       {chequeActionDialog.payment?.amount.toLocaleString()}
@@ -922,7 +1052,7 @@ export default function PaymentsPage() {
                     </div>
                     <div className="text-sm">
                       <strong>Customer:</strong>{" "}
-                      {chequeActionDialog.payment?.customers.name}
+                      {chequeActionDialog.payment?.customers?.name || "N/A"}
                     </div>
                   </div>
                   <br />

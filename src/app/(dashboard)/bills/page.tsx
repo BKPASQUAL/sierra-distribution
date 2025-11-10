@@ -45,10 +45,20 @@ interface Order {
   payment_status: "unpaid" | "partial" | "paid";
   payment_method: string | null;
   customers: Customer;
+  paid_amount?: number;
+  due_amount?: number;
+}
+
+interface Payment {
+  id: string;
+  order_id: string | null;
+  amount: number;
+  cheque_status: "pending" | "passed" | "returned" | null;
 }
 
 export default function BillsPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>(
     []
   );
@@ -59,26 +69,53 @@ export default function BillsPage() {
   const [paymentMethodFilter, setPaymentMethodFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
 
-  // Fetch orders from API
+  // Fetch orders and payments from API
   useEffect(() => {
-    const fetchOrders = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch("/api/orders");
-        const data = await response.json();
+        // Fetch orders
+        const ordersResponse = await fetch("/api/orders");
+        const ordersData = await ordersResponse.json();
 
-        if (data.orders) {
-          setOrders(data.orders);
+        // Fetch payments
+        const paymentsResponse = await fetch("/api/payments");
+        const paymentsData = await paymentsResponse.json();
+
+        if (ordersData.orders && paymentsData.payments) {
+          const ordersWithBalance = ordersData.orders.map((order: Order) => {
+            // Calculate paid amount for this order (exclude returned cheques)
+            const orderPayments = paymentsData.payments.filter(
+              (p: Payment) =>
+                p.order_id === order.id && p.cheque_status !== "returned"
+            );
+
+            const paidAmount = orderPayments.reduce(
+              (sum: number, p: Payment) => sum + p.amount,
+              0
+            );
+
+            const dueAmount = order.total_amount - paidAmount;
+
+            return {
+              ...order,
+              paid_amount: paidAmount,
+              due_amount: dueAmount,
+            };
+          });
+
+          setOrders(ordersWithBalance);
+          setPayments(paymentsData.payments);
         } else {
-          console.error("Failed to fetch orders:", data.error);
+          console.error("Failed to fetch data");
         }
       } catch (error) {
-        console.error("Network error fetching orders:", error);
+        console.error("Network error fetching data:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchOrders();
+    fetchData();
   }, []);
 
   // Fetch customers for filter
@@ -146,17 +183,8 @@ export default function BillsPage() {
   const totalBills = orders.length;
   const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
 
-  // Calculate total balance (unpaid + partial amounts)
-  const totalBalance = orders.reduce((sum, o) => {
-    if (o.payment_status === "unpaid") {
-      return sum + o.total_amount;
-    } else if (o.payment_status === "partial") {
-      // For partial, we'd need the paid amount from payments table
-      // For now, estimate as half the total
-      return sum + o.total_amount / 2;
-    }
-    return sum;
-  }, 0);
+  // Calculate total balance (sum of all due amounts)
+  const totalBalance = orders.reduce((sum, o) => sum + (o.due_amount || 0), 0);
 
   const pendingBills = orders.filter((o) => o.payment_status !== "paid").length;
 
@@ -352,8 +380,8 @@ export default function BillsPage() {
                 <TableHead>Customer</TableHead>
                 <TableHead>Invoice No</TableHead>
                 <TableHead className="text-right">Total</TableHead>
-                <TableHead className="text-right">Discount</TableHead>
-                <TableHead>Payment Method</TableHead>
+                <TableHead className="text-right">Paid</TableHead>
+                <TableHead className="text-right">Due Amount</TableHead>
                 <TableHead>Payment Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -385,10 +413,16 @@ export default function BillsPage() {
                       LKR {order.total_amount.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right text-green-600">
-                      -LKR {order.discount_amount.toLocaleString()}
+                      LKR {(order.paid_amount || 0).toLocaleString()}
                     </TableCell>
-                    <TableCell>
-                      {getPaymentMethodBadge(order.payment_method)}
+                    <TableCell className="text-right">
+                      {order.payment_status === "paid" ? (
+                        <span className="text-muted-foreground">-</span>
+                      ) : (
+                        <span className="font-semibold text-destructive">
+                          LKR {(order.due_amount || 0).toLocaleString()}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <span
