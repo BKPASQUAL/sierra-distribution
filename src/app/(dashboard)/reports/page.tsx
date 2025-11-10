@@ -698,7 +698,7 @@ export default function ReportsPage() {
             <div className="space-y-2">
               <Label>Quick Select</Label>
               <Select value={selectedPeriod} onValueChange={handleQuickPeriod}>
-                <SelectTrigger>
+                    <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select period" />
                 </SelectTrigger>
                 <SelectContent>
