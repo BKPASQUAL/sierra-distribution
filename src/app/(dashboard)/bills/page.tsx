@@ -2,7 +2,18 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Plus, Search, Eye, Calendar, Loader2 } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Eye,
+  Calendar,
+  Loader2,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  CheckCircle2,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,6 +38,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+// Import export libraries
+import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 // Types for API data
 interface Customer {
@@ -68,6 +91,8 @@ export default function BillsPage() {
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [paymentMethodFilter, setPaymentMethodFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
+  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   // Fetch orders and payments from API
   useEffect(() => {
@@ -224,6 +249,232 @@ export default function BillsPage() {
     );
   };
 
+  // Report Generation Functions
+  const generateExcelReport = () => {
+    if (filteredOrders.length === 0) {
+      alert("No bills to export. Please adjust your filters.");
+      return;
+    }
+
+    const excelData = filteredOrders.map((order) => ({
+      "Invoice No": order.order_number,
+      Date: new Date(order.order_date).toLocaleDateString(),
+      Customer: order.customers.name,
+      Phone: order.customers.phone || "N/A",
+      "Total Amount (LKR)": order.total_amount,
+      "Paid Amount (LKR)": order.paid_amount || 0,
+      "Due Amount (LKR)": order.due_amount || 0,
+      "Payment Status": order.payment_status.toUpperCase(),
+      "Payment Method": order.payment_method || "N/A",
+    }));
+
+    // Add summary row
+    const totalAmount = filteredOrders.reduce(
+      (sum, o) => sum + o.total_amount,
+      0
+    );
+    const totalPaid = filteredOrders.reduce(
+      (sum, o) => sum + (o.paid_amount || 0),
+      0
+    );
+    const totalDue = filteredOrders.reduce(
+      (sum, o) => sum + (o.due_amount || 0),
+      0
+    );
+
+    excelData.push({
+      "Invoice No": "",
+      Date: "",
+      Customer: "TOTAL",
+      Phone: "",
+      "Total Amount (LKR)": totalAmount,
+      "Paid Amount (LKR)": totalPaid,
+      "Due Amount (LKR)": totalDue,
+      "Payment Status": "",
+      "Payment Method": "",
+    } as any);
+
+    // Create workbook and worksheet
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Bills Report");
+
+    // Auto-width columns
+    const maxWidth = excelData.reduce((w: any, r: any) => {
+      return Object.keys(r).map((k, i) => {
+        const currentWidth = w[i] || 10;
+        const cellValue = String(r[k] || "");
+        return Math.max(currentWidth, cellValue.length + 2);
+      });
+    }, []);
+
+    ws["!cols"] = maxWidth.map((w: number) => ({ width: w }));
+
+    // Generate file
+    const fileName = `Bills_Report_${
+      new Date().toISOString().split("T")[0]
+    }.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    setSuccessMessage(
+      `Excel report generated successfully! (${filteredOrders.length} bills)`
+    );
+    setShowSuccessAlert(true);
+    setTimeout(() => setShowSuccessAlert(false), 3000);
+  };
+
+  const generatePDFReport = () => {
+    if (filteredOrders.length === 0) {
+      alert("No bills to export. Please adjust your filters.");
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+
+    // Add title
+    doc.setFontSize(16);
+    doc.setTextColor(40);
+    doc.text("Sierra Distribution", 14, 15);
+    doc.setFontSize(12);
+    doc.text("Customer Bills Report", 14, 22);
+
+    // Add metadata
+    doc.setFontSize(8);
+    doc.setTextColor(100);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
+    doc.text(`Total Bills: ${filteredOrders.length}`, 14, 33);
+
+    // Add filter information
+    let filterText = "Filters: ";
+    if (customerFilter !== "all") {
+      const customer = customers.find((c) => c.id === customerFilter);
+      filterText += `Customer: ${customer?.name || "Unknown"} | `;
+    }
+    if (paymentStatusFilter !== "all") {
+      filterText += `Status: ${paymentStatusFilter} | `;
+    }
+    if (paymentMethodFilter !== "all") {
+      filterText += `Method: ${paymentMethodFilter} | `;
+    }
+    if (dateFilter !== "all") {
+      filterText += `Period: ${dateFilter} | `;
+    }
+    if (filterText !== "Filters: ") {
+      doc.text(filterText, 14, 38);
+    }
+
+    // Prepare table data (removed Phone column to fit portrait)
+    const tableData = filteredOrders.map((order) => [
+      new Date(order.order_date).toLocaleDateString("en-GB"),
+      order.order_number,
+      order.customers.name,
+      order.total_amount.toLocaleString(),
+      (order.paid_amount || 0).toLocaleString(),
+      (order.due_amount || 0).toLocaleString(),
+      order.payment_status.charAt(0).toUpperCase() +
+        order.payment_status.slice(1),
+    ]);
+
+    // Add totals row
+    const totalAmount = filteredOrders.reduce(
+      (sum, o) => sum + o.total_amount,
+      0
+    );
+    const totalPaid = filteredOrders.reduce(
+      (sum, o) => sum + (o.paid_amount || 0),
+      0
+    );
+    const totalDue = filteredOrders.reduce(
+      (sum, o) => sum + (o.due_amount || 0),
+      0
+    );
+
+    tableData.push([
+      "",
+      "TOTAL",
+      "",
+      totalAmount.toLocaleString(),
+      totalPaid.toLocaleString(),
+      totalDue.toLocaleString(),
+      "",
+    ]);
+
+    // Generate table using autoTable
+    autoTable(doc, {
+      head: [
+        [
+          "Date",
+          "Invoice No",
+          "Customer",
+          "Total (LKR)",
+          "Paid (LKR)",
+          "Due (LKR)",
+          "Status",
+        ],
+      ],
+      body: tableData,
+      startY: filterText !== "Filters: " ? 43 : 38,
+      theme: "grid",
+      headStyles: {
+        fillColor: [79, 70, 229],
+        textColor: 255,
+        fontSize: 8,
+        fontStyle: "bold",
+        halign: "center",
+      },
+      bodyStyles: {
+        fontSize: 7,
+      },
+      columnStyles: {
+        0: { cellWidth: 22, halign: "center" }, // Date
+        1: { cellWidth: 28, halign: "left" }, // Invoice No
+        2: { cellWidth: 50, halign: "left" }, // Customer
+        3: { cellWidth: 25, halign: "right" }, // Total
+        4: { cellWidth: 25, halign: "right" }, // Paid
+        5: { cellWidth: 25, halign: "right" }, // Due
+        6: { cellWidth: 20, halign: "center" }, // Status
+      },
+      didParseCell: (data: any) => {
+        // Bold and highlight the total row
+        if (data.row.index === tableData.length - 1) {
+          data.cell.styles.fontStyle = "bold";
+          data.cell.styles.fillColor = [240, 240, 240];
+        }
+      },
+      margin: { left: 14, right: 14 },
+    });
+
+    // Add footer with page numbers
+    const pageCount = doc.getNumberOfPages();
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.text(
+        `Page ${i} of ${pageCount}`,
+        doc.internal.pageSize.getWidth() / 2,
+        doc.internal.pageSize.getHeight() - 10,
+        { align: "center" }
+      );
+    }
+
+    // Save PDF
+    const fileName = `Bills_Report_${
+      new Date().toISOString().split("T")[0]
+    }.pdf`;
+    doc.save(fileName);
+
+    setSuccessMessage(
+      `PDF report generated successfully! (${filteredOrders.length} bills)`
+    );
+    setShowSuccessAlert(true);
+    setTimeout(() => setShowSuccessAlert(false), 3000);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -234,6 +485,25 @@ export default function BillsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Success Alert */}
+      {showSuccessAlert && (
+        <div className="fixed top-4 right-4 z-50 w-96 animate-in slide-in-from-right">
+          <Alert className="bg-green-50 border-green-200">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <AlertTitle className="text-green-800">Success!</AlertTitle>
+            <AlertDescription className="text-green-700">
+              {successMessage}
+            </AlertDescription>
+            <button
+              onClick={() => setShowSuccessAlert(false)}
+              className="absolute top-2 right-2 rounded-md p-1 hover:bg-green-100"
+            >
+              <X className="h-4 w-4 text-green-600" />
+            </button>
+          </Alert>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
@@ -242,10 +512,31 @@ export default function BillsPage() {
             Create and manage customer invoices
           </p>
         </div>
-        <Button onClick={() => (window.location.href = "/bills/new")}>
-          <Plus className="w-4 h-4 mr-2" />
-          Create New Bill
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Report Generation Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Download className="w-4 h-4 mr-2" />
+                Generate Report
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={generateExcelReport}>
+                <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" />
+                Export to Excel (.xlsx)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={generatePDFReport}>
+                <FileText className="w-4 h-4 mr-2 text-red-600" />
+                Export to PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button onClick={() => (window.location.href = "/bills/new")}>
+            <Plus className="w-4 h-4 mr-2" />
+            Create New Bill
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
