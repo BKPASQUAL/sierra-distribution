@@ -572,6 +572,7 @@ export interface Database {
           created_by: string;
           created_at: string;
           updated_at: string;
+          
         };
         Insert: {
           id?: string;

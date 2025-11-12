@@ -29,7 +29,10 @@ export async function POST(request: Request) {
       .single();
 
     if (paymentError) {
-      return NextResponse.json({ error: paymentError.message }, { status: 500 });
+      return NextResponse.json(
+        { error: paymentError.message },
+        { status: 500 }
+      );
     }
 
     // 2. If linked to a purchase, update the purchase record
@@ -37,19 +40,26 @@ export async function POST(request: Request) {
       // Get the purchase
       const { data: purchase, error: fetchError } = await supabase
         .from("purchases")
-        .select("total_amount, amount_paid")
+        //
+        // --- THIS IS THE FIX ---
+        // We must select 'payment_status' to use it below
+        //
+        .select("total_amount, amount_paid, payment_status") // <-- ERROR WAS HERE
         .eq("id", body.purchase_id)
         .single();
 
       if (fetchError || !purchase) {
-        return NextResponse.json({ error: "Purchase not found" }, { status: 404 });
+        return NextResponse.json(
+          { error: "Purchase not found" },
+          { status: 404 }
+        );
       }
 
       // Calculate new paid amount
       const newAmountPaid = (purchase.amount_paid || 0) + body.amount;
       const newBalanceDue = purchase.total_amount - newAmountPaid;
-      
-      let newPaymentStatus = purchase.payment_status;
+
+      let newPaymentStatus = purchase.payment_status; // <-- This line now works
       if (newBalanceDue <= 0) {
         newPaymentStatus = "paid";
       } else {
@@ -65,9 +75,9 @@ export async function POST(request: Request) {
           payment_status: newPaymentStatus,
         })
         .eq("id", body.purchase_id);
-      
+
       if (updateError) {
-         // Log error but don't fail payment
+        // Log error but don't fail payment
         console.error("Failed to update purchase status:", updateError.message);
       }
     }
@@ -76,11 +86,18 @@ export async function POST(request: Request) {
     if (body.bank_account_id) {
       try {
         // This is a simple update. A real system would use a transaction.
-        const { data: account } = await supabase.from('bank_accounts').select('current_balance').eq('id', body.bank_account_id).single();
+        const { data: account } = await supabase
+          .from("bank_accounts")
+          .select("current_balance")
+          .eq("id", body.bank_account_id)
+          .single();
         if (account) {
-          await supabase.from('bank_accounts').update({
-            current_balance: account.current_balance - body.amount
-          }).eq('id', body.bank_account_id);
+          await supabase
+            .from("bank_accounts")
+            .update({
+              current_balance: account.current_balance - body.amount,
+            })
+            .eq("id", body.bank_account_id);
         }
       } catch (e) {
         console.error("Failed to update bank balance:", e);
@@ -89,6 +106,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ payment }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }

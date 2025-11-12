@@ -11,6 +11,10 @@ import {
   XCircle,
   Clock,
   Loader2,
+  Landmark,
+  ScrollText, // <-- CORRECTED ICON (was Cheque)
+  CreditCard,
+  Receipt,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,15 +73,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { toast } from "sonner";
+import { formatCurrency } from "@/lib/utils"; // Ensure this import is correct
 
-// Bank type definition
-interface Bank {
+// CORRECTED: BankAccount type definition
+interface BankAccount {
   id: string;
-  bank_code: string;
-  bank_name: string;
+  account_name: string;
+  account_type: string;
 }
 
-// Payment type definition
+// CORRECTED: Payment type definition
 interface Payment {
   id: string;
   payment_number: string;
@@ -91,7 +96,7 @@ interface Payment {
   cheque_number: string | null;
   cheque_date: string | null;
   cheque_status: "pending" | "passed" | "returned" | null;
-  bank_id: string | null;
+  bank_account_id: string | null; // <-- Corrected
   customers?: {
     name: string;
   };
@@ -99,9 +104,9 @@ interface Payment {
     order_number: string;
     total_amount: number;
   } | null;
-  banks?: {
-    bank_code: string;
-    bank_name: string;
+  bank_accounts?: {
+    // <-- Corrected
+    account_name: string;
   } | null;
 }
 
@@ -116,7 +121,7 @@ interface UnpaidOrder {
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [banks, setBanks] = useState<Bank[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]); // <-- Corrected
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>(
     []
   );
@@ -135,12 +140,13 @@ export default function PaymentsPage() {
     action: "passed" | "returned" | null;
   }>({ open: false, payment: null, action: null });
 
+  // CORRECTED: formData state
   const [formData, setFormData] = useState({
     orderId: "",
     amount: 0,
     date: new Date().toISOString().split("T")[0],
     method: "cash",
-    bankId: "",
+    bankAccountId: "", // <-- Corrected
     chequeNo: "",
     chequeDate: "",
     notes: "",
@@ -149,7 +155,8 @@ export default function PaymentsPage() {
   // Fetch payments from API
   useEffect(() => {
     fetchPayments();
-    fetchBanks();
+    fetchBankAccounts(); // <-- Corrected
+    fetchCustomers();
   }, []);
 
   const fetchPayments = async () => {
@@ -171,36 +178,35 @@ export default function PaymentsPage() {
     }
   };
 
-  const fetchBanks = async () => {
+  // CORRECTED: Fetch bank accounts
+  const fetchBankAccounts = async () => {
     try {
-      const response = await fetch("/api/banks");
+      const response = await fetch("/api/bank-accounts");
       const data = await response.json();
 
-      if (data.banks) {
-        setBanks(data.banks);
+      if (data.accounts) {
+        // Filter for deposit accounts
+        const depositAccounts = data.accounts.filter((acc: any) =>
+          ["cash", "current", "savings"].includes(acc.account_type)
+        );
+        setBankAccounts(depositAccounts);
       }
     } catch (error) {
-      console.error("Error fetching banks:", error);
+      console.error("Error fetching bank accounts:", error);
     }
   };
 
-  // Fetch customers for filter
-  useEffect(() => {
-    const fetchCustomers = async () => {
-      try {
-        const response = await fetch("/api/customers");
-        const data = await response.json();
-
-        if (data.customers) {
-          setCustomers(data.customers);
-        }
-      } catch (error) {
-        console.error("Error fetching customers:", error);
+  const fetchCustomers = async () => {
+    try {
+      const response = await fetch("/api/customers");
+      const data = await response.json();
+      if (data.customers) {
+        setCustomers(data.customers);
       }
-    };
-
-    fetchCustomers();
-  }, []);
+    } catch (error) {
+      console.error("Error fetching customers:", error);
+    }
+  };
 
   // Fetch unpaid orders when dialog opens
   useEffect(() => {
@@ -210,47 +216,39 @@ export default function PaymentsPage() {
   }, [isAddDialogOpen]);
 
   const fetchUnpaidOrders = async () => {
+    // This logic seems fine, but let's re-fetch payments to be sure
+    setLoading(true);
     try {
-      // Fetch orders with unpaid or partial payment status
-      const ordersResponse = await fetch("/api/orders");
-      const ordersData = await ordersResponse.json();
+      const [ordersResponse, paymentsResponse] = await Promise.all([
+        fetch("/api/orders"),
+        fetch("/api/payments"),
+      ]);
 
-      if (!ordersData.orders) {
-        console.error("Failed to fetch orders");
+      const ordersData = await ordersResponse.json();
+      const paymentsData = await paymentsResponse.json();
+
+      if (!ordersData.orders || !paymentsData.payments) {
+        console.error("Failed to fetch orders or payments");
         return;
       }
 
-      // Filter orders that are not fully paid
       const unpaidOrdersList = ordersData.orders.filter(
         (order: any) =>
           order.payment_status === "unpaid" ||
           order.payment_status === "partial"
       );
 
-      // Fetch all payments to calculate remaining balance for each order
-      const paymentsResponse = await fetch("/api/payments");
-      const paymentsData = await paymentsResponse.json();
-
-      if (!paymentsData.payments) {
-        console.error("Failed to fetch payments");
-        return;
-      }
-
-      // Calculate balance for each unpaid order
       const ordersWithBalance: UnpaidOrder[] = unpaidOrdersList.map(
         (order: any) => {
-          // Sum all successful payments for this order (exclude returned cheques)
           const orderPayments = paymentsData.payments.filter(
             (p: Payment) =>
               p.order_id === order.id && p.cheque_status !== "returned"
           );
-
           const totalPaid = orderPayments.reduce(
             (sum: number, p: Payment) => sum + p.amount,
             0
           );
           const balance = order.total_amount - totalPaid;
-
           return {
             id: order.id,
             order_number: order.order_number,
@@ -262,14 +260,15 @@ export default function PaymentsPage() {
         }
       );
 
-      // Only show orders with balance > 0
       const ordersWithPendingBalance = ordersWithBalance.filter(
-        (order) => order.balance > 0
+        (order) => order.balance > 0.01 // Use a small epsilon for float comparison
       );
 
       setUnpaidOrders(ordersWithPendingBalance);
     } catch (error) {
       console.error("Error fetching unpaid orders:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -305,8 +304,9 @@ export default function PaymentsPage() {
   });
 
   // Calculate stats
-  const totalPayments = payments.length;
-  const totalReceived = payments.reduce((sum, p) => sum + p.amount, 0);
+  const totalReceived = payments
+    .filter((p) => p.cheque_status !== "returned")
+    .reduce((sum, p) => sum + p.amount, 0);
   const pendingCheques = payments.filter(
     (p) => p.cheque_status === "pending"
   ).length;
@@ -320,9 +320,9 @@ export default function PaymentsPage() {
       return;
     }
 
-    // Validate payment amount doesn't exceed balance
     const selectedOrder = unpaidOrders.find((o) => o.id === formData.orderId);
-    if (selectedOrder && formData.amount > selectedOrder.balance) {
+    if (selectedOrder && formData.amount > selectedOrder.balance + 0.01) {
+      // Add epsilon
       toast.error(
         `Payment amount (LKR ${formData.amount.toLocaleString()}) cannot exceed remaining balance (LKR ${selectedOrder.balance.toLocaleString()})`
       );
@@ -330,32 +330,37 @@ export default function PaymentsPage() {
     }
 
     if (
-      formData.method === "cheque" &&
-      (!formData.chequeNo || !formData.chequeDate || !formData.bankId)
+      (formData.method === "cheque" || formData.method === "bank_transfer") &&
+      !formData.bankAccountId
     ) {
-      toast.error(
-        "Please provide cheque number, date, and bank for cheque payments"
-      );
+      toast.error("Please select an account to deposit to.");
+      return;
+    }
+
+    if (
+      formData.method === "cheque" &&
+      (!formData.chequeNo || !formData.chequeDate)
+    ) {
+      toast.error("Please provide cheque number and date.");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const payment_number = `PAY-${Date.now()}`;
-
       const paymentData = {
-        payment_number,
         order_id: formData.orderId,
         customer_id: selectedOrder?.customer_id,
         payment_date: formData.date,
         amount: formData.amount,
         payment_method: formData.method,
-        reference_number: null,
         notes: formData.notes || null,
         cheque_number: formData.method === "cheque" ? formData.chequeNo : null,
         cheque_date: formData.method === "cheque" ? formData.chequeDate : null,
         cheque_status: formData.method === "cheque" ? "pending" : null,
-        bank_id: formData.method === "cheque" ? formData.bankId : null,
+        bank_account_id:
+          formData.method === "cheque" || formData.method === "bank_transfer"
+            ? formData.bankAccountId
+            : null,
       };
 
       const response = await fetch("/api/payments", {
@@ -372,14 +377,14 @@ export default function PaymentsPage() {
 
       toast.success("Payment recorded successfully!");
 
-      // Refetch payments to ensure all data is up-to-date
-      await fetchPayments();
-
-      // Refetch unpaid orders to update balances
-      await fetchUnpaidOrders();
-
       setIsAddDialogOpen(false);
       resetForm();
+
+      // Refetch all data to update tables and balances
+      setLoading(true);
+      await fetchPayments();
+      await fetchUnpaidOrders(); // Refetch orders to update balances in dialog
+      setLoading(false);
     } catch (error) {
       console.error("Error adding payment:", error);
       toast.error(`Error adding payment: ${(error as Error).message}`);
@@ -394,7 +399,7 @@ export default function PaymentsPage() {
       amount: 0,
       date: new Date().toISOString().split("T")[0],
       method: "cash",
-      bankId: "",
+      bankAccountId: "", // <-- Corrected
       chequeNo: "",
       chequeDate: "",
       notes: "",
@@ -411,6 +416,7 @@ export default function PaymentsPage() {
   const handleChequeStatusUpdate = async () => {
     if (!chequeActionDialog.payment || !chequeActionDialog.action) return;
 
+    setIsSubmitting(true); // Add submitting state
     try {
       const response = await fetch(
         `/api/payments/${chequeActionDialog.payment.id}`,
@@ -419,6 +425,8 @@ export default function PaymentsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             cheque_status: chequeActionDialog.action,
+            amount: chequeActionDialog.payment.amount, // Send amount and account
+            bank_account_id: chequeActionDialog.payment.bank_account_id,
           }),
         }
       );
@@ -431,13 +439,14 @@ export default function PaymentsPage() {
 
       toast.success(`Cheque marked as ${chequeActionDialog.action}!`);
 
-      // Refetch payments to ensure all data is up-to-date
-      await fetchPayments();
+      await fetchPayments(); // Refetch payments
 
       setChequeActionDialog({ open: false, payment: null, action: null });
     } catch (error) {
       console.error("Error updating cheque status:", error);
       toast.error(`Error: ${(error as Error).message}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -448,7 +457,10 @@ export default function PaymentsPage() {
     if (!status) return null;
 
     const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize today's date
     const chequeDateObj = chequeDate ? new Date(chequeDate) : null;
+    if (chequeDateObj) chequeDateObj.setHours(0, 0, 0, 0); // Normalize cheque date
+
     const isPastDue = chequeDateObj && chequeDateObj < today;
 
     if (status === "passed") {
@@ -482,7 +494,22 @@ export default function PaymentsPage() {
     return null;
   };
 
-  if (loading) {
+  const getPaymentMethodIcon = (method: string) => {
+    switch (method) {
+      case "cash":
+        return <DollarSign className="w-4 h-4" />;
+      case "cheque":
+        return <ScrollText className="w-4 h-4" />; // <-- CORRECTED ICON
+      case "bank_transfer":
+        return <Landmark className="w-4 h-4" />;
+      case "card":
+        return <CreditCard className="w-4 h-4" />;
+      default:
+        return <Receipt className="w-4 h-4" />;
+    }
+  };
+
+  if (loading && payments.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -511,29 +538,30 @@ export default function PaymentsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
-              Total Payments
+              Total Received
             </CardTitle>
-            <DollarSign className="w-4 h-4 text-muted-foreground" />
+            <CheckCircle className="w-4 h-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalPayments}</div>
+            <div className="text-2xl font-bold text-green-600">
+              {formatCurrency(totalReceived)}
+            </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Payment records
+              (Excludes returned cheques)
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
-              Total Received
+              Total Payments
             </CardTitle>
+            <DollarSign className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              LKR {totalReceived.toLocaleString()}
-            </div>
+            <div className="text-2xl font-bold">{payments.length}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Amount collected
+              Payment records
             </p>
           </CardContent>
         </Card>
@@ -588,7 +616,7 @@ export default function PaymentsPage() {
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <Select value={customerFilter} onValueChange={setCustomerFilter}>
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-full md:w-[200px]">
                   <SelectValue placeholder="Filter by customer" />
                 </SelectTrigger>
                 <SelectContent>
@@ -601,14 +629,14 @@ export default function PaymentsPage() {
                 </SelectContent>
               </Select>
               <Select value={methodFilter} onValueChange={setMethodFilter}>
-                <SelectTrigger className="w-[160px]">
+                <SelectTrigger className="w-full md:w-[160px]">
                   <SelectValue placeholder="Payment method" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Methods</SelectItem>
                   <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="bank">Bank Transfer</SelectItem>
-                  <SelectItem value="credit">Credit</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="card">Card</SelectItem>
                   <SelectItem value="cheque">Cheque</SelectItem>
                 </SelectContent>
               </Select>
@@ -616,7 +644,7 @@ export default function PaymentsPage() {
                 value={chequeStatusFilter}
                 onValueChange={setChequeStatusFilter}
               >
-                <SelectTrigger className="w-[160px]">
+                <SelectTrigger className="w-full md:w-[160px]">
                   <SelectValue placeholder="Cheque status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -639,7 +667,7 @@ export default function PaymentsPage() {
                 <TableHead>Customer</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Method</TableHead>
-                <TableHead>Cheque/Bank Details</TableHead>
+                <TableHead>Details (Cheque / Deposit Account)</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -668,26 +696,24 @@ export default function PaymentsPage() {
                     <TableCell>{payment.orders?.order_number || "-"}</TableCell>
                     <TableCell>{payment.customers?.name || "-"}</TableCell>
                     <TableCell className="text-right font-medium text-green-600">
-                      LKR {payment.amount.toLocaleString()}
+                      {formatCurrency(payment.amount)}
                     </TableCell>
                     <TableCell>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                        {payment.payment_method.charAt(0).toUpperCase() +
-                          payment.payment_method.slice(1)}
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary capitalize">
+                        {getPaymentMethodIcon(payment.payment_method)}
+                        {payment.payment_method}
                       </span>
                     </TableCell>
                     <TableCell>
-                      {payment.payment_method.toLowerCase() === "cheque" ? (
+                      {/* CORRECTED: Display Cheque or Bank Deposit Info */}
+                      {payment.payment_method === "cheque" ? (
                         <div className="space-y-1">
                           <div className="text-xs font-medium">
                             {payment.cheque_number}
                           </div>
-                          {payment.banks && (
-                            <div className="text-xs text-muted-foreground">
-                              {payment.banks.bank_code} -{" "}
-                              {payment.banks.bank_name}
-                            </div>
-                          )}
+                          <div className="text-xs text-muted-foreground">
+                            {payment.bank_accounts?.account_name || "N/A"}
+                          </div>
                           <div className="text-xs text-muted-foreground">
                             Due:{" "}
                             {payment.cheque_date &&
@@ -700,12 +726,19 @@ export default function PaymentsPage() {
                             payment.cheque_date
                           )}
                         </div>
+                      ) : payment.payment_method === "bank_transfer" ? (
+                        <div className="text-xs text-muted-foreground">
+                          Deposited to:{" "}
+                          <span className="font-medium text-foreground">
+                            {payment.bank_accounts?.account_name || "N/A"}
+                          </span>
+                        </div>
                       ) : (
                         <span className="text-muted-foreground text-sm">-</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {payment.payment_method.toLowerCase() === "cheque" &&
+                      {payment.payment_method === "cheque" &&
                         payment.cheque_status === "pending" && (
                           <div className="flex items-center justify-end gap-1">
                             <Button
@@ -841,67 +874,77 @@ export default function PaymentsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="bank">Bank Transfer</SelectItem>
-                  <SelectItem value="credit">Credit</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                   <SelectItem value="cheque">Cheque</SelectItem>
+                  <SelectItem value="card">Credit/Debit Card</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {/* --- CORRECTED: Show for Cheque OR Bank Transfer --- */}
+            {(formData.method === "cheque" ||
+              formData.method === "bank_transfer") && (
+              <div className="col-span-2 space-y-2 border p-4 rounded-md bg-muted/50">
+                <Label>Deposit To Account *</Label>
+                <Popover open={bankSearchOpen} onOpenChange={setBankSearchOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={bankSearchOpen}
+                      className="w-full justify-between h-10"
+                    >
+                      {formData.bankAccountId
+                        ? bankAccounts.find(
+                            (acc) => acc.id === formData.bankAccountId
+                          )?.account_name
+                        : "Select account..."}
+                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[--radix-popover-trigger-width] p-0"
+                    align="start"
+                  >
+                    <Command>
+                      <CommandInput
+                        placeholder="Search account by name..."
+                        className="h-9"
+                      />
+                      <CommandList>
+                        <CommandEmpty>No account found.</CommandEmpty>
+                        <CommandGroup>
+                          {bankAccounts.map((acc) => (
+                            <CommandItem
+                              key={acc.id}
+                              value={acc.account_name}
+                              onSelect={() => {
+                                setFormData({
+                                  ...formData,
+                                  bankAccountId: acc.id,
+                                });
+                                setBankSearchOpen(false);
+                              }}
+                            >
+                              <span className="font-medium mr-2">
+                                {acc.account_name}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                ({acc.account_type})
+                              </span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
+
+            {/* Show Cheque fields ONLY for cheques */}
             {formData.method === "cheque" && (
               <>
-                <div className="col-span-2 space-y-2">
-                  <Label>Bank Code & Name *</Label>
-                  <Popover
-                    open={bankSearchOpen}
-                    onOpenChange={setBankSearchOpen}
-                  >
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={bankSearchOpen}
-                        className="w-full justify-between h-10"
-                      >
-                        {formData.bankId
-                          ? banks.find((bank) => bank.id === formData.bankId)
-                              ?.bank_code +
-                            " - " +
-                            banks.find((bank) => bank.id === formData.bankId)
-                              ?.bank_name
-                          : "Select bank..."}
-                        <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0" align="start">
-                      <Command>
-                        <CommandInput
-                          placeholder="Search bank by code or name..."
-                          className="h-9"
-                        />
-                        <CommandList>
-                          <CommandEmpty>No bank found.</CommandEmpty>
-                          <CommandGroup>
-                            {banks.map((bank) => (
-                              <CommandItem
-                                key={bank.id}
-                                value={`${bank.bank_code} ${bank.bank_name}`}
-                                onSelect={() => {
-                                  setFormData({ ...formData, bankId: bank.id });
-                                  setBankSearchOpen(false);
-                                }}
-                              >
-                                <span className="font-mono font-semibold mr-2">
-                                  {bank.bank_code}
-                                </span>
-                                <span>{bank.bank_name}</span>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="chequeNo">Cheque Number *</Label>
                   <Input
@@ -928,6 +971,7 @@ export default function PaymentsPage() {
                 </div>
               </>
             )}
+
             <div className="col-span-2 space-y-2">
               <Label htmlFor="notes">Notes</Label>
               <Input
@@ -983,98 +1027,74 @@ export default function PaymentsPage() {
                 ? "Pass Cheque?"
                 : "Return Cheque?"}
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              {chequeActionDialog.action === "passed" ? (
-                <>
-                  Are you sure you want to mark this cheque as{" "}
-                  <strong>Passed</strong>?
-                  <br />
-                  <br />
-                  <div className="bg-muted p-3 rounded-md mt-2 space-y-1">
-                    <div className="text-sm">
-                      <strong>Cheque No:</strong>{" "}
-                      {chequeActionDialog.payment?.cheque_number}
-                    </div>
-                    {chequeActionDialog.payment?.banks && (
+            {/* --- THIS IS THE CORRECTED PART --- */}
+            <AlertDialogDescription asChild>
+              <div>
+                {chequeActionDialog.action === "passed" ? (
+                  <>
+                    Are you sure you want to mark this cheque as{" "}
+                    <strong>Passed</strong>? This will deposit{" "}
+                    <strong>
+                      LKR {chequeActionDialog.payment?.amount.toLocaleString()}
+                    </strong>{" "}
+                    into the account{" "}
+                    <strong>
+                      {chequeActionDialog.payment?.bank_accounts
+                        ?.account_name || "N/A"}
+                    </strong>
+                    .
+                    <br />
+                    <div className="bg-muted p-3 rounded-md mt-2 space-y-1">
                       <div className="text-sm">
-                        <strong>Bank:</strong>{" "}
-                        {chequeActionDialog.payment.banks.bank_code} -{" "}
-                        {chequeActionDialog.payment.banks.bank_name}
+                        <strong>Cheque No:</strong>{" "}
+                        {chequeActionDialog.payment?.cheque_number}
                       </div>
-                    )}
-                    <div className="text-sm">
-                      <strong>Amount:</strong> LKR{" "}
-                      {chequeActionDialog.payment?.amount.toLocaleString()}
-                    </div>
-                    <div className="text-sm">
-                      <strong>Cheque Date:</strong>{" "}
-                      {chequeActionDialog.payment?.cheque_date &&
-                        new Date(
-                          chequeActionDialog.payment.cheque_date
-                        ).toLocaleDateString()}
-                    </div>
-                    <div className="text-sm">
-                      <strong>Customer:</strong>{" "}
-                      {chequeActionDialog.payment?.customers?.name || "N/A"}
-                    </div>
-                  </div>
-                  <br />
-                  This action confirms the cheque has cleared successfully.
-                </>
-              ) : (
-                <>
-                  Are you sure you want to mark this cheque as{" "}
-                  <strong>Returned</strong>?
-                  <br />
-                  <br />
-                  <div className="bg-muted p-3 rounded-md mt-2 space-y-1">
-                    <div className="text-sm">
-                      <strong>Cheque No:</strong>{" "}
-                      {chequeActionDialog.payment?.cheque_number}
-                    </div>
-                    {chequeActionDialog.payment?.banks && (
                       <div className="text-sm">
-                        <strong>Bank:</strong>{" "}
-                        {chequeActionDialog.payment.banks.bank_code} -{" "}
-                        {chequeActionDialog.payment.banks.bank_name}
+                        <strong>Customer:</strong>{" "}
+                        {chequeActionDialog.payment?.customers?.name || "N/A"}
                       </div>
-                    )}
-                    <div className="text-sm">
-                      <strong>Amount:</strong> LKR{" "}
-                      {chequeActionDialog.payment?.amount.toLocaleString()}
                     </div>
-                    <div className="text-sm">
-                      <strong>Cheque Date:</strong>{" "}
-                      {chequeActionDialog.payment?.cheque_date &&
-                        new Date(
-                          chequeActionDialog.payment.cheque_date
-                        ).toLocaleDateString()}
+                  </>
+                ) : (
+                  <>
+                    Are you sure you want to mark this cheque as{" "}
+                    <strong>Returned</strong>? This action indicates the cheque
+                    bounced and will reverse the payment.
+                    <br />
+                    <div className="bg-muted p-3 rounded-md mt-2 space-y-1">
+                      <div className="text-sm">
+                        <strong>Cheque No:</strong>{" "}
+                        {chequeActionDialog.payment?.cheque_number}
+                      </div>
+                      <div className="text-sm">
+                        <strong>Customer:</strong>{" "}
+                        {chequeActionDialog.payment?.customers?.name || "N/A"}
+                      </div>
                     </div>
-                    <div className="text-sm">
-                      <strong>Customer:</strong>{" "}
-                      {chequeActionDialog.payment?.customers?.name || "N/A"}
-                    </div>
-                  </div>
-                  <br />
-                  This action indicates the cheque has bounced or been returned
-                  by the bank.
-                </>
-              )}
+                  </>
+                )}
+              </div>
             </AlertDialogDescription>
+            {/* --- END OF CORRECTION --- */}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleChequeStatusUpdate}
+              disabled={isSubmitting} // Disable while submitting
               className={
                 chequeActionDialog.action === "passed"
                   ? "bg-green-600 hover:bg-green-700"
                   : "bg-destructive hover:bg-destructive/90"
               }
             >
-              {chequeActionDialog.action === "passed"
-                ? "Confirm Pass"
-                : "Confirm Return"}
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : chequeActionDialog.action === "passed" ? (
+                "Confirm Pass"
+              ) : (
+                "Confirm Return"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

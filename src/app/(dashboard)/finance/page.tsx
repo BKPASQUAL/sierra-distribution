@@ -3,7 +3,6 @@
 
 import React, { useState, useEffect } from "react";
 import {
-    Badge,
   Banknote, Building, DollarSign, Edit, Eye, Landmark, Loader2,
   Package, Plus, Receipt, Search, TrendingDown, TrendingUp, Users,
 } from "lucide-react";
@@ -25,7 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
-
+import { Badge } from "@/components/ui/badge"; // <-- ADD THIS LINE
 // Types
 interface Bank {
   id: string;
