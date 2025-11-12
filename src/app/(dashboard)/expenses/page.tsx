@@ -1,20 +1,8 @@
 // src/app/(dashboard)/expenses/page.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import {
-  Plus,
-  Search,
-  Filter,
-  Download,
-  Receipt,
-  Fuel,
-  Wrench,
-  MoreHorizontal,
-  Truck,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -22,6 +10,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -31,13 +29,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -45,77 +36,140 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createClient } from "@/lib/supabase/client";
-import { formatCurrency } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Plus,
+  Search,
+  Filter,
+  Download,
+  Trash2,
+  Edit,
+  Loader2,
+  Receipt,
+  TrendingUp,
+  DollarSign,
+  Calendar,
+  FileText,
+} from "lucide-react";
+import { toast } from "sonner";
+
+// Types
+type ExpenseCategory =
+  | "fuel"
+  | "salaries"
+  | "rent"
+  | "utilities"
+  | "maintenance"
+  | "delivery"
+  | "marketing"
+  | "office_supplies"
+  | "telephone"
+  | "insurance"
+  | "repairs"
+  | "professional_fees"
+  | "bank_charges"
+  | "depreciation"
+  | "taxes"
+  | "miscellaneous";
+
+type PaymentMethod = "cash" | "bank_transfer" | "cheque" | "card";
 
 interface Expense {
   id: string;
   expense_number: string;
   expense_date: string;
-  category: "fuel" | "maintenance" | "delivery" | "other";
+  category: ExpenseCategory;
   description: string | null;
   amount: number;
-  payment_method: string;
+  payment_method: PaymentMethod;
   reference_number: string | null;
   vendor_name: string | null;
   notes: string | null;
-  created_by: string;
+  receipt_number: string | null;
+  is_recurring: boolean;
+  recurring_frequency: string | null;
+  status: string;
   created_at: string;
-  users?: {
+  users: {
     name: string;
     email: string;
   };
 }
 
+const EXPENSE_CATEGORIES: Record<ExpenseCategory, string> = {
+  fuel: "Fuel & Gas",
+  salaries: "Salaries & Wages",
+  rent: "Rent",
+  utilities: "Utilities",
+  maintenance: "Maintenance",
+  delivery: "Delivery",
+  marketing: "Marketing",
+  office_supplies: "Office Supplies",
+  telephone: "Telephone",
+  insurance: "Insurance",
+  repairs: "Repairs",
+  professional_fees: "Professional Fees",
+  bank_charges: "Bank Charges",
+  depreciation: "Depreciation",
+  taxes: "Taxes",
+  miscellaneous: "Miscellaneous",
+};
+
+const PAYMENT_METHODS: Record<PaymentMethod, string> = {
+  cash: "Cash",
+  bank_transfer: "Bank Transfer",
+  cheque: "Cheque",
+  card: "Credit/Debit Card",
+};
+
 export default function ExpensesPage() {
+  const router = useRouter();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [dateFilter, setDateFilter] = useState({
+    start: "",
+    end: "",
+  });
+
+  // Form state
   const [formData, setFormData] = useState({
     expense_date: new Date().toISOString().split("T")[0],
-    category: "fuel",
+    category: "fuel" as ExpenseCategory,
     description: "",
     amount: "",
-    payment_method: "cash",
+    payment_method: "cash" as PaymentMethod,
     reference_number: "",
     vendor_name: "",
     notes: "",
-  });
-  const [stats, setStats] = useState({
-    totalExpenses: 0,
-    fuelExpenses: 0,
-    maintenanceExpenses: 0,
-    deliveryExpenses: 0,
-    otherExpenses: 0,
+    receipt_number: "",
+    is_recurring: false,
+    recurring_frequency: "",
   });
 
-  const supabase = createClient();
+  // Load expenses
+  useEffect(() => {
+    fetchExpenses();
+  }, []);
 
-  // Fetch expenses
   const fetchExpenses = async () => {
-    setLoading(true);
     try {
+      setLoading(true);
       let url = "/api/expenses";
       const params = new URLSearchParams();
 
       if (categoryFilter !== "all") {
         params.append("category", categoryFilter);
+      }
+      if (dateFilter.start) {
+        params.append("start_date", dateFilter.start);
+      }
+      if (dateFilter.end) {
+        params.append("end_date", dateFilter.end);
       }
 
       if (params.toString()) {
@@ -126,125 +180,77 @@ export default function ExpensesPage() {
       const data = await response.json();
 
       if (response.ok) {
-        setExpenses(data.expenses);
-        calculateStats(data.expenses);
+        setExpenses(data.expenses || []);
       } else {
-        console.error("Failed to fetch expenses:", data.error);
+        toast.error("Failed to fetch expenses");
       }
     } catch (error) {
-      console.error("Network error fetching expenses:", error);
+      console.error("Error fetching expenses:", error);
+      toast.error("Error loading expenses");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchExpenses();
-  }, [categoryFilter]);
-
-  // Calculate statistics
-  const calculateStats = (expensesData: Expense[]) => {
-    const total = expensesData.reduce((sum, exp) => sum + exp.amount, 0);
-    const fuel = expensesData
-      .filter((exp) => exp.category === "fuel")
-      .reduce((sum, exp) => sum + exp.amount, 0);
-    const maintenance = expensesData
-      .filter((exp) => exp.category === "maintenance")
-      .reduce((sum, exp) => sum + exp.amount, 0);
-    const delivery = expensesData
-      .filter((exp) => exp.category === "delivery")
-      .reduce((sum, exp) => sum + exp.amount, 0);
-    const other = expensesData
-      .filter((exp) => exp.category === "other")
-      .reduce((sum, exp) => sum + exp.amount, 0);
-
-    setStats({
-      totalExpenses: total,
-      fuelExpenses: fuel,
-      maintenanceExpenses: maintenance,
-      deliveryExpenses: delivery,
-      otherExpenses: other,
-    });
-  };
-
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!formData.amount || parseFloat(formData.amount) <= 0) {
+      toast.error("Please enter a valid amount");
+      return;
+    }
 
     try {
       const response = await fetch("/api/expenses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          amount: parseFloat(formData.amount),
+          recurring_frequency: formData.is_recurring
+            ? formData.recurring_frequency
+            : null,
+        }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setIsAddDialogOpen(false);
+        toast.success("Expense added successfully!");
+        setIsDialogOpen(false);
         resetForm();
-        fetchExpenses();
+        fetchExpenses(); // Refresh list
       } else {
-        alert(`Error: ${data.error}`);
+        toast.error(data.error || "Failed to add expense");
       }
     } catch (error) {
-      console.error("Error creating expense:", error);
-      alert("Network error while creating expense");
+      console.error("Error adding expense:", error);
+      toast.error("Error adding expense");
     }
   };
 
-  // Handle edit
-  const handleEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedExpense) return;
-
-    try {
-      const response = await fetch(`/api/expenses/${selectedExpense.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setIsEditDialogOpen(false);
-        setSelectedExpense(null);
-        resetForm();
-        fetchExpenses();
-      } else {
-        alert(`Error: ${data.error}`);
-      }
-    } catch (error) {
-      console.error("Error updating expense:", error);
-      alert("Network error while updating expense");
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this expense?")) {
+      return;
     }
-  };
-
-  // Handle delete
-  const handleDelete = async () => {
-    if (!selectedExpense) return;
 
     try {
-      const response = await fetch(`/api/expenses/${selectedExpense.id}`, {
+      const response = await fetch(`/api/expenses?id=${id}`, {
         method: "DELETE",
       });
 
       if (response.ok) {
-        setIsDeleteDialogOpen(false);
-        setSelectedExpense(null);
+        toast.success("Expense deleted successfully!");
         fetchExpenses();
       } else {
-        const data = await response.json();
-        alert(`Error: ${data.error}`);
+        toast.error("Failed to delete expense");
       }
     } catch (error) {
       console.error("Error deleting expense:", error);
-      alert("Network error while deleting expense");
+      toast.error("Error deleting expense");
     }
   };
 
-  // Reset form
   const resetForm = () => {
     setFormData({
       expense_date: new Date().toISOString().split("T")[0],
@@ -255,266 +261,334 @@ export default function ExpensesPage() {
       reference_number: "",
       vendor_name: "",
       notes: "",
+      receipt_number: "",
+      is_recurring: false,
+      recurring_frequency: "",
     });
-  };
-
-  // Open edit dialog
-  const openEditDialog = (expense: Expense) => {
-    setSelectedExpense(expense);
-    setFormData({
-      expense_date: expense.expense_date,
-      category: expense.category,
-      description: expense.description || "",
-      amount: expense.amount.toString(),
-      payment_method: expense.payment_method,
-      reference_number: expense.reference_number || "",
-      vendor_name: expense.vendor_name || "",
-      notes: expense.notes || "",
-    });
-    setIsEditDialogOpen(true);
   };
 
   // Filter expenses by search
   const filteredExpenses = expenses.filter((expense) => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      expense.expense_number.toLowerCase().includes(searchLower) ||
-      expense.description?.toLowerCase().includes(searchLower) ||
-      expense.vendor_name?.toLowerCase().includes(searchLower) ||
-      ""
-    );
+    const matchesSearch =
+      expense.expense_number
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase()) ||
+      expense.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      expense.vendor_name?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
   });
 
-  // Get category badge
-  const getCategoryBadge = (category: string) => {
-    const badges = {
-      fuel: <Badge className="bg-blue-500">Fuel</Badge>,
-      maintenance: <Badge className="bg-orange-500">Maintenance</Badge>,
-      delivery: <Badge className="bg-green-500">Delivery</Badge>,
-      other: <Badge className="bg-gray-500">Other</Badge>,
-    };
-    return badges[category as keyof typeof badges] || badges.other;
-  };
+  // Calculate totals
+  const totalExpenses = filteredExpenses.reduce(
+    (sum, exp) => sum + parseFloat(exp.amount.toString()),
+    0
+  );
 
-  // Get category icon
-  const getCategoryIcon = (category: string) => {
-    const icons = {
-      fuel: <Fuel className="h-4 w-4" />,
-      maintenance: <Wrench className="h-4 w-4" />,
-      delivery: <Truck className="h-4 w-4" />,
-      other: <Receipt className="h-4 w-4" />,
+  const getCategoryColor = (category: ExpenseCategory) => {
+    const colors: Record<ExpenseCategory, string> = {
+      fuel: "bg-blue-100 text-blue-800",
+      salaries: "bg-red-100 text-red-800",
+      rent: "bg-orange-100 text-orange-800",
+      utilities: "bg-green-100 text-green-800",
+      maintenance: "bg-purple-100 text-purple-800",
+      delivery: "bg-indigo-100 text-indigo-800",
+      marketing: "bg-pink-100 text-pink-800",
+      office_supplies: "bg-teal-100 text-teal-800",
+      telephone: "bg-yellow-100 text-yellow-800",
+      insurance: "bg-cyan-100 text-cyan-800",
+      repairs: "bg-lime-100 text-lime-800",
+      professional_fees: "bg-violet-100 text-violet-800",
+      bank_charges: "bg-rose-100 text-rose-800",
+      depreciation: "bg-slate-100 text-slate-800",
+      taxes: "bg-red-200 text-red-900",
+      miscellaneous: "bg-gray-100 text-gray-800",
     };
-    return icons[category as keyof typeof icons] || icons.other;
+    return colors[category] || "bg-gray-100 text-gray-800";
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
-          <p className="text-muted-foreground">
-            Manage fuel, maintenance, delivery, and other business expenses
+          <h1 className="text-3xl font-bold tracking-tight">
+            Expense Management
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Track and manage all business expenses
           </p>
         </div>
-        <Button onClick={() => setIsAddDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="w-4 h-4 mr-2" />
           Add Expense
         </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
               Total Expenses
             </CardTitle>
-            <Receipt className="h-4 w-4 text-muted-foreground" />
+            <DollarSign className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(stats.totalExpenses)}
+              LKR {totalExpenses.toLocaleString()}
             </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {filteredExpenses.length} transactions
+            </p>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Fuel</CardTitle>
-            <Fuel className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">This Month</CardTitle>
+            <Calendar className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(stats.fuelExpenses)}
+              LKR{" "}
+              {expenses
+                .filter(
+                  (e) =>
+                    new Date(e.expense_date).getMonth() ===
+                    new Date().getMonth()
+                )
+                .reduce((sum, e) => sum + parseFloat(e.amount.toString()), 0)
+                .toLocaleString()}
             </div>
+            <p className="text-xs text-muted-foreground mt-1">Current month</p>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Maintenance</CardTitle>
-            <Wrench className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Average</CardTitle>
+            <TrendingUp className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(stats.maintenanceExpenses)}
+              LKR{" "}
+              {expenses.length > 0
+                ? Math.round(
+                    expenses.reduce(
+                      (sum, e) => sum + parseFloat(e.amount.toString()),
+                      0
+                    ) / expenses.length
+                  ).toLocaleString()
+                : 0}
             </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Per transaction
+            </p>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Delivery</CardTitle>
-            <Truck className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Categories</CardTitle>
+            <Receipt className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(stats.deliveryExpenses)}
+              {new Set(expenses.map((e) => e.category)).size}
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Other</CardTitle>
-            <Receipt className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(stats.otherExpenses)}
-            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Active categories
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
+      {/* Filters and Search */}
       <Card>
         <CardHeader>
-          <CardTitle>Expense Records</CardTitle>
-          <CardDescription>
-            View and manage all expense transactions
-          </CardDescription>
+          <CardTitle>Filters</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <div className="grid gap-4 md:grid-cols-4">
+            <div className="space-y-2">
+              <Label>Search</Label>
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search expenses..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select
+                value={categoryFilter}
+                onValueChange={(value) => {
+                  setCategoryFilter(value);
+                  fetchExpenses();
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {Object.entries(EXPENSE_CATEGORIES).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Start Date</Label>
               <Input
-                placeholder="Search expenses..."
-                className="pl-8"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                type="date"
+                value={dateFilter.start}
+                onChange={(e) =>
+                  setDateFilter({ ...dateFilter, start: e.target.value })
+                }
               />
             </div>
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="fuel">Fuel</SelectItem>
-                <SelectItem value="maintenance">Maintenance</SelectItem>
-                <SelectItem value="delivery">Delivery</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
-              </SelectContent>
-            </Select>
+
+            <div className="space-y-2">
+              <Label>End Date</Label>
+              <Input
+                type="date"
+                value={dateFilter.end}
+                onChange={(e) =>
+                  setDateFilter({ ...dateFilter, end: e.target.value })
+                }
+              />
+            </div>
           </div>
 
-          {/* Table */}
-          <div className="rounded-md border">
+          <div className="mt-4 flex gap-2">
+            <Button onClick={fetchExpenses} variant="default">
+              <Filter className="w-4 h-4 mr-2" />
+              Apply Filters
+            </Button>
+            <Button
+              onClick={() => {
+                setCategoryFilter("all");
+                setDateFilter({ start: "", end: "" });
+                setSearchQuery("");
+                fetchExpenses();
+              }}
+              variant="outline"
+            >
+              Clear Filters
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Expenses Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Expense List</CardTitle>
+          <CardDescription>All recorded expenses</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Expense #</TableHead>
                   <TableHead>Date</TableHead>
+                  <TableHead>Expense #</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Vendor</TableHead>
                   <TableHead>Payment Method</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Created By</TableHead>
-                  <TableHead></TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {filteredExpenses.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-10">
-                      Loading expenses...
-                    </TableCell>
-                  </TableRow>
-                ) : filteredExpenses.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-10">
-                      No expenses found
+                    <TableCell colSpan={8} className="text-center py-8">
+                      <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
+                      <p className="text-muted-foreground">No expenses found</p>
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredExpenses.map((expense) => (
                     <TableRow key={expense.id}>
+                      <TableCell>
+                        {new Date(expense.expense_date).toLocaleDateString()}
+                      </TableCell>
                       <TableCell className="font-medium">
                         {expense.expense_number}
                       </TableCell>
                       <TableCell>
-                        {new Date(expense.expense_date).toLocaleDateString()}
+                        <Badge className={getCategoryColor(expense.category)}>
+                          {EXPENSE_CATEGORIES[expense.category]}
+                        </Badge>
                       </TableCell>
-                      <TableCell>
-                        {getCategoryBadge(expense.category)}
+                      <TableCell className="max-w-xs truncate">
+                        {expense.description || "-"}
                       </TableCell>
-                      <TableCell>{expense.description || "-"}</TableCell>
                       <TableCell>{expense.vendor_name || "-"}</TableCell>
-                      <TableCell className="capitalize">
-                        {expense.payment_method.replace("_", " ")}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(expense.amount)}
-                      </TableCell>
-                      <TableCell>{expense.users?.name || "Unknown"}</TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem
-                              onClick={() => openEditDialog(expense)}
-                            >
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedExpense(expense);
-                                setIsDeleteDialogOpen(true);
-                              }}
-                              className="text-red-600"
-                            >
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {PAYMENT_METHODS[expense.payment_method]}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">
+                        LKR{" "}
+                        {parseFloat(expense.amount.toString()).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(expense.id)}
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
                 )}
+                {filteredExpenses.length > 0 && (
+                  <TableRow className="bg-muted/50 font-bold">
+                    <TableCell colSpan={6}>Total</TableCell>
+                    <TableCell className="text-right">
+                      LKR {totalExpenses.toLocaleString()}
+                    </TableCell>
+                    <TableCell></TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
-          </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Add Expense Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Expense</DialogTitle>
             <DialogDescription>Record a new business expense</DialogDescription>
           </DialogHeader>
+
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="expense_date">Date</Label>
+                  <Label htmlFor="expense_date">
+                    Date <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="expense_date"
                     type="date"
@@ -525,75 +599,85 @@ export default function ExpensesPage() {
                     required
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="category">Category</Label>
+                  <Label htmlFor="amount">
+                    Amount (LKR) <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="amount"
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={formData.amount}
+                    onChange={(e) =>
+                      setFormData({ ...formData, amount: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="category">
+                    Category <span className="text-destructive">*</span>
+                  </Label>
                   <Select
                     value={formData.category}
-                    onValueChange={(value) =>
+                    onValueChange={(value: ExpenseCategory) =>
                       setFormData({ ...formData, category: value })
                     }
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="fuel">Fuel</SelectItem>
-                      <SelectItem value="maintenance">Maintenance</SelectItem>
-                      <SelectItem value="delivery">Delivery Cost</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      {Object.entries(EXPENSE_CATEGORIES).map(
+                        ([key, label]) => (
+                          <SelectItem key={key} value={key}>
+                            {label}
+                          </SelectItem>
+                        )
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="payment_method">
+                    Payment Method <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={formData.payment_method}
+                    onValueChange={(value: PaymentMethod) =>
+                      setFormData({ ...formData, payment_method: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(PAYMENT_METHODS).map(([key, label]) => (
+                        <SelectItem key={key} value={key}>
+                          {label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description">Description (Optional)</Label>
+                <Label htmlFor="description">Description</Label>
                 <Input
                   id="description"
+                  placeholder="Brief description of the expense"
                   value={formData.description}
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  placeholder="Enter expense description (optional)"
                 />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="amount">Amount</Label>
-                  <Input
-                    id="amount"
-                    type="number"
-                    step="0.01"
-                    value={formData.amount}
-                    onChange={(e) =>
-                      setFormData({ ...formData, amount: e.target.value })
-                    }
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="payment_method">Payment Method</Label>
-                  <Select
-                    value={formData.payment_method}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, payment_method: value })
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="bank_transfer">
-                        Bank Transfer
-                      </SelectItem>
-                      <SelectItem value="cheque">Cheque</SelectItem>
-                      <SelectItem value="card">Card</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -601,48 +685,102 @@ export default function ExpensesPage() {
                   <Label htmlFor="vendor_name">Vendor Name</Label>
                   <Input
                     id="vendor_name"
+                    placeholder="Vendor or supplier name"
                     value={formData.vendor_name}
                     onChange={(e) =>
                       setFormData({ ...formData, vendor_name: e.target.value })
                     }
-                    placeholder="Enter vendor name"
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="reference_number">Reference Number</Label>
+                  <Label htmlFor="receipt_number">Receipt/Invoice #</Label>
                   <Input
-                    id="reference_number"
-                    value={formData.reference_number}
+                    id="receipt_number"
+                    placeholder="Receipt number"
+                    value={formData.receipt_number}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        reference_number: e.target.value,
+                        receipt_number: e.target.value,
                       })
                     }
-                    placeholder="Invoice/Receipt #"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reference_number">Reference Number</Label>
+                <Input
+                  id="reference_number"
+                  placeholder="Cheque number, transaction ID, etc."
+                  value={formData.reference_number}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      reference_number: e.target.value,
+                    })
+                  }
+                />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="notes">Notes</Label>
                 <Textarea
                   id="notes"
+                  placeholder="Additional notes..."
                   value={formData.notes}
                   onChange={(e) =>
                     setFormData({ ...formData, notes: e.target.value })
                   }
-                  placeholder="Additional notes (optional)"
                   rows={3}
                 />
               </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="is_recurring"
+                  checked={formData.is_recurring}
+                  onCheckedChange={(checked) =>
+                    setFormData({
+                      ...formData,
+                      is_recurring: checked as boolean,
+                    })
+                  }
+                />
+                <Label htmlFor="is_recurring" className="font-normal">
+                  This is a recurring expense
+                </Label>
+              </div>
+
+              {formData.is_recurring && (
+                <div className="space-y-2">
+                  <Label htmlFor="recurring_frequency">Frequency</Label>
+                  <Select
+                    value={formData.recurring_frequency}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, recurring_frequency: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select frequency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="quarterly">Quarterly</SelectItem>
+                      <SelectItem value="yearly">Yearly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
+
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  setIsAddDialogOpen(false);
+                  setIsDialogOpen(false);
                   resetForm();
                 }}
               >
@@ -651,183 +789,6 @@ export default function ExpensesPage() {
               <Button type="submit">Add Expense</Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Expense Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Expense</DialogTitle>
-            <DialogDescription>Update expense details</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleEdit}>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit_expense_date">Date</Label>
-                  <Input
-                    id="edit_expense_date"
-                    type="date"
-                    value={formData.expense_date}
-                    onChange={(e) =>
-                      setFormData({ ...formData, expense_date: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit_category">Category</Label>
-                  <Select
-                    value={formData.category}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, category: value })
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="fuel">Fuel</SelectItem>
-                      <SelectItem value="maintenance">Maintenance</SelectItem>
-                      <SelectItem value="delivery">Delivery Cost</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit_description">Description (Optional)</Label>
-                <Input
-                  id="edit_description"
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                  placeholder="Enter expense description (optional)"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit_amount">Amount</Label>
-                  <Input
-                    id="edit_amount"
-                    type="number"
-                    step="0.01"
-                    value={formData.amount}
-                    onChange={(e) =>
-                      setFormData({ ...formData, amount: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit_payment_method">Payment Method</Label>
-                  <Select
-                    value={formData.payment_method}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, payment_method: value })
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="bank_transfer">
-                        Bank Transfer
-                      </SelectItem>
-                      <SelectItem value="cheque">Cheque</SelectItem>
-                      <SelectItem value="card">Card</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit_vendor_name">Vendor Name</Label>
-                  <Input
-                    id="edit_vendor_name"
-                    value={formData.vendor_name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, vendor_name: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit_reference_number">
-                    Reference Number
-                  </Label>
-                  <Input
-                    id="edit_reference_number"
-                    value={formData.reference_number}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        reference_number: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit_notes">Notes</Label>
-                <Textarea
-                  id="edit_notes"
-                  value={formData.notes}
-                  onChange={(e) =>
-                    setFormData({ ...formData, notes: e.target.value })
-                  }
-                  rows={3}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setIsEditDialogOpen(false);
-                  setSelectedExpense(null);
-                  resetForm();
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit">Update Expense</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Expense</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this expense? This action cannot
-              be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsDeleteDialogOpen(false);
-                setSelectedExpense(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -17,6 +17,8 @@ import {
   Truck,
   AlertCircle,
   Receipt,
+  Wallet,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -30,20 +32,32 @@ const navigation = [
   { name: "Products", href: "/products", icon: Package },
   { name: "Purchases", href: "/purchases", icon: ShoppingCart },
   { name: "Bills", href: "/bills", icon: FileText },
-  { name: "Expenses", href: "/expenses", icon: Receipt },
   { name: "Payments", href: "/payments", icon: DollarSign },
   { name: "Due Invoices", href: "/due-invoices", icon: AlertCircle },
+  
+  // Phase 1 & 2: Financial Management
+  { name: "Expenses", href: "/expenses", icon: Receipt },
+  { name: "Supplier Payables", href: "/payables", icon: AlertCircle },
+  { name: "Cash Flow", href: "/cash-flow", icon: Wallet },
+  
+  // Reports (Admin Only)
+  {
+    name: "Financial Reports",
+    href: "/financial-reports",
+    icon: BarChart3,
+    adminOnly: true,
+  },
   {
     name: "Reports",
     href: "/reports",
     icon: TrendingUp,
-    adminOnly: true, // Only show to admins
+    adminOnly: true,
   },
   {
     name: "Settings",
     href: "/settings",
     icon: Settings,
-    adminOnly: true, // Only show to admins
+    adminOnly: true,
   },
 ];
 
