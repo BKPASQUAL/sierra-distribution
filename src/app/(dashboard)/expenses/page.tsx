@@ -5,13 +5,24 @@ import React, { useEffect, useState } from "react";
 import {
   Plus,
   Search,
-  Filter,
-  Download,
+  MoreHorizontal,
   Receipt,
   Fuel,
   Wrench,
-  MoreHorizontal,
   Truck,
+  User,
+  Building,
+  Briefcase,
+  Phone,
+  Shield,
+  FileText,
+  Banknote,
+  Percent,
+  TrendingDown,
+  Users,
+  Loader2,
+  Package,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,12 +69,78 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
+import { ExpenseCategory, ExpenseStatus } from "@/types/database.types"; // Import full types
 
+// NEW: Full list of categories from your schema
+const expenseCategories: {
+  value: ExpenseCategory;
+  label: string;
+  icon: React.ReactNode;
+}[] = [
+  { value: "fuel", label: "Fuel", icon: <Fuel className="h-4 w-4" /> },
+  { value: "salaries", label: "Salaries", icon: <Users className="h-4 w-4" /> },
+  { value: "rent", label: "Rent", icon: <Building className="h-4 w-4" /> },
+  {
+    value: "utilities",
+    label: "Utilities",
+    icon: <Receipt className="h-4 w-4" />,
+  },
+  {
+    value: "maintenance",
+    label: "Maintenance",
+    icon: <Wrench className="h-4 w-4" />,
+  },
+  { value: "delivery", label: "Delivery", icon: <Truck className="h-4 w-4" /> },
+  {
+    value: "marketing",
+    label: "Marketing",
+    icon: <TrendingUp className="h-4 w-4" />,
+  },
+  {
+    value: "office_supplies",
+    label: "Office Supplies",
+    icon: <Briefcase className="h-4 w-4" />,
+  },
+  {
+    value: "telephone",
+    label: "Telephone",
+    icon: <Phone className="h-4 w-4" />,
+  },
+  {
+    value: "insurance",
+    label: "Insurance",
+    icon: <Shield className="h-4 w-4" />,
+  },
+  { value: "repairs", label: "Repairs", icon: <Wrench className="h-4 w-4" /> },
+  {
+    value: "professional_fees",
+    label: "Professional Fees",
+    icon: <FileText className="h-4 w-4" />,
+  },
+  {
+    value: "bank_charges",
+    label: "Bank Charges",
+    icon: <Banknote className="h-4 w-4" />,
+  },
+  {
+    value: "depreciation",
+    label: "Depreciation",
+    icon: <TrendingDown className="h-4 w-4" />,
+  },
+  { value: "taxes", label: "Taxes", icon: <Percent className="h-4 w-4" /> },
+  {
+    value: "miscellaneous",
+    label: "Miscellaneous",
+    icon: <Package className="h-4 w-4" />,
+  },
+];
+
+// UPDATED: Expense interface to match your full schema
 interface Expense {
   id: string;
   expense_number: string;
   expense_date: string;
-  category: "fuel" | "maintenance" | "delivery" | "other";
+  category: ExpenseCategory;
   description: string | null;
   amount: number;
   payment_method: string;
@@ -72,6 +149,8 @@ interface Expense {
   notes: string | null;
   created_by: string;
   created_at: string;
+  receipt_number: string | null;
+  status: ExpenseStatus;
   users?: {
     name: string;
     email: string;
@@ -87,16 +166,21 @@ export default function ExpensesPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+
+  // UPDATED: formData state to include all new fields
   const [formData, setFormData] = useState({
     expense_date: new Date().toISOString().split("T")[0],
-    category: "fuel",
+    category: "fuel" as ExpenseCategory,
     description: "",
     amount: "",
     payment_method: "cash",
     reference_number: "",
     vendor_name: "",
+    receipt_number: "", // New
+    status: "approved" as ExpenseStatus, // New
     notes: "",
   });
+
   const [stats, setStats] = useState({
     totalExpenses: 0,
     fuelExpenses: 0,
@@ -107,7 +191,6 @@ export default function ExpensesPage() {
 
   const supabase = createClient();
 
-  // Fetch expenses
   const fetchExpenses = async () => {
     setLoading(true);
     try {
@@ -117,7 +200,6 @@ export default function ExpensesPage() {
       if (categoryFilter !== "all") {
         params.append("category", categoryFilter);
       }
-
       if (params.toString()) {
         url += `?${params.toString()}`;
       }
@@ -142,7 +224,6 @@ export default function ExpensesPage() {
     fetchExpenses();
   }, [categoryFilter]);
 
-  // Calculate statistics
   const calculateStats = (expensesData: Expense[]) => {
     const total = expensesData.reduce((sum, exp) => sum + exp.amount, 0);
     const fuel = expensesData
@@ -154,32 +235,25 @@ export default function ExpensesPage() {
     const delivery = expensesData
       .filter((exp) => exp.category === "delivery")
       .reduce((sum, exp) => sum + exp.amount, 0);
-    const other = expensesData
-      .filter((exp) => exp.category === "other")
-      .reduce((sum, exp) => sum + exp.amount, 0);
 
     setStats({
       totalExpenses: total,
       fuelExpenses: fuel,
       maintenanceExpenses: maintenance,
       deliveryExpenses: delivery,
-      otherExpenses: other,
+      otherExpenses: total - fuel - maintenance - delivery,
     });
   };
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     try {
       const response = await fetch("/api/expenses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
-
       const data = await response.json();
-
       if (response.ok) {
         setIsAddDialogOpen(false);
         resetForm();
@@ -193,20 +267,16 @@ export default function ExpensesPage() {
     }
   };
 
-  // Handle edit
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedExpense) return;
-
     try {
       const response = await fetch(`/api/expenses/${selectedExpense.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
-
       const data = await response.json();
-
       if (response.ok) {
         setIsEditDialogOpen(false);
         setSelectedExpense(null);
@@ -221,15 +291,12 @@ export default function ExpensesPage() {
     }
   };
 
-  // Handle delete
   const handleDelete = async () => {
     if (!selectedExpense) return;
-
     try {
       const response = await fetch(`/api/expenses/${selectedExpense.id}`, {
         method: "DELETE",
       });
-
       if (response.ok) {
         setIsDeleteDialogOpen(false);
         setSelectedExpense(null);
@@ -244,7 +311,7 @@ export default function ExpensesPage() {
     }
   };
 
-  // Reset form
+  // UPDATED: Reset form to include new fields
   const resetForm = () => {
     setFormData({
       expense_date: new Date().toISOString().split("T")[0],
@@ -254,11 +321,13 @@ export default function ExpensesPage() {
       payment_method: "cash",
       reference_number: "",
       vendor_name: "",
+      receipt_number: "",
+      status: "approved",
       notes: "",
     });
   };
 
-  // Open edit dialog
+  // UPDATED: Open edit dialog to include new fields
   const openEditDialog = (expense: Expense) => {
     setSelectedExpense(expense);
     setFormData({
@@ -269,42 +338,30 @@ export default function ExpensesPage() {
       payment_method: expense.payment_method,
       reference_number: expense.reference_number || "",
       vendor_name: expense.vendor_name || "",
+      receipt_number: expense.receipt_number || "",
+      status: expense.status || "approved",
       notes: expense.notes || "",
     });
     setIsEditDialogOpen(true);
   };
 
-  // Filter expenses by search
   const filteredExpenses = expenses.filter((expense) => {
     const searchLower = searchQuery.toLowerCase();
     return (
       expense.expense_number.toLowerCase().includes(searchLower) ||
-      expense.description?.toLowerCase().includes(searchLower) ||
-      expense.vendor_name?.toLowerCase().includes(searchLower) ||
-      ""
+      (expense.description || "").toLowerCase().includes(searchLower) ||
+      (expense.vendor_name || "").toLowerCase().includes(searchLower)
     );
   });
 
-  // Get category badge
   const getCategoryBadge = (category: string) => {
-    const badges = {
-      fuel: <Badge className="bg-blue-500">Fuel</Badge>,
-      maintenance: <Badge className="bg-orange-500">Maintenance</Badge>,
-      delivery: <Badge className="bg-green-500">Delivery</Badge>,
-      other: <Badge className="bg-gray-500">Other</Badge>,
-    };
-    return badges[category as keyof typeof badges] || badges.other;
-  };
-
-  // Get category icon
-  const getCategoryIcon = (category: string) => {
-    const icons = {
-      fuel: <Fuel className="h-4 w-4" />,
-      maintenance: <Wrench className="h-4 w-4" />,
-      delivery: <Truck className="h-4 w-4" />,
-      other: <Receipt className="h-4 w-4" />,
-    };
-    return icons[category as keyof typeof icons] || icons.other;
+    const categoryInfo = expenseCategories.find((c) => c.value === category);
+    return (
+      <Badge variant="outline" className="capitalize items-center gap-1">
+        {categoryInfo?.icon}
+        {categoryInfo?.label || category}
+      </Badge>
+    );
   };
 
   return (
@@ -314,7 +371,7 @@ export default function ExpensesPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
           <p className="text-muted-foreground">
-            Manage fuel, maintenance, delivery, and other business expenses
+            Manage all business operating expenses
           </p>
         </div>
         <Button onClick={() => setIsAddDialogOpen(true)}>
@@ -397,27 +454,29 @@ export default function ExpensesPage() {
             <div className="relative flex-1">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search expenses..."
+                placeholder="Search by ID, description, vendor..."
                 className="pl-8"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
+            {/* UPDATED: Full category list */}
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by category" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="fuel">Fuel</SelectItem>
-                <SelectItem value="maintenance">Maintenance</SelectItem>
-                <SelectItem value="delivery">Delivery</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
+                {expenseCategories.map((cat) => (
+                  <SelectItem key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Table */}
+          {/* UPDATED: Table with new columns */}
           <div className="rounded-md border">
             <Table>
               <TableHeader>
@@ -427,8 +486,9 @@ export default function ExpensesPage() {
                   <TableHead>Category</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Vendor</TableHead>
-                  <TableHead>Payment Method</TableHead>
+                  <TableHead>Receipt #</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Created By</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
@@ -436,13 +496,13 @@ export default function ExpensesPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-10">
-                      Loading expenses...
+                    <TableCell colSpan={10} className="text-center py-10">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : filteredExpenses.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-10">
+                    <TableCell colSpan={10} className="text-center py-10">
                       No expenses found
                     </TableCell>
                   </TableRow>
@@ -460,11 +520,23 @@ export default function ExpensesPage() {
                       </TableCell>
                       <TableCell>{expense.description || "-"}</TableCell>
                       <TableCell>{expense.vendor_name || "-"}</TableCell>
-                      <TableCell className="capitalize">
-                        {expense.payment_method.replace("_", " ")}
-                      </TableCell>
+                      <TableCell>{expense.receipt_number || "-"}</TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(expense.amount)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            expense.status === "approved"
+                              ? "default"
+                              : expense.status === "pending"
+                              ? "outline"
+                              : "destructive"
+                          }
+                          className="capitalize"
+                        >
+                          {expense.status}
+                        </Badge>
                       </TableCell>
                       <TableCell>{expense.users?.name || "Unknown"}</TableCell>
                       <TableCell>
@@ -503,7 +575,7 @@ export default function ExpensesPage() {
         </CardContent>
       </Card>
 
-      {/* Add Expense Dialog */}
+      {/* UPDATED: Add Expense Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -529,7 +601,7 @@ export default function ExpensesPage() {
                   <Label htmlFor="category">Category</Label>
                   <Select
                     value={formData.category}
-                    onValueChange={(value) =>
+                    onValueChange={(value: ExpenseCategory) =>
                       setFormData({ ...formData, category: value })
                     }
                   >
@@ -537,10 +609,11 @@ export default function ExpensesPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="fuel">Fuel</SelectItem>
-                      <SelectItem value="maintenance">Maintenance</SelectItem>
-                      <SelectItem value="delivery">Delivery Cost</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      {expenseCategories.map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -554,13 +627,13 @@ export default function ExpensesPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  placeholder="Enter expense description (optional)"
+                  placeholder="e.g., Lorry fuel top-up"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="amount">Amount</Label>
+                  <Label htmlFor="amount">Amount (LKR)</Label>
                   <Input
                     id="amount"
                     type="number"
@@ -605,21 +678,21 @@ export default function ExpensesPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, vendor_name: e.target.value })
                     }
-                    placeholder="Enter vendor name"
+                    placeholder="e.g., Ceypetco"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="reference_number">Reference Number</Label>
+                  <Label htmlFor="receipt_number">Receipt Number</Label>
                   <Input
-                    id="reference_number"
-                    value={formData.reference_number}
+                    id="receipt_number"
+                    value={formData.receipt_number}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        reference_number: e.target.value,
+                        receipt_number: e.target.value,
                       })
                     }
-                    placeholder="Invoice/Receipt #"
+                    placeholder="Receipt or Invoice #"
                   />
                 </div>
               </div>
@@ -654,7 +727,7 @@ export default function ExpensesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Expense Dialog */}
+      {/* UPDATED: Edit Expense Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -680,7 +753,7 @@ export default function ExpensesPage() {
                   <Label htmlFor="edit_category">Category</Label>
                   <Select
                     value={formData.category}
-                    onValueChange={(value) =>
+                    onValueChange={(value: ExpenseCategory) =>
                       setFormData({ ...formData, category: value })
                     }
                   >
@@ -688,10 +761,11 @@ export default function ExpensesPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="fuel">Fuel</SelectItem>
-                      <SelectItem value="maintenance">Maintenance</SelectItem>
-                      <SelectItem value="delivery">Delivery Cost</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      {expenseCategories.map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -705,13 +779,12 @@ export default function ExpensesPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  placeholder="Enter expense description (optional)"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="edit_amount">Amount</Label>
+                  <Label htmlFor="edit_amount">Amount (LKR)</Label>
                   <Input
                     id="edit_amount"
                     type="number"
@@ -758,20 +831,37 @@ export default function ExpensesPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit_reference_number">
-                    Reference Number
-                  </Label>
+                  <Label htmlFor="edit_receipt_number">Receipt Number</Label>
                   <Input
-                    id="edit_reference_number"
-                    value={formData.reference_number}
+                    id="edit_receipt_number"
+                    value={formData.receipt_number}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        reference_number: e.target.value,
+                        receipt_number: e.target.value,
                       })
                     }
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit_status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value: ExpenseStatus) =>
+                    setFormData({ ...formData, status: value })
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="approved">Approved</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">

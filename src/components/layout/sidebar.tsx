@@ -17,6 +17,8 @@ import {
   Truck,
   AlertCircle,
   Receipt,
+  Landmark,
+  Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -33,11 +35,18 @@ const navigation = [
   { name: "Expenses", href: "/expenses", icon: Receipt },
   { name: "Payments", href: "/payments", icon: DollarSign },
   { name: "Due Invoices", href: "/due-invoices", icon: AlertCircle },
+  { name: "Finance", href: "/finance", icon: Landmark },
   {
     name: "Reports",
     href: "/reports",
     icon: TrendingUp,
     adminOnly: true, // Only show to admins
+  },
+  {
+    name: "Financial Statements",
+    href: "/reports/financial-statement",
+    icon: Briefcase,
+    adminOnly: true,
   },
   {
     name: "Settings",

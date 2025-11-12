@@ -1,11 +1,31 @@
 // src/app/api/expenses/route.ts
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { Database } from "@/types/database.types";
+import { Database, ExpenseCategory } from "@/types/database.types";
 
 type ExpenseInsert = Database["public"]["Tables"]["expenses"]["Insert"];
 
-// GET - Fetch all expenses with filters
+// Full list of new valid categories from your schema
+const validCategories: ExpenseCategory[] = [
+  "fuel",
+  "salaries",
+  "rent",
+  "utilities",
+  "maintenance",
+  "delivery",
+  "marketing",
+  "office_supplies",
+  "telephone",
+  "insurance",
+  "repairs",
+  "professional_fees",
+  "bank_charges",
+  "depreciation",
+  "taxes",
+  "miscellaneous",
+];
+
+// GET - Fetch all expenses with filters (No change needed)
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
@@ -33,11 +53,9 @@ export async function GET(request: Request) {
     if (category && category !== "all") {
       query = query.eq("category", category);
     }
-
     if (startDate) {
       query = query.gte("expense_date", startDate);
     }
-
     if (endDate) {
       query = query.lte("expense_date", endDate);
     }
@@ -59,12 +77,11 @@ export async function GET(request: Request) {
   }
 }
 
-// POST - Create new expense
+// POST - Create new expense (Updated Validation)
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
 
-    // Get current user
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -75,7 +92,6 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
-    // Validate required fields (description is now optional)
     if (!body.category || !body.amount || !body.payment_method) {
       return NextResponse.json(
         { error: "Missing required fields: category, amount, payment_method" },
@@ -83,44 +99,40 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate category (now includes delivery)
-    const validCategories = ["fuel", "maintenance", "delivery", "other"];
+    // UPDATED: Validate against the new, full list of categories
     if (!validCategories.includes(body.category)) {
       return NextResponse.json(
-        {
-          error:
-            "Invalid category. Must be: fuel, maintenance, delivery, or other",
-        },
+        { error: `Invalid category: ${body.category}` },
         { status: 400 }
       );
     }
 
-    // Validate payment method
     const validPaymentMethods = ["cash", "bank_transfer", "cheque", "card"];
     if (!validPaymentMethods.includes(body.payment_method)) {
       return NextResponse.json(
-        {
-          error:
-            "Invalid payment method. Must be: cash, bank_transfer, cheque, or card",
-        },
+        { error: "Invalid payment method" },
         { status: 400 }
       );
     }
 
-    // Generate expense number
     const expenseNumber = await generateExpenseNumber(supabase);
 
     const expenseData: ExpenseInsert = {
       expense_number: expenseNumber,
       expense_date: body.expense_date || new Date().toISOString().split("T")[0],
       category: body.category,
-      description: body.description || null, // Optional now
+      description: body.description || null,
       amount: parseFloat(body.amount),
       payment_method: body.payment_method,
       reference_number: body.reference_number || null,
       vendor_name: body.vendor_name || null,
       notes: body.notes || null,
       created_by: user.id,
+      // Include new fields
+      receipt_number: body.receipt_number || null,
+      status: body.status || "approved",
+      is_recurring: body.is_recurring || false,
+      recurring_frequency: body.recurring_frequency || null,
     };
 
     const { data: expense, error } = await supabase
@@ -152,12 +164,11 @@ export async function POST(request: Request) {
   }
 }
 
-// Helper function to generate expense number
+// Helper function (no change)
 async function generateExpenseNumber(supabase: any): Promise<string> {
   const today = new Date().toISOString().split("T")[0];
   const datePart = today.replace(/-/g, "");
 
-  // Count expenses created today
   const { count } = await supabase
     .from("expenses")
     .select("*", { count: "exact", head: true })

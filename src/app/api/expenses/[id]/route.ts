@@ -1,8 +1,29 @@
 // src/app/api/expenses/[id]/route.ts
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { Database, ExpenseCategory, ExpenseStatus } from "@/types/database.types"; // Import new types
 
-// GET single expense by ID
+// Full list of new valid categories from your schema
+const validCategories: ExpenseCategory[] = [
+  "fuel",
+  "salaries",
+  "rent",
+  "utilities",
+  "maintenance",
+  "delivery",
+  "marketing",
+  "office_supplies",
+  "telephone",
+  "insurance",
+  "repairs",
+  "professional_fees",
+  "bank_charges",
+  "depreciation",
+  "taxes",
+  "miscellaneous",
+];
+
+// GET (No change)
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
@@ -42,7 +63,7 @@ export async function GET(
   }
 }
 
-// PUT - Update expense
+// PUT - Update expense (Updated Validation & Fields)
 export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
@@ -51,7 +72,6 @@ export async function PUT(
     const supabase = await createClient();
     const { id } = params;
 
-    // Get current user
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -60,7 +80,6 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Check if expense exists and user has permission
     const { data: existingExpense, error: fetchError } = await supabase
       .from("expenses")
       .select("created_by")
@@ -71,14 +90,12 @@ export async function PUT(
       return NextResponse.json({ error: "Expense not found" }, { status: 404 });
     }
 
-    // Get user role
     const { data: userData } = await supabase
       .from("users")
       .select("role")
       .eq("id", user.id)
       .single();
 
-    // Check permission: user can update their own expenses or admin can update any
     if (existingExpense.created_by !== user.id && userData?.role !== "Admin") {
       return NextResponse.json(
         { error: "You do not have permission to update this expense" },
@@ -88,18 +105,12 @@ export async function PUT(
 
     const body = await request.json();
 
-    // Validate category if provided
-    if (body.category) {
-      const validCategories = ["fuel", "maintenance", "other"];
-      if (!validCategories.includes(body.category)) {
-        return NextResponse.json(
-          { error: "Invalid category. Must be: fuel, maintenance, or other" },
-          { status: 400 }
-        );
-      }
+    // UPDATED: Validate category
+    if (body.category && !validCategories.includes(body.category)) {
+      return NextResponse.json({ error: "Invalid category." }, { status: 400 });
     }
 
-    // Validate payment method if provided
+    // Validate payment method
     if (body.payment_method) {
       const validPaymentMethods = ["cash", "bank_transfer", "cheque", "card"];
       if (!validPaymentMethods.includes(body.payment_method)) {
@@ -110,17 +121,41 @@ export async function PUT(
       }
     }
 
+    // UPDATED: Validate status
+    if (body.status) {
+      const validStatus: ExpenseStatus[] = ["pending", "approved", "rejected"];
+      if (!validStatus.includes(body.status)) {
+        return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+      }
+    }
+
+    // Build updateData object dynamically
     const updateData: any = {};
-    if (body.expense_date) updateData.expense_date = body.expense_date;
-    if (body.category) updateData.category = body.category;
-    if (body.description) updateData.description = body.description;
-    if (body.amount) updateData.amount = parseFloat(body.amount);
-    if (body.payment_method) updateData.payment_method = body.payment_method;
-    if (body.reference_number !== undefined)
-      updateData.reference_number = body.reference_number;
-    if (body.vendor_name !== undefined)
-      updateData.vendor_name = body.vendor_name;
-    if (body.notes !== undefined) updateData.notes = body.notes;
+    const fields: (keyof Database["public"]["Tables"]["expenses"]["Update"])[] =
+      [
+        "expense_date",
+        "category",
+        "description",
+        "amount",
+        "payment_method",
+        "reference_number",
+        "vendor_name",
+        "notes",
+        "receipt_number",
+        "is_recurring",
+        "recurring_frequency",
+        "status",
+      ];
+
+    fields.forEach((field) => {
+      if (body[field] !== undefined) {
+        if (field === "amount") {
+          updateData[field] = parseFloat(body[field]);
+        } else {
+          updateData[field] = body[field];
+        }
+      }
+    });
 
     const { data: expense, error: updateError } = await supabase
       .from("expenses")
@@ -151,7 +186,7 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete expense (Admin only)
+// DELETE (No change)
 export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
@@ -160,7 +195,6 @@ export async function DELETE(
     const supabase = await createClient();
     const { id } = params;
 
-    // Get current user
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -169,7 +203,6 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Check if user is admin
     const { data: userData } = await supabase
       .from("users")
       .select("role")
