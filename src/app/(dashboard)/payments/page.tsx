@@ -69,12 +69,27 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { toast } from "sonner";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Bank type definition
 interface Bank {
   id: string;
   bank_code: string;
   bank_name: string;
+}
+
+// Company Account type definition
+interface CompanyAccount {
+  id: string;
+  account_name: string;
+  account_type: "saving" | "current" | "cash";
+  account_number: string | null;
+  current_balance: number;
+  banks?: {
+    bank_code: string;
+    bank_name: string;
+  } | null;
 }
 
 // Payment type definition
@@ -92,6 +107,7 @@ interface Payment {
   cheque_date: string | null;
   cheque_status: "pending" | "passed" | "returned" | null;
   bank_id: string | null;
+  deposit_account_id: string | null;
   customers?: {
     name: string;
   };
@@ -102,38 +118,38 @@ interface Payment {
   banks?: {
     bank_code: string;
     bank_name: string;
-  } | null;
+  };
+  company_accounts?: {
+    account_name: string;
+    account_type: string;
+  };
 }
 
-interface UnpaidOrder {
+interface Order {
   id: string;
   order_number: string;
-  total_amount: number;
-  balance: number;
   customer_id: string;
-  customers: { name: string };
+  customer_name: string;
+  order_date: string;
+  total_amount: number;
+  paid_amount: number;
+  balance: number;
 }
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [unpaidOrders, setUnpaidOrders] = useState<Order[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
-  const [customers, setCustomers] = useState<{ id: string; name: string }[]>(
-    []
-  );
-  const [unpaidOrders, setUnpaidOrders] = useState<UnpaidOrder[]>([]);
+  const [companyAccounts, setCompanyAccounts] = useState<CompanyAccount[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const [customerFilter, setCustomerFilter] = useState("all");
   const [methodFilter, setMethodFilter] = useState("all");
   const [chequeStatusFilter, setChequeStatusFilter] = useState("all");
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [bankSearchOpen, setBankSearchOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [chequeActionDialog, setChequeActionDialog] = useState<{
-    open: boolean;
-    payment: Payment | null;
-    action: "passed" | "returned" | null;
-  }>({ open: false, payment: null, action: null });
+  const [accountSearchOpen, setAccountSearchOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     orderId: "",
@@ -141,33 +157,52 @@ export default function PaymentsPage() {
     date: new Date().toISOString().split("T")[0],
     method: "cash",
     bankId: "",
+    depositAccountId: "", // New field for deposit account
     chequeNo: "",
     chequeDate: "",
     notes: "",
   });
 
-  // Fetch payments from API
+  const [chequeActionDialog, setChequeActionDialog] = useState<{
+    open: boolean;
+    payment: Payment | null;
+    action: "passed" | "returned" | null;
+  }>({
+    open: false,
+    payment: null,
+    action: null,
+  });
+
   useEffect(() => {
     fetchPayments();
+    fetchUnpaidOrders();
     fetchBanks();
+    fetchCompanyAccounts();
   }, []);
 
   const fetchPayments = async () => {
     try {
       const response = await fetch("/api/payments");
       const data = await response.json();
-
-      if (data.payments) {
+      if (response.ok) {
         setPayments(data.payments);
-      } else {
-        console.error("Failed to fetch payments:", data.error);
-        toast.error("Failed to fetch payments");
       }
     } catch (error) {
-      console.error("Network error fetching payments:", error);
-      toast.error("Network error fetching payments");
+      console.error("Error fetching payments:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUnpaidOrders = async () => {
+    try {
+      const response = await fetch("/api/orders/unpaid");
+      const data = await response.json();
+      if (response.ok) {
+        setUnpaidOrders(data.orders);
+      }
+    } catch (error) {
+      console.error("Error fetching unpaid orders:", error);
     }
   };
 
@@ -175,8 +210,7 @@ export default function PaymentsPage() {
     try {
       const response = await fetch("/api/banks");
       const data = await response.json();
-
-      if (data.banks) {
+      if (response.ok) {
         setBanks(data.banks);
       }
     } catch (error) {
@@ -184,110 +218,30 @@ export default function PaymentsPage() {
     }
   };
 
-  // Fetch customers for filter
-  useEffect(() => {
-    const fetchCustomers = async () => {
-      try {
-        const response = await fetch("/api/customers");
-        const data = await response.json();
-
-        if (data.customers) {
-          setCustomers(data.customers);
-        }
-      } catch (error) {
-        console.error("Error fetching customers:", error);
-      }
-    };
-
-    fetchCustomers();
-  }, []);
-
-  // Fetch unpaid orders when dialog opens
-  useEffect(() => {
-    if (isAddDialogOpen) {
-      fetchUnpaidOrders();
-    }
-  }, [isAddDialogOpen]);
-
-  const fetchUnpaidOrders = async () => {
+  const fetchCompanyAccounts = async () => {
     try {
-      // Fetch orders with unpaid or partial payment status
-      const ordersResponse = await fetch("/api/orders");
-      const ordersData = await ordersResponse.json();
-
-      if (!ordersData.orders) {
-        console.error("Failed to fetch orders");
-        return;
+      const response = await fetch("/api/accounts");
+      const data = await response.json();
+      if (response.ok) {
+        setCompanyAccounts(data.accounts);
       }
-
-      // Filter orders that are not fully paid
-      const unpaidOrdersList = ordersData.orders.filter(
-        (order: any) =>
-          order.payment_status === "unpaid" ||
-          order.payment_status === "partial"
-      );
-
-      // Fetch all payments to calculate remaining balance for each order
-      const paymentsResponse = await fetch("/api/payments");
-      const paymentsData = await paymentsResponse.json();
-
-      if (!paymentsData.payments) {
-        console.error("Failed to fetch payments");
-        return;
-      }
-
-      // Calculate balance for each unpaid order
-      const ordersWithBalance: UnpaidOrder[] = unpaidOrdersList.map(
-        (order: any) => {
-          // Sum all successful payments for this order (exclude returned cheques)
-          const orderPayments = paymentsData.payments.filter(
-            (p: Payment) =>
-              p.order_id === order.id && p.cheque_status !== "returned"
-          );
-
-          const totalPaid = orderPayments.reduce(
-            (sum: number, p: Payment) => sum + p.amount,
-            0
-          );
-          const balance = order.total_amount - totalPaid;
-
-          return {
-            id: order.id,
-            order_number: order.order_number,
-            total_amount: order.total_amount,
-            balance: balance,
-            customer_id: order.customer_id,
-            customers: order.customers,
-          };
-        }
-      );
-
-      // Only show orders with balance > 0
-      const ordersWithPendingBalance = ordersWithBalance.filter(
-        (order) => order.balance > 0
-      );
-
-      setUnpaidOrders(ordersWithPendingBalance);
     } catch (error) {
-      console.error("Error fetching unpaid orders:", error);
+      console.error("Error fetching company accounts:", error);
     }
   };
 
-  // Filter payments
   const filteredPayments = payments.filter((payment) => {
     const matchesSearch =
-      payment.payment_number
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase()) ||
-      (payment.orders?.order_number || "")
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase()) ||
-      (payment.customers?.name || "")
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
+      payment.payment_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      payment.customers?.name
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      payment.orders?.order_number
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase());
 
     const matchesCustomer =
-      customerFilter === "all" || payment.customer_id === customerFilter;
+      customerFilter === "all" || payment.customers?.name === customerFilter;
 
     const matchesMethod =
       methodFilter === "all" ||
@@ -314,6 +268,18 @@ export default function PaymentsPage() {
     (p) => p.cheque_status === "returned"
   ).length;
 
+  // Get available accounts based on payment method
+  const getAvailableAccounts = () => {
+    if (formData.method === "cash") {
+      return companyAccounts.filter((acc) => acc.account_type === "cash");
+    } else if (formData.method === "bank" || formData.method === "cheque") {
+      return companyAccounts.filter(
+        (acc) => acc.account_type === "saving" || acc.account_type === "current"
+      );
+    }
+    return [];
+  };
+
   const handleAddPayment = async () => {
     if (!formData.orderId || formData.amount <= 0) {
       toast.error("Please select an order and enter valid amount");
@@ -326,6 +292,19 @@ export default function PaymentsPage() {
       toast.error(
         `Payment amount (LKR ${formData.amount.toLocaleString()}) cannot exceed remaining balance (LKR ${selectedOrder.balance.toLocaleString()})`
       );
+      return;
+    }
+
+    // Validate deposit account selection
+    if (
+      (formData.method === "bank" ||
+        formData.method === "cheque" ||
+        formData.method === "cash") &&
+      !formData.depositAccountId
+    ) {
+      const accountType =
+        formData.method === "cash" ? "cash account" : "bank account";
+      toast.error(`Please select a ${accountType} for deposit`);
       return;
     }
 
@@ -350,6 +329,7 @@ export default function PaymentsPage() {
         payment_date: formData.date,
         amount: formData.amount,
         payment_method: formData.method,
+        deposit_account_id: formData.depositAccountId, // Include deposit account
         reference_number: null,
         notes: formData.notes || null,
         cheque_number: formData.method === "cheque" ? formData.chequeNo : null,
@@ -372,11 +352,10 @@ export default function PaymentsPage() {
 
       toast.success("Payment recorded successfully!");
 
-      // Refetch payments to ensure all data is up-to-date
+      // Refetch all data to ensure consistency
       await fetchPayments();
-
-      // Refetch unpaid orders to update balances
       await fetchUnpaidOrders();
+      await fetchCompanyAccounts(); // Refresh account balances
 
       setIsAddDialogOpen(false);
       resetForm();
@@ -395,6 +374,7 @@ export default function PaymentsPage() {
       date: new Date().toISOString().split("T")[0],
       method: "cash",
       bankId: "",
+      depositAccountId: "",
       chequeNo: "",
       chequeDate: "",
       notes: "",
@@ -431,7 +411,6 @@ export default function PaymentsPage() {
 
       toast.success(`Cheque marked as ${chequeActionDialog.action}!`);
 
-      // Refetch payments to ensure all data is up-to-date
       await fetchPayments();
 
       setChequeActionDialog({ open: false, payment: null, action: null });
@@ -449,59 +428,54 @@ export default function PaymentsPage() {
 
     const today = new Date();
     const chequeDateObj = chequeDate ? new Date(chequeDate) : null;
-    const isPastDue = chequeDateObj && chequeDateObj < today;
+    const isOverdue =
+      chequeDateObj && status === "pending" && chequeDateObj < today;
 
-    if (status === "passed") {
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-          <CheckCircle className="w-3 h-3 mr-1" />
-          Passed
-        </span>
-      );
-    } else if (status === "returned") {
-      return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
-          <XCircle className="w-3 h-3 mr-1" />
-          Returned
-        </span>
-      );
-    } else if (status === "pending") {
-      return (
-        <span
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-            isPastDue
-              ? "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
-              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-          }`}
-        >
-          <Clock className="w-3 h-3 mr-1" />
-          {isPastDue ? "Overdue" : "Pending"}
-        </span>
-      );
-    }
-    return null;
-  };
+    const statusConfig = {
+      pending: {
+        color: isOverdue ? "text-orange-600" : "text-yellow-600",
+        bg: isOverdue ? "bg-orange-50" : "bg-yellow-50",
+        icon: Clock,
+        label: isOverdue ? "Overdue" : "Pending",
+      },
+      passed: {
+        color: "text-green-600",
+        bg: "bg-green-50",
+        icon: CheckCircle,
+        label: "Passed",
+      },
+      returned: {
+        color: "text-red-600",
+        bg: "bg-red-50",
+        icon: XCircle,
+        label: "Returned",
+      },
+    };
 
-  if (loading) {
+    const config = statusConfig[status];
+    const Icon = config.icon;
+
     return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
+      <span
+        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${config.bg} ${config.color}`}
+      >
+        <Icon className="w-3 h-3" />
+        {config.label}
+      </span>
     );
-  }
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Payments</h1>
-          <p className="text-muted-foreground mt-1">
-            Record and manage customer payments
+          <p className="text-muted-foreground">
+            Manage customer payments and cheques
           </p>
         </div>
         <Button onClick={() => setIsAddDialogOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
+          <Plus className="mr-2 h-4 w-4" />
           Add Payment
         </Button>
       </div>
@@ -517,9 +491,6 @@ export default function PaymentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalPayments}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Payment records
-            </p>
           </CardContent>
         </Card>
         <Card>
@@ -527,14 +498,12 @@ export default function PaymentsPage() {
             <CardTitle className="text-sm font-medium">
               Total Received
             </CardTitle>
+            <DollarSign className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
+            <div className="text-2xl font-bold">
               LKR {totalReceived.toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Amount collected
-            </p>
           </CardContent>
         </Card>
         <Card>
@@ -545,12 +514,7 @@ export default function PaymentsPage() {
             <Clock className="w-4 h-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
-              {pendingCheques}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Awaiting clearance
-            </p>
+            <div className="text-2xl font-bold">{pendingCheques}</div>
           </CardContent>
         </Card>
         <Card>
@@ -558,50 +522,31 @@ export default function PaymentsPage() {
             <CardTitle className="text-sm font-medium">
               Returned Cheques
             </CardTitle>
-            <XCircle className="w-4 h-4 text-destructive" />
+            <XCircle className="w-4 h-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">
-              {returnedCheques}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Bounced payments
-            </p>
+            <div className="text-2xl font-bold">{returnedCheques}</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Search and Filters */}
+      {/* Payments Table */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex-1 max-w-sm">
+          <div className="flex items-center justify-between">
+            <CardTitle>Payment History</CardTitle>
+            <div className="flex items-center gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by ID, bill, or customer..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
+                  placeholder="Search payments..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 w-[300px]"
                 />
               </div>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Select value={customerFilter} onValueChange={setCustomerFilter}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Filter by customer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Customers</SelectItem>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Select value={methodFilter} onValueChange={setMethodFilter}>
-                <SelectTrigger className="w-[160px]">
+                <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="Payment method" />
                 </SelectTrigger>
                 <SelectContent>
@@ -639,6 +584,7 @@ export default function PaymentsPage() {
                 <TableHead>Customer</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Method</TableHead>
+                <TableHead>Deposit Account</TableHead>
                 <TableHead>Cheque/Bank Details</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -646,10 +592,7 @@ export default function PaymentsPage() {
             <TableBody>
               {filteredPayments.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="text-center py-8 text-muted-foreground"
-                  >
+                  <TableCell colSpan={9} className="text-center py-10">
                     No payments found
                   </TableCell>
                 </TableRow>
@@ -657,30 +600,40 @@ export default function PaymentsPage() {
                 filteredPayments.map((payment) => (
                   <TableRow key={payment.id}>
                     <TableCell>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Calendar className="w-3 h-3 text-muted-foreground" />
-                        {new Date(payment.payment_date).toLocaleDateString()}
-                      </div>
+                      {new Date(payment.payment_date).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="font-medium">
                       {payment.payment_number}
                     </TableCell>
-                    <TableCell>{payment.orders?.order_number || "-"}</TableCell>
-                    <TableCell>{payment.customers?.name || "-"}</TableCell>
-                    <TableCell className="text-right font-medium text-green-600">
+                    <TableCell>
+                      {payment.orders?.order_number || "N/A"}
+                    </TableCell>
+                    <TableCell>{payment.customers?.name || "N/A"}</TableCell>
+                    <TableCell className="text-right font-medium">
                       LKR {payment.amount.toLocaleString()}
                     </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                        {payment.payment_method.charAt(0).toUpperCase() +
-                          payment.payment_method.slice(1)}
-                      </span>
+                    <TableCell className="capitalize">
+                      {payment.payment_method}
                     </TableCell>
                     <TableCell>
-                      {payment.payment_method.toLowerCase() === "cheque" ? (
+                      {payment.company_accounts ? (
+                        <div>
+                          <div className="font-medium">
+                            {payment.company_accounts.account_name}
+                          </div>
+                          <div className="text-xs text-muted-foreground capitalize">
+                            {payment.company_accounts.account_type}
+                          </div>
+                        </div>
+                      ) : (
+                        "N/A"
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {payment.payment_method === "cheque" && (
                         <div className="space-y-1">
-                          <div className="text-xs font-medium">
-                            {payment.cheque_number}
+                          <div className="text-sm">
+                            Cheque: {payment.cheque_number}
                           </div>
                           {payment.banks && (
                             <div className="text-xs text-muted-foreground">
@@ -688,46 +641,58 @@ export default function PaymentsPage() {
                               {payment.banks.bank_name}
                             </div>
                           )}
-                          <div className="text-xs text-muted-foreground">
-                            Due:{" "}
-                            {payment.cheque_date &&
-                              new Date(
+                          {payment.cheque_date && (
+                            <div className="text-xs text-muted-foreground">
+                              Date:{" "}
+                              {new Date(
                                 payment.cheque_date
                               ).toLocaleDateString()}
-                          </div>
+                            </div>
+                          )}
                           {getChequeStatusBadge(
                             payment.cheque_status,
                             payment.cheque_date
                           )}
                         </div>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                      {payment.payment_method === "bank" && payment.banks && (
+                        <div className="text-sm">
+                          {payment.banks.bank_code} - {payment.banks.bank_name}
+                        </div>
+                      )}
+                      {payment.payment_method === "cash" && (
+                        <span className="text-sm text-muted-foreground">
+                          Cash Payment
+                        </span>
+                      )}
+                      {payment.payment_method === "credit" && (
+                        <span className="text-sm text-muted-foreground">
+                          On Credit
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {payment.payment_method.toLowerCase() === "cheque" &&
+                      {payment.payment_method === "cheque" &&
                         payment.cheque_status === "pending" && (
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="flex gap-2 justify-end">
                             <Button
-                              variant="ghost"
                               size="sm"
-                              className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
+                              variant="outline"
                               onClick={() =>
                                 openChequeActionDialog(payment, "passed")
                               }
+                              className="text-green-600 hover:text-green-700"
                             >
-                              <CheckCircle className="w-3 h-3 mr-1" />
                               Pass
                             </Button>
                             <Button
-                              variant="ghost"
                               size="sm"
-                              className="h-7 text-xs text-destructive hover:text-destructive/90 hover:bg-red-50"
+                              variant="outline"
                               onClick={() =>
                                 openChequeActionDialog(payment, "returned")
                               }
+                              className="text-red-600 hover:text-red-700"
                             >
-                              <XCircle className="w-3 h-3 mr-1" />
                               Return
                             </Button>
                           </div>
@@ -743,69 +708,53 @@ export default function PaymentsPage() {
 
       {/* Add Payment Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add Payment</DialogTitle>
             <DialogDescription>
-              Record a new payment from customer (Only showing bills with
-              pending balance)
+              Record a new payment from customer
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 space-y-2">
-              <Label htmlFor="orderId">Select Unpaid Bill *</Label>
+              <Label htmlFor="order">Select Order *</Label>
               <Select
                 value={formData.orderId}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, orderId: value })
-                }
+                onValueChange={(value) => {
+                  const order = unpaidOrders.find((o) => o.id === value);
+                  setFormData({
+                    ...formData,
+                    orderId: value,
+                    amount: order ? order.balance : 0,
+                  });
+                }}
               >
                 <SelectTrigger className="w-full h-10">
-                  <SelectValue
-                    placeholder={
-                      unpaidOrders.length > 0
-                        ? "Select unpaid bill"
-                        : "No unpaid bills available"
-                    }
-                  />
+                  <SelectValue placeholder="Select an order..." />
                 </SelectTrigger>
                 <SelectContent>
                   {unpaidOrders.length === 0 ? (
                     <SelectItem value="none" disabled>
-                      No bills with pending balance
+                      No unpaid orders available
                     </SelectItem>
                   ) : (
                     unpaidOrders.map((order) => (
                       <SelectItem key={order.id} value={order.id}>
-                        {order.order_number} - {order.customers?.name} (Balance:
+                        {order.order_number} - {order.customer_name} (Balance:
                         LKR {order.balance.toLocaleString()})
                       </SelectItem>
                     ))
                   )}
                 </SelectContent>
               </Select>
-              {formData.orderId && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Remaining Balance: LKR{" "}
-                  {unpaidOrders
-                    .find((o) => o.id === formData.orderId)
-                    ?.balance.toLocaleString()}
-                </p>
-              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="amount">Payment Amount (LKR) *</Label>
               <Input
                 id="amount"
                 type="number"
-                min="0"
-                max={
-                  formData.orderId
-                    ? unpaidOrders.find((o) => o.id === formData.orderId)
-                        ?.balance
-                    : undefined
-                }
-                placeholder="0"
+                step="0.01"
+                placeholder="Enter amount"
                 value={formData.amount}
                 onChange={(e) =>
                   setFormData({
@@ -828,16 +777,23 @@ export default function PaymentsPage() {
                 className="w-full h-10"
               />
             </div>
-            <div className="col-span-2 space-y-2">
+            <div className="space-y-2">
               <Label htmlFor="method">Payment Method *</Label>
               <Select
                 value={formData.method}
                 onValueChange={(value) =>
-                  setFormData({ ...formData, method: value })
+                  setFormData({
+                    ...formData,
+                    method: value,
+                    depositAccountId: "", // Reset account when method changes
+                    bankId: "",
+                    chequeNo: "",
+                    chequeDate: "",
+                  })
                 }
               >
                 <SelectTrigger className="w-full h-10">
-                  <SelectValue placeholder="Select method" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="cash">Cash</SelectItem>
@@ -847,10 +803,107 @@ export default function PaymentsPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Deposit Account Selection - Show for Cash, Bank Transfer, and Cheque */}
+            {(formData.method === "cash" ||
+              formData.method === "bank" ||
+              formData.method === "cheque") && (
+              <div className="space-y-2">
+                <Label>
+                  {formData.method === "cash"
+                    ? "Cash Account *"
+                    : "Deposit to Bank Account *"}
+                </Label>
+                <Popover
+                  open={accountSearchOpen}
+                  onOpenChange={setAccountSearchOpen}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={accountSearchOpen}
+                      className="w-full justify-between h-10"
+                    >
+                      <span className="truncate">
+                        {formData.depositAccountId
+                          ? (() => {
+                              const account = companyAccounts.find(
+                                (a) => a.id === formData.depositAccountId
+                              );
+                              return account ? (
+                                <span>
+                                  {account.account_name}
+                                  {account.banks && (
+                                    <span className="text-muted-foreground ml-2">
+                                      ({account.banks.bank_code})
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                "Select account..."
+                              );
+                            })()
+                          : "Select account..."}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Search account..." />
+                      <CommandList>
+                        <CommandEmpty>No account found.</CommandEmpty>
+                        <CommandGroup>
+                          {getAvailableAccounts().map((account) => (
+                            <CommandItem
+                              key={account.id}
+                              value={`${account.account_name} ${
+                                account.banks?.bank_name || ""
+                              }`}
+                              onSelect={() => {
+                                setFormData({
+                                  ...formData,
+                                  depositAccountId: account.id,
+                                });
+                                setAccountSearchOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  formData.depositAccountId === account.id
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              <div className="flex flex-col">
+                                <span className="font-medium">
+                                  {account.account_name}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {account.banks
+                                    ? `${account.banks.bank_code} - ${account.banks.bank_name}`
+                                    : "Cash on Hand"}{" "}
+                                  | Balance: LKR{" "}
+                                  {account.current_balance.toLocaleString()}
+                                </span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
+
+            {/* Cheque specific fields */}
             {formData.method === "cheque" && (
               <>
-                <div className="col-span-2 space-y-2">
-                  <Label>Bank Code & Name *</Label>
+                <div className="space-y-2">
+                  <Label>Cheque Bank *</Label>
                   <Popover
                     open={bankSearchOpen}
                     onOpenChange={setBankSearchOpen}
@@ -862,22 +915,24 @@ export default function PaymentsPage() {
                         aria-expanded={bankSearchOpen}
                         className="w-full justify-between h-10"
                       >
-                        {formData.bankId
-                          ? banks.find((bank) => bank.id === formData.bankId)
-                              ?.bank_code +
-                            " - " +
-                            banks.find((bank) => bank.id === formData.bankId)
-                              ?.bank_name
-                          : "Select bank..."}
-                        <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        <span className="truncate">
+                          {formData.bankId
+                            ? (() => {
+                                const bank = banks.find(
+                                  (b) => b.id === formData.bankId
+                                );
+                                return bank
+                                  ? `${bank.bank_code} - ${bank.bank_name}`
+                                  : "Select bank...";
+                              })()
+                            : "Select bank..."}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-full p-0" align="start">
+                    <PopoverContent className="w-full p-0">
                       <Command>
-                        <CommandInput
-                          placeholder="Search bank by code or name..."
-                          className="h-9"
-                        />
+                        <CommandInput placeholder="Search bank..." />
                         <CommandList>
                           <CommandEmpty>No bank found.</CommandEmpty>
                           <CommandGroup>
@@ -886,14 +941,22 @@ export default function PaymentsPage() {
                                 key={bank.id}
                                 value={`${bank.bank_code} ${bank.bank_name}`}
                                 onSelect={() => {
-                                  setFormData({ ...formData, bankId: bank.id });
+                                  setFormData({
+                                    ...formData,
+                                    bankId: bank.id,
+                                  });
                                   setBankSearchOpen(false);
                                 }}
                               >
-                                <span className="font-mono font-semibold mr-2">
-                                  {bank.bank_code}
-                                </span>
-                                <span>{bank.bank_name}</span>
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    formData.bankId === bank.id
+                                      ? "opacity-100"
+                                      : "opacity-0"
+                                  )}
+                                />
+                                {bank.bank_code} - {bank.bank_name}
                               </CommandItem>
                             ))}
                           </CommandGroup>
@@ -906,7 +969,7 @@ export default function PaymentsPage() {
                   <Label htmlFor="chequeNo">Cheque Number *</Label>
                   <Input
                     id="chequeNo"
-                    placeholder="CHQ123456"
+                    placeholder="Enter cheque number"
                     value={formData.chequeNo}
                     onChange={(e) =>
                       setFormData({ ...formData, chequeNo: e.target.value })
@@ -1056,25 +1119,15 @@ export default function PaymentsPage() {
                     </div>
                   </div>
                   <br />
-                  This action indicates the cheque has bounced or been returned
-                  by the bank.
+                  This indicates the cheque bounced or was rejected.
                 </>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleChequeStatusUpdate}
-              className={
-                chequeActionDialog.action === "passed"
-                  ? "bg-green-600 hover:bg-green-700"
-                  : "bg-destructive hover:bg-destructive/90"
-              }
-            >
-              {chequeActionDialog.action === "passed"
-                ? "Confirm Pass"
-                : "Confirm Return"}
+            <AlertDialogAction onClick={handleChequeStatusUpdate}>
+              Confirm
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
