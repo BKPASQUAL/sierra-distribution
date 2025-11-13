@@ -1046,83 +1046,55 @@ export default function PaymentsPage() {
                 ? "Pass Cheque?"
                 : "Return Cheque?"}
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              {chequeActionDialog.action === "passed" ? (
-                <>
-                  Are you sure you want to mark this cheque as{" "}
-                  <strong>Passed</strong>?
-                  <br />
-                  <br />
-                  <div className="bg-muted p-3 rounded-md mt-2 space-y-1">
-                    <div className="text-sm">
-                      <strong>Cheque No:</strong>{" "}
-                      {chequeActionDialog.payment?.cheque_number}
-                    </div>
-                    {chequeActionDialog.payment?.banks && (
-                      <div className="text-sm">
-                        <strong>Bank:</strong>{" "}
-                        {chequeActionDialog.payment.banks.bank_code} -{" "}
-                        {chequeActionDialog.payment.banks.bank_name}
-                      </div>
-                    )}
-                    <div className="text-sm">
-                      <strong>Amount:</strong> LKR{" "}
-                      {chequeActionDialog.payment?.amount.toLocaleString()}
-                    </div>
-                    <div className="text-sm">
-                      <strong>Cheque Date:</strong>{" "}
-                      {chequeActionDialog.payment?.cheque_date &&
-                        new Date(
-                          chequeActionDialog.payment.cheque_date
-                        ).toLocaleDateString()}
-                    </div>
-                    <div className="text-sm">
-                      <strong>Customer:</strong>{" "}
-                      {chequeActionDialog.payment?.customers?.name || "N/A"}
-                    </div>
-                  </div>
-                  <br />
-                  This action confirms the cheque has cleared successfully.
-                </>
-              ) : (
-                <>
-                  Are you sure you want to mark this cheque as{" "}
-                  <strong>Returned</strong>?
-                  <br />
-                  <br />
-                  <div className="bg-muted p-3 rounded-md mt-2 space-y-1">
-                    <div className="text-sm">
-                      <strong>Cheque No:</strong>{" "}
-                      {chequeActionDialog.payment?.cheque_number}
-                    </div>
-                    {chequeActionDialog.payment?.banks && (
-                      <div className="text-sm">
-                        <strong>Bank:</strong>{" "}
-                        {chequeActionDialog.payment.banks.bank_code} -{" "}
-                        {chequeActionDialog.payment.banks.bank_name}
-                      </div>
-                    )}
-                    <div className="text-sm">
-                      <strong>Amount:</strong> LKR{" "}
-                      {chequeActionDialog.payment?.amount.toLocaleString()}
-                    </div>
-                    <div className="text-sm">
-                      <strong>Cheque Date:</strong>{" "}
-                      {chequeActionDialog.payment?.cheque_date &&
-                        new Date(
-                          chequeActionDialog.payment.cheque_date
-                        ).toLocaleDateString()}
-                    </div>
-                    <div className="text-sm">
-                      <strong>Customer:</strong>{" "}
-                      {chequeActionDialog.payment?.customers?.name || "N/A"}
-                    </div>
-                  </div>
-                  <br />
-                  This indicates the cheque bounced or was rejected.
-                </>
+
+            {/* --- CORRECTED STRUCTURE --- */}
+            {chequeActionDialog.action === "passed" ? (
+              <AlertDialogDescription>
+                Are you sure you want to mark this cheque as{" "}
+                <strong>Passed</strong>?
+                <br />
+                <br />
+                This action confirms the cheque has cleared successfully.
+              </AlertDialogDescription>
+            ) : (
+              <AlertDialogDescription>
+                Are you sure you want to mark this cheque as{" "}
+                <strong>Returned</strong>?
+                <br />
+                <br />
+                This indicates the cheque bounced or was rejected.
+              </AlertDialogDescription>
+            )}
+
+            <div className="bg-muted p-3 rounded-md mt-2 space-y-1">
+              <div className="text-sm">
+                <strong>Cheque No:</strong>{" "}
+                {chequeActionDialog.payment?.cheque_number}
+              </div>
+              {chequeActionDialog.payment?.banks && (
+                <div className="text-sm">
+                  <strong>Bank:</strong>{" "}
+                  {chequeActionDialog.payment.banks.bank_code} -{" "}
+                  {chequeActionDialog.payment.banks.bank_name}
+                </div>
               )}
-            </AlertDialogDescription>
+              <div className="text-sm">
+                <strong>Amount:</strong> LKR{" "}
+                {chequeActionDialog.payment?.amount.toLocaleString()}
+              </div>
+              <div className="text-sm">
+                <strong>Cheque Date:</strong>{" "}
+                {chequeActionDialog.payment?.cheque_date &&
+                  new Date(
+                    chequeActionDialog.payment.cheque_date
+                  ).toLocaleDateString()}
+              </div>
+              <div className="text-sm">
+                <strong>Customer:</strong>{" "}
+                {chequeActionDialog.payment?.customers?.name || "N/A"}
+              </div>
+            </div>
+            {/* --- END OF FIX --- */}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
