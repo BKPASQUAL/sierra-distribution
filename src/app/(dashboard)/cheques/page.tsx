@@ -2,7 +2,6 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-// --- START OF CHANGE ---
 import Link from "next/link";
 import {
   Landmark,
@@ -15,9 +14,8 @@ import {
   Check,
   ChevronsUpDown,
   Search,
-  History, // Added History icon
+  History,
 } from "lucide-react";
-// --- END OF CHANGE ---
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -54,19 +52,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+// --- START OF CHANGE ---
+// Removed Command components as they are no longer needed in this file
+// Removed Popover components as they are no longer needed in this file
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+// --- END OF CHANGE ---
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -124,7 +120,9 @@ export default function ChequeManagementPage() {
   const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
   const [selectedCheck, setSelectedCheck] = useState<Payment | null>(null);
   const [depositAccountId, setDepositAccountId] = useState("");
-  const [accountSearchOpen, setAccountSearchOpen] = useState(false);
+  // --- START OF CHANGE ---
+  // Removed accountSearchOpen state
+  // --- END OF CHANGE ---
   const [actionType, setActionType] = useState<"passed" | "returned" | null>(
     null
   );
@@ -330,7 +328,6 @@ export default function ChequeManagementPage() {
 
   return (
     <div className="space-y-6">
-      {/* --- START OF CHANGE --- */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
@@ -347,7 +344,6 @@ export default function ChequeManagementPage() {
           </Button>
         </Link>
       </div>
-      {/* --- END OF CHANGE --- */}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -391,7 +387,7 @@ export default function ChequeManagementPage() {
           placeholder="Search by cheque no. or customer..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-9 w-full md:w-[300px]"
+          className="pl-9 w-full md:w-[400px]" // Changed width
         />
       </div>
       {/* --- END: SEARCH BAR --- */}
@@ -457,7 +453,6 @@ export default function ChequeManagementPage() {
                             <Button
                               size="sm"
                               onClick={() => openDepositDialog(cheque)}
-                            //   disabled={isPast(parseISO(cheque.cheque_date!))} // Optional: disable deposit for past-due
                             >
                               Deposit
                             </Button>
@@ -643,57 +638,40 @@ export default function ChequeManagementPage() {
             <Label htmlFor="depositAccount" className="pt-2">
               Deposit to Account *
             </Label>
-            <Popover
-              open={accountSearchOpen}
-              onOpenChange={setAccountSearchOpen}
+
+            {/* --- START OF CHANGE --- */}
+            {/* Replaced Popover+Command with Select */}
+            <Select
+              value={depositAccountId}
+              onValueChange={(value) => setDepositAccountId(value)}
             >
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  className="w-full justify-between h-10"
-                  id="depositAccount"
-                >
-                  <span className="truncate">
-                    {depositAccountId
-                      ? companyAccounts.find((a) => a.id === depositAccountId)
-                          ?.account_name
-                      : "Select account..."}
-                  </span>
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full p-0">
-                <Command>
-                  <CommandInput placeholder="Search account..." />
-                  <CommandList>
-                    <CommandEmpty>No account found.</CommandEmpty>
-                    <CommandGroup>
-                      {companyAccounts.map((account) => (
-                        <CommandItem
-                          key={account.id}
-                          value={account.account_name}
-                          onSelect={() => {
-                            setDepositAccountId(account.id);
-                            setAccountSearchOpen(false);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              depositAccountId === account.id
-                                ? "opacity-100"
-                                : "opacity-0"
-                            )}
-                          />
-                          {account.account_name} ({account.banks?.bank_code})
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+              <SelectTrigger className="w-full h-10">
+                <SelectValue placeholder="Select account..." />
+              </SelectTrigger>
+              <SelectContent>
+                {companyAccounts.length === 0 ? (
+                  <SelectItem value="none" disabled>
+                    No accounts found
+                  </SelectItem>
+                ) : (
+                  companyAccounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      <div className="flex flex-col">
+                        <span className="font-medium">
+                          {account.account_name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {account.account_number}
+                          {account.account_number && account.banks ? " - " : ""}
+                          {account.banks?.bank_name}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+            {/* --- END OF CHANGE --- */}
           </div>
           <DialogFooter>
             <Button
