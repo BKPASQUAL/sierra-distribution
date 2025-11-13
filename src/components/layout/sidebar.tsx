@@ -17,6 +17,7 @@ import {
   Truck,
   AlertCircle,
   Receipt,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ const navigation = [
   { name: "Bills", href: "/bills", icon: FileText },
   { name: "Expenses", href: "/expenses", icon: Receipt },
   { name: "Payments", href: "/payments", icon: DollarSign },
+  { name: "Bank Accounts", href: "/bank-accounts", icon: Wallet },
   { name: "Due Invoices", href: "/due-invoices", icon: AlertCircle },
   {
     name: "Reports",
