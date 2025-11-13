@@ -432,6 +432,56 @@ export interface Database {
           updated_at?: string;
         };
       };
+      bank_accounts: {
+        Row: {
+          id: string;
+          account_name: string;
+          account_number: string;
+          bank_name: string; // Direct bank name without foreign key
+          account_type: "current" | "savings" | "cash";
+          branch: string | null;
+          opening_balance: number;
+          current_balance: number;
+          currency: string;
+          is_active: boolean;
+          is_primary: boolean;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          account_name: string;
+          account_number: string;
+          bank_name: string;
+          account_type: "current" | "savings" | "cash";
+          branch?: string | null;
+          opening_balance?: number;
+          current_balance?: number;
+          currency?: string;
+          is_active?: boolean;
+          is_primary?: boolean;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          account_name?: string;
+          account_number?: string;
+          bank_name?: string;
+          account_type?: "current" | "savings" | "cash";
+          branch?: string | null;
+          opening_balance?: number;
+          current_balance?: number;
+          currency?: string;
+          is_active?: boolean;
+          is_primary?: boolean;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;
