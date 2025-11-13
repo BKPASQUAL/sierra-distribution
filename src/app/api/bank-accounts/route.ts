@@ -8,13 +8,15 @@ export async function GET() {
     const supabase = await createClient();
     const { data: accounts, error } = await supabase
       .from("bank_accounts")
-      .select(`
+      .select(
+        `
         *,
         banks (
           bank_code,
           bank_name
         )
-      `)
+      `
+      )
       .order("account_type", { ascending: true })
       .order("account_name", { ascending: true });
 
@@ -23,7 +25,10 @@ export async function GET() {
     }
     return NextResponse.json({ accounts }, { status: 200 });
   } catch (error) {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
@@ -53,6 +58,9 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ account }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }

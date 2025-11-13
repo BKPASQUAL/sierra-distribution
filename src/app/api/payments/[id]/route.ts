@@ -1,134 +1,168 @@
 // src/app/api/payments/[id]/route.ts
-import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
+import { createClient } from "@/lib/supabase/server";
+import { NextResponse } from "next/server";
 
 // PATCH - Update payment (specifically for cheque status)
 export async function PATCH(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } } // Corrected params type
 ) {
   try {
-    const supabase = await createClient()
-    const { id } = await params
-    const body = await request.json()
+    const supabase = await createClient();
+    const { id } = params;
+    const body = await request.json();
 
-    const { cheque_status } = body
+    // Get all needed data from the body
+    const { cheque_status, amount, bank_account_id } = body;
 
     // Validate cheque status
-    if (!cheque_status || !['pending', 'passed', 'returned'].includes(cheque_status)) {
+    if (
+      !cheque_status ||
+      !["pending", "passed", "returned"].includes(cheque_status)
+    ) {
       return NextResponse.json(
-        { error: 'Invalid cheque status. Must be: pending, passed, or returned' },
+        {
+          error: "Invalid cheque status. Must be: pending, passed, or returned",
+        },
         { status: 400 }
-      )
+      );
     }
 
-    // Get the payment to verify it's a cheque
+    // Get the payment to verify it's a cheque and get customer_id
     const { data: payment, error: fetchError } = await supabase
-      .from('payments')
-      .select('payment_method, customer_id, order_id, amount')
-      .eq('id', id)
-      .single()
+      .from("payments")
+      .select("payment_method, customer_id, order_id, amount")
+      .eq("id", id)
+      .single();
 
     if (fetchError || !payment) {
-      return NextResponse.json(
-        { error: 'Payment not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Payment not found" }, { status: 404 });
     }
 
-    if (payment.payment_method.toLowerCase() !== 'cheque') {
+    if (payment.payment_method.toLowerCase() !== "cheque") {
       return NextResponse.json(
-        { error: 'Cannot update cheque status for non-cheque payment' },
+        { error: "Cannot update cheque status for non-cheque payment" },
         { status: 400 }
-      )
+      );
     }
 
     // Update the cheque status
     const { data: updatedPayment, error: updateError } = await supabase
-      .from('payments')
+      .from("payments")
       .update({ cheque_status })
-      .eq('id', id)
+      .eq("id", id)
       .select()
-      .single()
+      .single();
 
     if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
-    // If cheque is returned, we need to handle the payment failure
-    if (cheque_status === 'returned' && payment.order_id) {
+    // --- THIS IS THE FIX ---
+    // 1. If cheque PASSED, add funds to the bank account
+    if (cheque_status === "passed" && bank_account_id && amount) {
+      try {
+        const { data: account, error: accError } = await supabase
+          .from("bank_accounts")
+          .select("current_balance")
+          .eq("id", bank_account_id)
+          .single();
+
+        if (accError || !account) throw new Error("Bank account not found.");
+
+        // Add the amount to the current balance
+        const newBankBalance = account.current_balance + parseFloat(amount);
+        await supabase
+          .from("bank_accounts")
+          .update({ current_balance: newBankBalance })
+          .eq("id", bank_account_id);
+      } catch (e) {
+        console.error(
+          "Failed to update bank balance on cheque pass:",
+          (e as Error).message
+        );
+        // Don't fail the whole request, just log it
+      }
+    }
+    // --- END OF FIX ---
+
+    // 2. If cheque is RETURNED, we need to handle the payment failure
+    if (cheque_status === "returned" && payment.order_id) {
       // Recalculate order payment status (excluding this returned cheque)
       const { data: orderPayments } = await supabase
-        .from('payments')
-        .select('amount, cheque_status, id')
-        .eq('order_id', payment.order_id)
+        .from("payments")
+        .select("amount, cheque_status, id")
+        .eq("order_id", payment.order_id);
 
       // Sum only successful payments (not returned cheques)
-      const totalPaid = orderPayments?.reduce((sum, p) => {
-        if (p.cheque_status === 'returned') return sum
-        return sum + p.amount
-      }, 0) || 0
+      const totalPaid =
+        orderPayments?.reduce((sum, p) => {
+          if (p.cheque_status === "returned") return sum;
+          return sum + p.amount;
+        }, 0) || 0;
 
       // Get order total
       const { data: order } = await supabase
-        .from('orders')
-        .select('total_amount')
-        .eq('id', payment.order_id)
-        .single()
+        .from("orders")
+        .select("total_amount")
+        .eq("id", payment.order_id)
+        .single();
 
       if (order) {
-        let newPaymentStatus: 'unpaid' | 'partial' | 'paid' = 'unpaid'
+        let newPaymentStatus: "unpaid" | "partial" | "paid" = "unpaid";
         if (totalPaid >= order.total_amount) {
-          newPaymentStatus = 'paid'
+          newPaymentStatus = "paid";
         } else if (totalPaid > 0) {
-          newPaymentStatus = 'partial'
+          newPaymentStatus = "partial";
         }
 
         // Update order payment status
         await supabase
-          .from('orders')
+          .from("orders")
           .update({ payment_status: newPaymentStatus })
-          .eq('id', payment.order_id)
+          .eq("id", payment.order_id);
 
         // Update customer outstanding balance (add back the returned amount)
         const { data: customer } = await supabase
-          .from('customers')
-          .select('outstanding_balance')
-          .eq('id', payment.customer_id)
-          .single()
+          .from("customers")
+          .select("outstanding_balance")
+          .eq("id", payment.customer_id)
+          .single();
 
         if (customer) {
-          const newBalance = (customer.outstanding_balance || 0) + payment.amount
+          const newBalance =
+            (customer.outstanding_balance || 0) + payment.amount;
           await supabase
-            .from('customers')
+            .from("customers")
             .update({ outstanding_balance: newBalance })
-            .eq('id', payment.customer_id)
+            .eq("id", payment.customer_id);
         }
       }
     }
 
-    return NextResponse.json({ payment: updatedPayment }, { status: 200 })
+    return NextResponse.json({ payment: updatedPayment }, { status: 200 });
   } catch (error) {
-    console.error('Error updating payment:', error)
+    console.error("Error updating payment:", error);
     return NextResponse.json(
-      { error: 'Internal server error while updating payment' },
+      { error: "Internal server error while updating payment" },
       { status: 500 }
-    )
+    );
   }
 }
 
 // GET single payment
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } } // Corrected params type
 ) {
   try {
-    const supabase = await createClient()
-    const { id } = await params
+    const supabase = await createClient();
+    const { id } = params;
 
     const { data: payment, error } = await supabase
-      .from('payments')
-      .select(`
+      .from("payments")
+      .select(
+        `
         *,
         customers (
           name,
@@ -138,23 +172,24 @@ export async function GET(
           order_number,
           total_amount
         )
-      `)
-      .eq('id', id)
-      .single()
+      `
+      )
+      .eq("id", id)
+      .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     if (!payment) {
-      return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
+      return NextResponse.json({ error: "Payment not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ payment }, { status: 200 })
+    return NextResponse.json({ payment }, { status: 200 });
   } catch (error) {
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: "Internal server error" },
       { status: 500 }
-    )
+    );
   }
 }
