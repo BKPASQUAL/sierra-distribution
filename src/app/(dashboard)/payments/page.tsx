@@ -11,6 +11,9 @@ import {
   XCircle,
   Clock,
   Loader2,
+  // --- START OF CHANGE ---
+  Banknote, // Import Banknote icon for 'deposited'
+  // --- END OF CHANGE ---
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +21,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -45,16 +49,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+// --- START OF CHANGE ---
+// Removed AlertDialog imports
+// --- END OF CHANGE ---
 import {
   Command,
   CommandEmpty,
@@ -105,7 +102,7 @@ interface Payment {
   notes: string | null;
   cheque_number: string | null;
   cheque_date: string | null;
-  cheque_status: "pending" | "passed" | "returned" | null;
+  cheque_status: "pending" | "deposited" | "passed" | "returned" | null;
   bank_id: string | null;
   deposit_account_id: string | null;
   customers?: {
@@ -151,6 +148,10 @@ export default function PaymentsPage() {
   const [bankSearchOpen, setBankSearchOpen] = useState(false);
   const [accountSearchOpen, setAccountSearchOpen] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
   const [formData, setFormData] = useState({
     orderId: "",
     amount: 0,
@@ -163,15 +164,9 @@ export default function PaymentsPage() {
     notes: "",
   });
 
-  const [chequeActionDialog, setChequeActionDialog] = useState<{
-    open: boolean;
-    payment: Payment | null;
-    action: "passed" | "returned" | null;
-  }>({
-    open: false,
-    payment: null,
-    action: null,
-  });
+  // --- START OF CHANGE ---
+  // Removed chequeActionDialog state
+  // --- END OF CHANGE ---
 
   useEffect(() => {
     fetchPayments();
@@ -179,6 +174,11 @@ export default function PaymentsPage() {
     fetchBanks();
     fetchCompanyAccounts();
   }, []);
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, methodFilter, chequeStatusFilter]);
 
   const fetchPayments = async () => {
     try {
@@ -262,11 +262,26 @@ export default function PaymentsPage() {
   const totalPayments = payments.length;
   const totalReceived = payments.reduce((sum, p) => sum + p.amount, 0);
   const pendingCheques = payments.filter(
-    (p) => p.cheque_status === "pending"
+    (p) => p.cheque_status === "pending" || p.cheque_status === "deposited"
   ).length;
   const returnedCheques = payments.filter(
     (p) => p.cheque_status === "returned"
   ).length;
+
+  // Pagination logic
+  const totalItems = filteredPayments.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = currentPage * itemsPerPage;
+  const paginatedPayments = filteredPayments.slice(startIndex, endIndex);
+
+  const handleNextPage = () => {
+    setCurrentPage((prev) => Math.min(prev + 1, totalPages));
+  };
+
+  const handlePreviousPage = () => {
+    setCurrentPage((prev) => Math.max(prev - 1, 1));
+  };
 
   // Get available accounts based on payment method
   const getAvailableAccounts = () => {
@@ -295,11 +310,9 @@ export default function PaymentsPage() {
       return;
     }
 
-    // Validate deposit account selection
+    // Validate deposit account selection (Cheque removed from this validation)
     if (
-      (formData.method === "bank" ||
-        formData.method === "cheque" ||
-        formData.method === "cash") &&
+      (formData.method === "bank" || formData.method === "cash") &&
       !formData.depositAccountId
     ) {
       const accountType =
@@ -329,7 +342,9 @@ export default function PaymentsPage() {
         payment_date: formData.date,
         amount: formData.amount,
         payment_method: formData.method,
-        deposit_account_id: formData.depositAccountId, // Include deposit account
+        // Set deposit_account_id to null if method is cheque
+        deposit_account_id:
+          formData.method === "cheque" ? null : formData.depositAccountId,
         reference_number: null,
         notes: formData.notes || null,
         cheque_number: formData.method === "cheque" ? formData.chequeNo : null,
@@ -381,45 +396,11 @@ export default function PaymentsPage() {
     });
   };
 
-  const openChequeActionDialog = (
-    payment: Payment,
-    action: "passed" | "returned"
-  ) => {
-    setChequeActionDialog({ open: true, payment, action });
-  };
+  // --- START OF CHANGE ---
+  // Removed openChequeActionDialog and handleChequeStatusUpdate functions
+  // --- END OF CHANGE ---
 
-  const handleChequeStatusUpdate = async () => {
-    if (!chequeActionDialog.payment || !chequeActionDialog.action) return;
-
-    try {
-      const response = await fetch(
-        `/api/payments/${chequeActionDialog.payment.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            cheque_status: chequeActionDialog.action,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to update cheque status");
-      }
-
-      toast.success(`Cheque marked as ${chequeActionDialog.action}!`);
-
-      await fetchPayments();
-
-      setChequeActionDialog({ open: false, payment: null, action: null });
-    } catch (error) {
-      console.error("Error updating cheque status:", error);
-      toast.error(`Error: ${(error as Error).message}`);
-    }
-  };
-
+  // Updated function to handle 'deposited' status
   const getChequeStatusBadge = (
     status: Payment["cheque_status"],
     chequeDate: string | null
@@ -438,6 +419,12 @@ export default function PaymentsPage() {
         icon: Clock,
         label: isOverdue ? "Overdue" : "Pending",
       },
+      deposited: {
+        color: "text-blue-600",
+        bg: "bg-blue-50",
+        icon: Banknote,
+        label: "Deposited",
+      },
       passed: {
         color: "text-green-600",
         bg: "bg-green-50",
@@ -453,6 +440,16 @@ export default function PaymentsPage() {
     };
 
     const config = statusConfig[status];
+
+    if (!config) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-gray-50 text-gray-600">
+          <Clock className="w-3 h-3" />
+          {status}
+        </span>
+      );
+    }
+
     const Icon = config.icon;
 
     return (
@@ -567,6 +564,7 @@ export default function PaymentsPage() {
                 <SelectContent>
                   <SelectItem value="all">All Cheques</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="deposited">Deposited</SelectItem>
                   <SelectItem value="passed">Passed</SelectItem>
                   <SelectItem value="returned">Returned</SelectItem>
                 </SelectContent>
@@ -586,18 +584,20 @@ export default function PaymentsPage() {
                 <TableHead>Method</TableHead>
                 <TableHead>Deposit Account</TableHead>
                 <TableHead>Cheque/Bank Details</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {/* --- START OF CHANGE --- */}
+                <TableHead className="text-right">Cheque Status</TableHead>
+                {/* --- END OF CHANGE --- */}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredPayments.length === 0 ? (
+              {paginatedPayments.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center py-10">
                     No payments found
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredPayments.map((payment) => (
+                paginatedPayments.map((payment) => (
                   <TableRow key={payment.id}>
                     <TableCell>
                       {new Date(payment.payment_date).toLocaleDateString()}
@@ -649,10 +649,9 @@ export default function PaymentsPage() {
                               ).toLocaleDateString()}
                             </div>
                           )}
-                          {getChequeStatusBadge(
-                            payment.cheque_status,
-                            payment.cheque_date
-                          )}
+                          {/* --- START OF CHANGE --- */}
+                          {/* Status badge moved to its own column */}
+                          {/* --- END OF CHANGE --- */}
                         </div>
                       )}
                       {payment.payment_method === "bank" && payment.banks && (
@@ -671,39 +670,48 @@ export default function PaymentsPage() {
                         </span>
                       )}
                     </TableCell>
+                    {/* --- START OF CHANGE --- */}
+                    {/* New TableCell for Cheque Status Badge */}
                     <TableCell className="text-right">
                       {payment.payment_method === "cheque" &&
-                        payment.cheque_status === "pending" && (
-                          <div className="flex gap-2 justify-end">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                openChequeActionDialog(payment, "passed")
-                              }
-                              className="text-green-600 hover:text-green-700"
-                            >
-                              Pass
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                openChequeActionDialog(payment, "returned")
-                              }
-                              className="text-red-600 hover:text-red-700"
-                            >
-                              Return
-                            </Button>
-                          </div>
+                        getChequeStatusBadge(
+                          payment.cheque_status,
+                          payment.cheque_date
                         )}
                     </TableCell>
+                    {/* --- END OF CHANGE --- */}
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
         </CardContent>
+
+        {/* Pagination Controls */}
+        <CardFooter className="flex items-center justify-between py-4">
+          <div className="text-sm text-muted-foreground">
+            Showing {Math.min(startIndex + 1, totalItems)} to{" "}
+            {Math.min(endIndex, totalItems)} of {totalItems} entries
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePreviousPage}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNextPage}
+              disabled={currentPage === totalPages || totalPages === 0}
+            >
+              Next
+            </Button>
+          </div>
+        </CardFooter>
       </Card>
 
       {/* Add Payment Dialog */}
@@ -804,10 +812,8 @@ export default function PaymentsPage() {
               </Select>
             </div>
 
-            {/* Deposit Account Selection - Show for Cash, Bank Transfer, and Cheque */}
-            {(formData.method === "cash" ||
-              formData.method === "bank" ||
-              formData.method === "cheque") && (
+            {/* Deposit Account Selection - Show for Cash and Bank Transfer ONLY */}
+            {(formData.method === "cash" || formData.method === "bank") && (
               <div className="space-y-2">
                 <Label>
                   {formData.method === "cash"
@@ -1031,79 +1037,9 @@ export default function PaymentsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Cheque Action Confirmation Dialog */}
-      <AlertDialog
-        open={chequeActionDialog.open}
-        onOpenChange={(open) =>
-          !open &&
-          setChequeActionDialog({ open: false, payment: null, action: null })
-        }
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {chequeActionDialog.action === "passed"
-                ? "Pass Cheque?"
-                : "Return Cheque?"}
-            </AlertDialogTitle>
-
-            {/* --- CORRECTED STRUCTURE --- */}
-            {chequeActionDialog.action === "passed" ? (
-              <AlertDialogDescription>
-                Are you sure you want to mark this cheque as{" "}
-                <strong>Passed</strong>?
-                <br />
-                <br />
-                This action confirms the cheque has cleared successfully.
-              </AlertDialogDescription>
-            ) : (
-              <AlertDialogDescription>
-                Are you sure you want to mark this cheque as{" "}
-                <strong>Returned</strong>?
-                <br />
-                <br />
-                This indicates the cheque bounced or was rejected.
-              </AlertDialogDescription>
-            )}
-
-            <div className="bg-muted p-3 rounded-md mt-2 space-y-1">
-              <div className="text-sm">
-                <strong>Cheque No:</strong>{" "}
-                {chequeActionDialog.payment?.cheque_number}
-              </div>
-              {chequeActionDialog.payment?.banks && (
-                <div className="text-sm">
-                  <strong>Bank:</strong>{" "}
-                  {chequeActionDialog.payment.banks.bank_code} -{" "}
-                  {chequeActionDialog.payment.banks.bank_name}
-                </div>
-              )}
-              <div className="text-sm">
-                <strong>Amount:</strong> LKR{" "}
-                {chequeActionDialog.payment?.amount.toLocaleString()}
-              </div>
-              <div className="text-sm">
-                <strong>Cheque Date:</strong>{" "}
-                {chequeActionDialog.payment?.cheque_date &&
-                  new Date(
-                    chequeActionDialog.payment.cheque_date
-                  ).toLocaleDateString()}
-              </div>
-              <div className="text-sm">
-                <strong>Customer:</strong>{" "}
-                {chequeActionDialog.payment?.customers?.name || "N/A"}
-              </div>
-            </div>
-            {/* --- END OF FIX --- */}
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleChequeStatusUpdate}>
-              Confirm
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* --- START OF CHANGE --- */}
+      {/* Removed the Cheque Action Confirmation Dialog */}
+      {/* --- END OF CHANGE --- */}
     </div>
   );
 }

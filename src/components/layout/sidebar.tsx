@@ -33,6 +33,7 @@ const navigation = [
   { name: "Bills", href: "/bills", icon: FileText },
   { name: "Expenses", href: "/expenses", icon: Receipt },
   { name: "Payments", href: "/payments", icon: DollarSign },
+  { name: "Cheque Management", href: "/cheques", icon: Landmark },
   { name: "Accounts", href: "/accounts", icon: Landmark, adminOnly: true },
   { name: "Due Invoices", href: "/due-invoices", icon: AlertCircle },
   {

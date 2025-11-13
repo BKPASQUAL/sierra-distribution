@@ -104,21 +104,21 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate deposit_account_id for cash, bank, and cheque payments
+    // --- START OF FIX ---
+    // Validate deposit_account_id for cash and bank payments ONLY
     if (
-      (payment_method === "cash" ||
-        payment_method === "bank" ||
-        payment_method === "cheque") &&
+      (payment_method === "cash" || payment_method === "bank") &&
       !deposit_account_id
     ) {
       return NextResponse.json(
         {
           error:
-            "Deposit account is required for cash, bank transfer, and cheque payments",
+            "Deposit account is required for cash and bank transfer payments",
         },
         { status: 400 }
       );
     }
+    // --- END OF FIX ---
 
     // Validate cheque fields if payment method is cheque
     if (payment_method.toLowerCase() === "cheque") {
@@ -164,7 +164,10 @@ export async function POST(request: Request) {
           payment_date: payment_date || new Date().toISOString().split("T")[0],
           amount,
           payment_method,
+          // --- START OF FIX ---
+          // Set deposit_account_id to null if it wasn't provided (e.g., for cheques)
           deposit_account_id: deposit_account_id || null,
+          // --- END OF FIX ---
           reference_number: reference_number || null,
           notes: notes || null,
           cheque_number: cheque_number || null,
@@ -185,6 +188,7 @@ export async function POST(request: Request) {
     }
 
     // Update company account balance if deposit account is provided
+    // This will now only run for cash/bank, or for cheques *if* a deposit account was chosen
     if (deposit_account_id) {
       const newBalance = accountBalance + parseFloat(amount);
 
