@@ -21,6 +21,10 @@ import {
   Receipt,
   Fuel,
   Wrench,
+  Scale,
+  Wallet,
+  Building2,
+  TrendingUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -136,6 +140,78 @@ interface ExpenseSummary {
   topVendors: { vendor: string; total: number; count: number }[];
 }
 
+interface FinancialAccounts {
+  tradingAccount: {
+    salesRevenue: number;
+    costOfGoodsSold: number;
+    grossProfit: number;
+    grossProfitMargin: number;
+    totalDiscounts: number;
+    totalOrders: number;
+  };
+  profitAndLoss: {
+    grossProfit: number;
+    expenses: {
+      fuel: number;
+      maintenance: number;
+      other: number;
+      total: number;
+    };
+    netProfit: number;
+    netProfitMargin: number;
+    expenseRatio: number;
+  };
+  balanceSheet: {
+    assets: {
+      currentAssets: {
+        cash: number;
+        bank: number;
+        cheques: number;
+        accountsReceivable: {
+          amount: number;
+          invoiceCount: number;
+        };
+        inventory: {
+          atCost: number;
+          atMRP: number;
+        };
+        total: number;
+      };
+      fixedAssets: number;
+      totalAssets: number;
+    };
+    liabilities: {
+      currentLiabilities: {
+        accountsPayable: number;
+        loans: number;
+        total: number;
+      };
+      longTermLiabilities: number;
+      totalLiabilities: number;
+    };
+    capital: {
+      ownersEquity: number;
+      retainedEarnings: number;
+      totalCapital: number;
+    };
+  };
+  summary: {
+    period: {
+      startDate: string;
+      endDate: string;
+    };
+    keyMetrics: {
+      revenue: number;
+      cogs: number;
+      grossProfit: number;
+      expenses: number;
+      netProfit: number;
+      grossMargin: number;
+      netMargin: number;
+    };
+  };
+}
+
 export default function ReportsPage() {
   // Auth state
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -161,6 +237,8 @@ export default function ReportsPage() {
     byMonth: [],
     topVendors: [],
   });
+  const [financialAccounts, setFinancialAccounts] = useState<FinancialAccounts | null>(null);
+  const [loadingFinancialAccounts, setLoadingFinancialAccounts] = useState(false);
 
   // Filter state
   const [dateFrom, setDateFrom] = useState(() => {
@@ -469,6 +547,29 @@ export default function ReportsPage() {
       byMonth,
       topVendors,
     });
+  };
+
+  const fetchFinancialAccounts = async () => {
+    try {
+      setLoadingFinancialAccounts(true);
+
+      const params = new URLSearchParams();
+      if (dateFrom) params.append("start_date", dateFrom);
+      if (dateTo) params.append("end_date", dateTo);
+
+      const response = await fetch(`/api/reports/financial-accounts?${params.toString()}`);
+      const data = await response.json();
+
+      if (response.ok) {
+        setFinancialAccounts(data);
+      } else {
+        console.error("Failed to fetch financial accounts:", data.error);
+      }
+    } catch (error) {
+      console.error("Error fetching financial accounts:", error);
+    } finally {
+      setLoadingFinancialAccounts(false);
+    }
   };
 
   const filteredOrders = orders.filter((order) => {
@@ -810,8 +911,12 @@ export default function ReportsPage() {
       </div>
 
       {/* Reports Tabs */}
-      <Tabs defaultValue="profit" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
+      <Tabs defaultValue="financial" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-7">
+          <TabsTrigger value="financial" onClick={fetchFinancialAccounts}>
+            <Scale className="w-4 h-4 mr-2" />
+            Financial Accounts
+          </TabsTrigger>
           <TabsTrigger value="profit">
             <TrendingUp className="w-4 h-4 mr-2" />
             Profit Analysis
@@ -837,6 +942,470 @@ export default function ReportsPage() {
             Summary
           </TabsTrigger>
         </TabsList>
+
+        {/* Financial Accounts Tab */}
+        <TabsContent value="financial" className="space-y-4">
+          {loadingFinancialAccounts ? (
+            <div className="flex items-center justify-center h-96">
+              <div className="text-center space-y-3">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto" />
+                <p className="text-sm text-muted-foreground">
+                  Loading financial accounts...
+                </p>
+              </div>
+            </div>
+          ) : financialAccounts ? (
+            <>
+              {/* 1. TRADING ACCOUNT */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <TrendingUpDown className="w-5 h-5 text-blue-600" />
+                    <div>
+                      <CardTitle>Trading Account</CardTitle>
+                      <CardDescription>
+                        Direct trading performance (Sales Revenue, COGS, Gross Profit)
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <Card className="border-blue-200 dark:border-blue-800">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">
+                            Sales Revenue
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-blue-600">
+                            LKR {financialAccounts.tradingAccount.salesRevenue.toLocaleString()}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            From {financialAccounts.tradingAccount.totalOrders} orders
+                          </p>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-red-200 dark:border-red-800">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">
+                            Cost of Goods Sold (COGS)
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-red-600">
+                            LKR {financialAccounts.tradingAccount.costOfGoodsSold.toLocaleString()}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Cost price of goods sold
+                          </p>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-green-200 dark:border-green-800">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">
+                            Gross Profit
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-green-600">
+                            LKR {financialAccounts.tradingAccount.grossProfit.toLocaleString()}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Margin: {financialAccounts.tradingAccount.grossProfitMargin.toFixed(2)}%
+                          </p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-muted/50">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Sales Revenue</span>
+                          <span className="font-medium">
+                            LKR {financialAccounts.tradingAccount.salesRevenue.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-red-600">
+                          <span className="text-sm">Less: Cost of Goods Sold</span>
+                          <span className="font-medium">
+                            (LKR {financialAccounts.tradingAccount.costOfGoodsSold.toLocaleString()})
+                          </span>
+                        </div>
+                        <div className="border-t pt-2 flex items-center justify-between">
+                          <span className="font-bold">Gross Profit</span>
+                          <span className="font-bold text-green-600 text-lg">
+                            LKR {financialAccounts.tradingAccount.grossProfit.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 2. PROFIT & LOSS ACCOUNT */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-green-600" />
+                    <div>
+                      <CardTitle>Profit & Loss Account</CardTitle>
+                      <CardDescription>
+                        Overall profitability after operating expenses (Net Profit)
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Card className="border-green-200 dark:border-green-800">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">
+                            Gross Profit
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-green-600">
+                            LKR {financialAccounts.profitAndLoss.grossProfit.toLocaleString()}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            From trading operations
+                          </p>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-orange-200 dark:border-orange-800">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">
+                            Operating Expenses
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-orange-600">
+                            LKR {financialAccounts.profitAndLoss.expenses.total.toLocaleString()}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Fuel, Maintenance, Other
+                          </p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="p-4 rounded-lg border">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Fuel className="w-4 h-4 text-blue-600" />
+                          <span className="text-sm font-medium">Fuel</span>
+                        </div>
+                        <div className="text-xl font-bold">
+                          LKR {financialAccounts.profitAndLoss.expenses.fuel.toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="p-4 rounded-lg border">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Wrench className="w-4 h-4 text-orange-600" />
+                          <span className="text-sm font-medium">Maintenance</span>
+                        </div>
+                        <div className="text-xl font-bold">
+                          LKR {financialAccounts.profitAndLoss.expenses.maintenance.toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="p-4 rounded-lg border">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Receipt className="w-4 h-4 text-gray-600" />
+                          <span className="text-sm font-medium">Other</span>
+                        </div>
+                        <div className="text-xl font-bold">
+                          LKR {financialAccounts.profitAndLoss.expenses.other.toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-lg border bg-muted/50">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Gross Profit</span>
+                          <span className="font-medium text-green-600">
+                            LKR {financialAccounts.profitAndLoss.grossProfit.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-orange-600">
+                          <span className="text-sm">Less: Operating Expenses</span>
+                          <span className="font-medium">
+                            (LKR {financialAccounts.profitAndLoss.expenses.total.toLocaleString()})
+                          </span>
+                        </div>
+                        <div className="border-t pt-2 flex items-center justify-between">
+                          <span className="font-bold">Net Profit</span>
+                          <span className={`font-bold text-lg ${
+                            financialAccounts.profitAndLoss.netProfit >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}>
+                            LKR {financialAccounts.profitAndLoss.netProfit.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Net Profit Margin</span>
+                          <span className="font-medium">
+                            {financialAccounts.profitAndLoss.netProfitMargin.toFixed(2)}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 3. BALANCE SHEET */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Scale className="w-5 h-5 text-purple-600" />
+                    <div>
+                      <CardTitle>Balance Sheet</CardTitle>
+                      <CardDescription>
+                        Financial position - Assets, Liabilities, and Capital
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-6 md:grid-cols-2">
+                    {/* ASSETS */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Wallet className="w-5 h-5 text-blue-600" />
+                        <h3 className="font-bold text-lg">ASSETS</h3>
+                      </div>
+
+                      <Card className="border-blue-200 dark:border-blue-800">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">Current Assets</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Cash</span>
+                            <span className="font-medium">
+                              LKR {financialAccounts.balanceSheet.assets.currentAssets.cash.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Bank</span>
+                            <span className="font-medium">
+                              LKR {financialAccounts.balanceSheet.assets.currentAssets.bank.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Cheques (Pending/Passed)</span>
+                            <span className="font-medium">
+                              LKR {financialAccounts.balanceSheet.assets.currentAssets.cheques.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">
+                              Accounts Receivable ({financialAccounts.balanceSheet.assets.currentAssets.accountsReceivable.invoiceCount})
+                            </span>
+                            <span className="font-medium">
+                              LKR {financialAccounts.balanceSheet.assets.currentAssets.accountsReceivable.amount.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Inventory (at cost)</span>
+                            <span className="font-medium">
+                              LKR {financialAccounts.balanceSheet.assets.currentAssets.inventory.atCost.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="border-t pt-2 flex items-center justify-between">
+                            <span className="font-bold">Total Current Assets</span>
+                            <span className="font-bold text-blue-600">
+                              LKR {financialAccounts.balanceSheet.assets.currentAssets.total.toLocaleString()}
+                            </span>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <div className="p-4 rounded-lg border bg-blue-50 dark:bg-blue-900/10">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-lg">TOTAL ASSETS</span>
+                          <span className="font-bold text-blue-600 text-xl">
+                            LKR {financialAccounts.balanceSheet.assets.totalAssets.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* LIABILITIES & CAPITAL */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Building2 className="w-5 h-5 text-red-600" />
+                        <h3 className="font-bold text-lg">LIABILITIES & CAPITAL</h3>
+                      </div>
+
+                      <Card className="border-red-200 dark:border-red-800">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">Current Liabilities</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Accounts Payable</span>
+                            <span className="font-medium">
+                              LKR {financialAccounts.balanceSheet.liabilities.currentLiabilities.accountsPayable.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Loans</span>
+                            <span className="font-medium">
+                              LKR {financialAccounts.balanceSheet.liabilities.currentLiabilities.loans.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="border-t pt-2 flex items-center justify-between">
+                            <span className="font-bold">Total Liabilities</span>
+                            <span className="font-bold text-red-600">
+                              LKR {financialAccounts.balanceSheet.liabilities.totalLiabilities.toLocaleString()}
+                            </span>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border-green-200 dark:border-green-800">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium">Owner's Equity/Capital</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Owner's Equity</span>
+                            <span className="font-medium">
+                              LKR {financialAccounts.balanceSheet.capital.ownersEquity.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Retained Earnings (Current)</span>
+                            <span className="font-medium">
+                              LKR {financialAccounts.balanceSheet.capital.retainedEarnings.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="border-t pt-2 flex items-center justify-between">
+                            <span className="font-bold">Total Capital</span>
+                            <span className="font-bold text-green-600">
+                              LKR {financialAccounts.balanceSheet.capital.totalCapital.toLocaleString()}
+                            </span>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <div className="p-4 rounded-lg border bg-purple-50 dark:bg-purple-900/10">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-lg">TOTAL LIABILITIES + CAPITAL</span>
+                          <span className="font-bold text-purple-600 text-xl">
+                            LKR {(financialAccounts.balanceSheet.liabilities.totalLiabilities +
+                                  financialAccounts.balanceSheet.capital.totalCapital).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Balance Sheet Equation */}
+                  <div className="mt-6 p-4 rounded-lg border-2 border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/10">
+                    <div className="text-center space-y-2">
+                      <p className="text-sm text-muted-foreground font-medium">
+                        Balance Sheet Equation
+                      </p>
+                      <p className="text-lg font-bold">
+                        Assets = Liabilities + Capital
+                      </p>
+                      <p className="text-sm">
+                        LKR {financialAccounts.balanceSheet.assets.totalAssets.toLocaleString()} =
+                        LKR {financialAccounts.balanceSheet.liabilities.totalLiabilities.toLocaleString()} +
+                        LKR {financialAccounts.balanceSheet.capital.totalCapital.toLocaleString()}
+                      </p>
+                      {Math.abs(
+                        financialAccounts.balanceSheet.assets.totalAssets -
+                        (financialAccounts.balanceSheet.liabilities.totalLiabilities +
+                         financialAccounts.balanceSheet.capital.totalCapital)
+                      ) < 1 ? (
+                        <p className="text-green-600 text-sm font-medium flex items-center justify-center gap-2">
+                          <CheckCircle className="w-4 h-4" />
+                          Balance Sheet is Balanced
+                        </p>
+                      ) : (
+                        <p className="text-orange-600 text-sm font-medium flex items-center justify-center gap-2">
+                          <AlertTriangle className="w-4 h-4" />
+                          Small variance due to rounding
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Summary Overview */}
+              <Card className="border-2 border-primary">
+                <CardHeader>
+                  <CardTitle>Financial Summary</CardTitle>
+                  <CardDescription>
+                    Period: {financialAccounts.summary.period.startDate} to {financialAccounts.summary.period.endDate}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <div className="p-4 rounded-lg border">
+                      <p className="text-sm text-muted-foreground mb-1">Revenue</p>
+                      <p className="text-2xl font-bold">
+                        LKR {financialAccounts.summary.keyMetrics.revenue.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-lg border">
+                      <p className="text-sm text-muted-foreground mb-1">COGS</p>
+                      <p className="text-2xl font-bold text-red-600">
+                        LKR {financialAccounts.summary.keyMetrics.cogs.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-lg border">
+                      <p className="text-sm text-muted-foreground mb-1">Gross Profit</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        LKR {financialAccounts.summary.keyMetrics.grossProfit.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Margin: {financialAccounts.summary.keyMetrics.grossMargin.toFixed(2)}%
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-lg border">
+                      <p className="text-sm text-muted-foreground mb-1">Net Profit</p>
+                      <p className={`text-2xl font-bold ${
+                        financialAccounts.summary.keyMetrics.netProfit >= 0
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}>
+                        LKR {financialAccounts.summary.keyMetrics.netProfit.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Margin: {financialAccounts.summary.keyMetrics.netMargin.toFixed(2)}%
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <Card>
+              <CardContent className="py-12">
+                <div className="text-center space-y-4">
+                  <Scale className="w-16 h-16 mx-auto text-muted-foreground" />
+                  <div>
+                    <h3 className="text-lg font-semibold">Financial Accounts</h3>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Click the tab or refresh to load financial accounts data
+                    </p>
+                  </div>
+                  <Button onClick={fetchFinancialAccounts}>
+                    Load Financial Accounts
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
 
         {/* Profit Analysis Tab */}
         <TabsContent value="profit" className="space-y-4">
