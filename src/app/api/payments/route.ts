@@ -1,15 +1,25 @@
 // src/app/api/payments/route.ts
 import { createClient } from "@/lib/supabase/server";
-import { NextResponse } from "next/server";
+// --- START OF CHANGE ---
+import { NextResponse, NextRequest } from "next/server";
+// --- END OF CHANGE ---
 
 // GET all payments with company account details
-export async function GET() {
+// --- START OF CHANGE ---
+export async function GET(request: NextRequest) {
+  // Add 'request: NextRequest'
+  // --- END OF CHANGE ---
   try {
     const supabase = await createClient();
 
-    // Fetch payments with customer, order, and company account details
-    // Note: For cheque bank details, we fetch the bank_account_id separately
-    const { data: payments, error } = await supabase
+    // --- START OF CHANGE ---
+    // Read filters from the URL
+    const { searchParams } = new URL(request.url);
+    const paymentMethod = searchParams.get("payment_method");
+    const chequeStatus = searchParams.get("cheque_status");
+
+    // Start building the query
+    let query = supabase
       .from("payments")
       .select(
         `
@@ -33,6 +43,20 @@ export async function GET() {
       `
       )
       .order("payment_date", { ascending: false });
+
+    // Apply payment_method filter if provided
+    if (paymentMethod) {
+      query = query.eq("payment_method", paymentMethod);
+    }
+
+    // Apply cheque_status filter if provided
+    if (chequeStatus) {
+      query = query.eq("cheque_status", chequeStatus);
+    }
+
+    // Execute the final query
+    const { data: payments, error } = await query;
+    // --- END OF CHANGE ---
 
     if (error) {
       console.error("Error fetching payments:", error);
@@ -104,7 +128,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // --- START OF FIX ---
     // Validate deposit_account_id for cash and bank payments ONLY
     if (
       (payment_method === "cash" || payment_method === "bank") &&
@@ -118,7 +141,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    // --- END OF FIX ---
 
     // Validate cheque fields if payment method is cheque
     if (payment_method.toLowerCase() === "cheque") {
@@ -164,10 +186,7 @@ export async function POST(request: Request) {
           payment_date: payment_date || new Date().toISOString().split("T")[0],
           amount,
           payment_method,
-          // --- START OF FIX ---
-          // Set deposit_account_id to null if it wasn't provided (e.g., for cheques)
           deposit_account_id: deposit_account_id || null,
-          // --- END OF FIX ---
           reference_number: reference_number || null,
           notes: notes || null,
           cheque_number: cheque_number || null,

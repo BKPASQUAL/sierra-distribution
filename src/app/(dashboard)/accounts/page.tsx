@@ -13,6 +13,10 @@ import {
   MoreHorizontal,
   Check,
   ChevronsUpDown,
+  // --- START OF CHANGE ---
+  ArrowRightLeft, // Icon for Transfer
+  Download, // Icon for Deposit
+  // --- END OF CHANGE ---
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,6 +74,9 @@ import {
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+// --- START OF CHANGE ---
+import { Textarea } from "@/components/ui/textarea";
+// --- END OF CHANGE ---
 
 // Interface for the banks dropdown (from banks table)
 interface Bank {
@@ -99,19 +106,41 @@ export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bankSearchOpen, setBankSearchOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
 
-  const [formData, setFormData] = useState({
+  // --- START OF CHANGE ---
+  // Renamed dialog state for clarity
+  const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
+  const [isDepositDialogOpen, setIsDepositDialogOpen] = useState(false);
+  const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  // Form state for Add/Edit Account
+  const [accountFormData, setAccountFormData] = useState({
     account_name: "",
     account_number: "",
     account_type: "saving" as "saving" | "current" | "cash",
     initial_balance: 0,
     bank_id: "",
   });
+
+  // Form state for Deposit
+  const [depositForm, setDepositForm] = useState({
+    toAccountId: "",
+    amount: "",
+    notes: "",
+  });
+
+  // Form state for Transfer
+  const [transferForm, setTransferForm] = useState({
+    fromAccountId: "",
+    toAccountId: "",
+    amount: "",
+    notes: "",
+  });
+  // --- END OF CHANGE ---
 
   useEffect(() => {
     fetchData();
@@ -120,10 +149,9 @@ export default function AccountsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch both accounts and banks in parallel
       const [accountsResponse, banksResponse] = await Promise.all([
         fetch("/api/accounts"),
-        fetch("/api/banks"), // Fetches the list of banks for the dropdown
+        fetch("/api/banks"),
       ]);
 
       const accountsData = await accountsResponse.json();
@@ -147,8 +175,8 @@ export default function AccountsPage() {
     }
   };
 
-  const resetForm = () => {
-    setFormData({
+  const resetAccountForm = () => {
+    setAccountFormData({
       account_name: "",
       account_number: "",
       account_type: "saving",
@@ -158,27 +186,27 @@ export default function AccountsPage() {
     setSelectedAccount(null);
   };
 
-  const handleOpenDialog = (account?: Account) => {
+  const handleOpenAccountDialog = (account?: Account) => {
     if (account) {
       setSelectedAccount(account);
-      setFormData({
+      setAccountFormData({
         account_name: account.account_name,
         account_number: account.account_number || "",
         account_type: account.account_type,
-        initial_balance: account.initial_balance, // Show initial balance
+        initial_balance: account.initial_balance,
         bank_id: account.bank_id || "",
       });
     } else {
-      resetForm();
+      resetAccountForm();
     }
-    setIsDialogOpen(true);
+    setIsAccountDialogOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    const payload: any = { ...formData };
+    const payload: any = { ...accountFormData };
 
     if (payload.account_type === "cash") {
       payload.account_number = null;
@@ -187,7 +215,6 @@ export default function AccountsPage() {
         payload.account_name = "Cash on Hand";
       }
     } else {
-      // It's 'saving' or 'current', so bank_id is required
       if (!payload.bank_id) {
         toast.error("Please select a bank for bank accounts.");
         setIsSubmitting(false);
@@ -207,25 +234,18 @@ export default function AccountsPage() {
         body: JSON.stringify(payload),
       });
 
-      // ✅ --- FIX IS HERE ---
-      // First, check if the response was successful
       if (response.ok) {
         toast.success(
           `Account ${selectedAccount ? "updated" : "created"} successfully!`
         );
-        setIsDialogOpen(false);
-        resetForm();
-        // Now, we refresh the table
+        setIsAccountDialogOpen(false);
+        resetAccountForm();
         await fetchData();
       } else {
-        // If it failed, *now* we try to parse the error message
         const data = await response.json();
         toast.error(data.error || "Failed to save account");
       }
-      // ✅ --- END OF FIX ---
     } catch (error) {
-      // This will catch actual network errors (e.g., internet down)
-      // or if response.json() fails on an error response
       toast.error(`Network error: ${(error as Error).message}`);
     } finally {
       setIsSubmitting(false);
@@ -241,20 +261,15 @@ export default function AccountsPage() {
         method: "DELETE",
       });
 
-      // ✅ --- FIX IS HERE ---
-      // First, check if the response was successful
       if (response.ok) {
         toast.success("Account deleted successfully!");
         setIsDeleteDialogOpen(false);
-        resetForm();
-        // Now, we refresh the table
+        resetAccountForm();
         await fetchData();
       } else {
-        // If it failed, *now* we try to parse the error message
         const data = await response.json();
         toast.error(data.error || "Failed to delete account");
       }
-      // ✅ --- END OF FIX ---
     } catch (error) {
       toast.error(`Network error: ${(error as Error).message}`);
     } finally {
@@ -262,12 +277,84 @@ export default function AccountsPage() {
     }
   };
 
+  // --- START OF CHANGE ---
+  // Handlers for new dialogs
+  const handleDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/accounts/transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "deposit",
+          toAccountId: depositForm.toAccountId,
+          amount: depositForm.amount,
+          notes: depositForm.notes,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        toast.success("Deposit successful!");
+        setIsDepositDialogOpen(false);
+        setDepositForm({ toAccountId: "", amount: "", notes: "" });
+        await fetchData();
+      } else {
+        toast.error(data.error || "Deposit failed.");
+      }
+    } catch (error) {
+      toast.error(`Network error: ${(error as Error).message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/accounts/transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "transfer",
+          fromAccountId: transferForm.fromAccountId,
+          toAccountId: transferForm.toAccountId,
+          amount: transferForm.amount,
+          notes: transferForm.notes,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        toast.success("Transfer successful!");
+        setIsTransferDialogOpen(false);
+        setTransferForm({
+          fromAccountId: "",
+          toAccountId: "",
+          amount: "",
+          notes: "",
+        });
+        await fetchData();
+      } else {
+        toast.error(data.error || "Transfer failed.");
+      }
+    } catch (error) {
+      toast.error(`Network error: ${(error as Error).message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  // --- END OF CHANGE ---
+
   const totalBalance = accounts.reduce(
     (sum, acc) => sum + acc.current_balance,
     0
   );
 
-  // ... (rest of the component is unchanged) ...
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -277,10 +364,28 @@ export default function AccountsPage() {
             Manage your company's bank and cash accounts
           </p>
         </div>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Account
-        </Button>
+        {/* --- START OF CHANGE --- */}
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setIsDepositDialogOpen(true)}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Deposit
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setIsTransferDialogOpen(true)}
+          >
+            <ArrowRightLeft className="mr-2 h-4 w-4" />
+            Transfer
+          </Button>
+          <Button onClick={() => handleOpenAccountDialog()}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Account
+          </Button>
+        </div>
+        {/* --- END OF CHANGE --- */}
       </div>
 
       <Card>
@@ -364,7 +469,7 @@ export default function AccountsPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuItem
-                            onClick={() => handleOpenDialog(account)}
+                            onClick={() => handleOpenAccountDialog(account)}
                           >
                             Edit
                           </DropdownMenuItem>
@@ -388,22 +493,25 @@ export default function AccountsPage() {
         </CardContent>
       </Card>
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      {/* Add/Edit Account Dialog */}
+      <Dialog open={isAccountDialogOpen} onOpenChange={setIsAccountDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {selectedAccount ? "Edit Account" : "Add New Account"}
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleAccountSubmit}>
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="account_type">Account Type *</Label>
                 <Select
-                  value={formData.account_type}
+                  value={accountFormData.account_type}
                   onValueChange={(value: "saving" | "current" | "cash") =>
-                    setFormData({ ...formData, account_type: value })
+                    setAccountFormData({
+                      ...accountFormData,
+                      account_type: value,
+                    })
                   }
                   disabled={!!selectedAccount}
                 >
@@ -422,12 +530,15 @@ export default function AccountsPage() {
                 <Label htmlFor="account_name">Account Name *</Label>
                 <Input
                   id="account_name"
-                  value={formData.account_name}
+                  value={accountFormData.account_name}
                   onChange={(e) =>
-                    setFormData({ ...formData, account_name: e.target.value })
+                    setAccountFormData({
+                      ...accountFormData,
+                      account_name: e.target.value,
+                    })
                   }
                   placeholder={
-                    formData.account_type === "cash"
+                    accountFormData.account_type === "cash"
                       ? "e.g., Cash on Hand"
                       : "e.g., HNB Main Account"
                   }
@@ -435,7 +546,7 @@ export default function AccountsPage() {
                 />
               </div>
 
-              {formData.account_type !== "cash" && (
+              {accountFormData.account_type !== "cash" && (
                 <>
                   <div className="space-y-2">
                     <Label>Bank *</Label>
@@ -451,13 +562,13 @@ export default function AccountsPage() {
                           className="w-full justify-between h-10"
                         >
                           <span className="truncate">
-                            {formData.bank_id
+                            {accountFormData.bank_id
                               ? banks.find(
-                                  (bank) => bank.id === formData.bank_id
+                                  (bank) => bank.id === accountFormData.bank_id
                                 )?.bank_code +
                                 " - " +
                                 banks.find(
-                                  (bank) => bank.id === formData.bank_id
+                                  (bank) => bank.id === accountFormData.bank_id
                                 )?.bank_name
                               : "Select bank..."}
                           </span>
@@ -481,8 +592,8 @@ export default function AccountsPage() {
                                   key={bank.id}
                                   value={`${bank.bank_code} ${bank.bank_name}`}
                                   onSelect={() => {
-                                    setFormData({
-                                      ...formData,
+                                    setAccountFormData({
+                                      ...accountFormData,
                                       bank_id: bank.id,
                                     });
                                     setBankSearchOpen(false);
@@ -491,7 +602,7 @@ export default function AccountsPage() {
                                   <Check
                                     className={cn(
                                       "mr-2 h-4 w-4",
-                                      formData.bank_id === bank.id
+                                      accountFormData.bank_id === bank.id
                                         ? "opacity-100"
                                         : "opacity-0"
                                     )}
@@ -509,10 +620,10 @@ export default function AccountsPage() {
                     <Label htmlFor="account_number">Account Number</Label>
                     <Input
                       id="account_number"
-                      value={formData.account_number}
+                      value={accountFormData.account_number}
                       onChange={(e) =>
-                        setFormData({
-                          ...formData,
+                        setAccountFormData({
+                          ...accountFormData,
                           account_number: e.target.value,
                         })
                       }
@@ -528,10 +639,10 @@ export default function AccountsPage() {
                   id="initial_balance"
                   type="number"
                   step="0.01"
-                  value={formData.initial_balance}
+                  value={accountFormData.initial_balance}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
+                    setAccountFormData({
+                      ...accountFormData,
                       initial_balance: parseFloat(e.target.value) || 0,
                     })
                   }
@@ -549,7 +660,7 @@ export default function AccountsPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setIsDialogOpen(false)}
+                onClick={() => setIsAccountDialogOpen(false)}
                 disabled={isSubmitting}
               >
                 Cancel
@@ -597,6 +708,188 @@ export default function AccountsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* --- START OF CHANGE --- */}
+      {/* Deposit Dialog */}
+      <Dialog open={isDepositDialogOpen} onOpenChange={setIsDepositDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deposit to Account</DialogTitle>
+            <DialogDescription>
+              Record an external deposit into one of your accounts.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleDeposit}>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="deposit_toAccountId">To Account *</Label>
+                <Select
+                  value={depositForm.toAccountId}
+                  onValueChange={(value) =>
+                    setDepositForm({ ...depositForm, toAccountId: value })
+                  }
+                >
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Select account to deposit into..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((account) => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.account_name} (
+                        {formatCurrency(account.current_balance)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="deposit_amount">Amount (LKR) *</Label>
+                <Input
+                  id="deposit_amount"
+                  type="number"
+                  step="0.01"
+                  value={depositForm.amount}
+                  onChange={(e) =>
+                    setDepositForm({ ...depositForm, amount: e.target.value })
+                  }
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="deposit_notes">Notes (Optional)</Label>
+                <Textarea
+                  id="deposit_notes"
+                  value={depositForm.notes}
+                  onChange={(e) =>
+                    setDepositForm({ ...depositForm, notes: e.target.value })
+                  }
+                  placeholder="e.g., Owner's equity deposit, Bank interest..."
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDepositDialogOpen(false)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : null}
+                Confirm Deposit
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Dialog */}
+      <Dialog
+        open={isTransferDialogOpen}
+        onOpenChange={setIsTransferDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transfer Between Accounts</DialogTitle>
+            <DialogDescription>
+              Move funds from one of your accounts to another.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleTransfer}>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="transfer_fromAccountId">From Account *</Label>
+                <Select
+                  value={transferForm.fromAccountId}
+                  onValueChange={(value) =>
+                    setTransferForm({ ...transferForm, fromAccountId: value })
+                  }
+                >
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Select source account..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((account) => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.account_name} (
+                        {formatCurrency(account.current_balance)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="transfer_toAccountId">To Account *</Label>
+                <Select
+                  value={transferForm.toAccountId}
+                  onValueChange={(value) =>
+                    setTransferForm({ ...transferForm, toAccountId: value })
+                  }
+                >
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Select destination account..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((account) => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.account_name} (
+                        {formatCurrency(account.current_balance)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="transfer_amount">Amount (LKR) *</Label>
+                <Input
+                  id="transfer_amount"
+                  type="number"
+                  step="0.01"
+                  value={transferForm.amount}
+                  onChange={(e) =>
+                    setTransferForm({ ...transferForm, amount: e.target.value })
+                  }
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="transfer_notes">Notes (Optional)</Label>
+                <Textarea
+                  id="transfer_notes"
+                  value={transferForm.notes}
+                  onChange={(e) =>
+                    setTransferForm({ ...transferForm, notes: e.target.value })
+                  }
+                  placeholder="e.g., Transfer cash to bank..."
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsTransferDialogOpen(false)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : null}
+                Confirm Transfer
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      {/* --- END OF CHANGE --- */}
     </div>
   );
 }
