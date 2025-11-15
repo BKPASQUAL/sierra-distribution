@@ -66,8 +66,9 @@ export async function GET() {
         id: order.id,
         order_number: order.order_number,
         customer_id: order.customer_id,
-        // Line 71
-        customer_name: order.customers?.[0]?.name || "N/A",
+        // --- START OF FIX ---
+        // Changed order.customers?.[0]?.name to order.customers?.name
+        customer_name: (order.customers as any)?.name || "N/A", // --- END OF FIX ---
         order_date: order.order_date,
         total_amount: order.total_amount,
         paid_amount: totalPaid,

@@ -11,9 +11,7 @@ import {
   XCircle,
   Clock,
   Loader2,
-  // --- START OF CHANGE ---
-  Banknote, // Import Banknote icon for 'deposited'
-  // --- END OF CHANGE ---
+  Banknote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,9 +47,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-// --- START OF CHANGE ---
-// Removed AlertDialog imports
-// --- END OF CHANGE ---
 import {
   Command,
   CommandEmpty,
@@ -68,6 +63,10 @@ import {
 import { toast } from "sonner";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+// --- START OF CHANGE ---
+// Import formatCurrency
+import { formatCurrency } from "@/lib/utils";
+// --- END OF CHANGE ---
 
 // Bank type definition
 interface Bank {
@@ -147,6 +146,10 @@ export default function PaymentsPage() {
   const [chequeStatusFilter, setChequeStatusFilter] = useState("all");
   const [bankSearchOpen, setBankSearchOpen] = useState(false);
   const [accountSearchOpen, setAccountSearchOpen] = useState(false);
+  // --- START OF CHANGE ---
+  // Add state for the new order search popover
+  const [orderSearchOpen, setOrderSearchOpen] = useState(false);
+  // --- END OF CHANGE ---
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -163,10 +166,6 @@ export default function PaymentsPage() {
     chequeDate: "",
     notes: "",
   });
-
-  // --- START OF CHANGE ---
-  // Removed chequeActionDialog state
-  // --- END OF CHANGE ---
 
   useEffect(() => {
     fetchPayments();
@@ -305,7 +304,11 @@ export default function PaymentsPage() {
     const selectedOrder = unpaidOrders.find((o) => o.id === formData.orderId);
     if (selectedOrder && formData.amount > selectedOrder.balance) {
       toast.error(
-        `Payment amount (LKR ${formData.amount.toLocaleString()}) cannot exceed remaining balance (LKR ${selectedOrder.balance.toLocaleString()})`
+        `Payment amount (${formatCurrency(
+          formData.amount
+        )}) cannot exceed remaining balance (${formatCurrency(
+          selectedOrder.balance
+        )})`
       );
       return;
     }
@@ -395,10 +398,6 @@ export default function PaymentsPage() {
       notes: "",
     });
   };
-
-  // --- START OF CHANGE ---
-  // Removed openChequeActionDialog and handleChequeStatusUpdate functions
-  // --- END OF CHANGE ---
 
   // Updated function to handle 'deposited' status
   const getChequeStatusBadge = (
@@ -499,7 +498,7 @@ export default function PaymentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              LKR {totalReceived.toLocaleString()}
+              {formatCurrency(totalReceived)}
             </div>
           </CardContent>
         </Card>
@@ -584,9 +583,7 @@ export default function PaymentsPage() {
                 <TableHead>Method</TableHead>
                 <TableHead>Deposit Account</TableHead>
                 <TableHead>Cheque/Bank Details</TableHead>
-                {/* --- START OF CHANGE --- */}
                 <TableHead className="text-right">Cheque Status</TableHead>
-                {/* --- END OF CHANGE --- */}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -610,7 +607,7 @@ export default function PaymentsPage() {
                     </TableCell>
                     <TableCell>{payment.customers?.name || "N/A"}</TableCell>
                     <TableCell className="text-right font-medium">
-                      LKR {payment.amount.toLocaleString()}
+                      {formatCurrency(payment.amount)}
                     </TableCell>
                     <TableCell className="capitalize">
                       {payment.payment_method}
@@ -649,9 +646,6 @@ export default function PaymentsPage() {
                               ).toLocaleDateString()}
                             </div>
                           )}
-                          {/* --- START OF CHANGE --- */}
-                          {/* Status badge moved to its own column */}
-                          {/* --- END OF CHANGE --- */}
                         </div>
                       )}
                       {payment.payment_method === "bank" && payment.banks && (
@@ -670,8 +664,6 @@ export default function PaymentsPage() {
                         </span>
                       )}
                     </TableCell>
-                    {/* --- START OF CHANGE --- */}
-                    {/* New TableCell for Cheque Status Badge */}
                     <TableCell className="text-right">
                       {payment.payment_method === "cheque" &&
                         getChequeStatusBadge(
@@ -679,7 +671,6 @@ export default function PaymentsPage() {
                           payment.cheque_date
                         )}
                     </TableCell>
-                    {/* --- END OF CHANGE --- */}
                   </TableRow>
                 ))
               )}
@@ -724,38 +715,91 @@ export default function PaymentsPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4">
+            {/* --- START OF CHANGE --- */}
+            {/* Replaced Select with Popover/Command */}
             <div className="col-span-2 space-y-2">
               <Label htmlFor="order">Select Order *</Label>
-              <Select
-                value={formData.orderId}
-                onValueChange={(value) => {
-                  const order = unpaidOrders.find((o) => o.id === value);
-                  setFormData({
-                    ...formData,
-                    orderId: value,
-                    amount: order ? order.balance : 0,
-                  });
-                }}
+              <Popover
+                open={orderSearchOpen}
+                onOpenChange={setOrderSearchOpen}
               >
-                <SelectTrigger className="w-full h-10">
-                  <SelectValue placeholder="Select an order..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {unpaidOrders.length === 0 ? (
-                    <SelectItem value="none" disabled>
-                      No unpaid orders available
-                    </SelectItem>
-                  ) : (
-                    unpaidOrders.map((order) => (
-                      <SelectItem key={order.id} value={order.id}>
-                        {order.order_number} - {order.customer_name} (Balance:
-                        LKR {order.balance.toLocaleString()})
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={orderSearchOpen}
+                    className="w-full justify-between h-10"
+                  >
+                    <span className="truncate">
+                      {formData.orderId
+                        ? (() => {
+                            const order = unpaidOrders.find(
+                              (o) => o.id === formData.orderId
+                            );
+                            return order
+                              ? `${order.order_number} - ${
+                                  order.customer_name
+                                } (${formatCurrency(order.balance)})`
+                              : "Select an order...";
+                          })()
+                        : "Select an order..."}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search by order, customer, or balance..." />
+                    <CommandList>
+                      <CommandEmpty>No unpaid orders found.</CommandEmpty>
+                      <CommandGroup>
+                        {unpaidOrders.map((order) => (
+                          <CommandItem
+                            key={order.id}
+                            value={`${order.order_number} ${order.customer_name} ${order.balance}`}
+                            onSelect={() => {
+                              setFormData({
+                                ...formData,
+                                orderId: order.id,
+                                amount: order.balance, // Automatically set amount
+                              });
+                              setOrderSearchOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                formData.orderId === order.id
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              )}
+                            />
+                            <div className="flex justify-between w-full">
+                              <div className="flex flex-col">
+                                <span className="font-medium">
+                                  {order.order_number} - {order.customer_name}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  Order Date:{" "}
+                                  {new Date(
+                                    order.order_date
+                                  ).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <span className="font-medium">
+                                {formatCurrency(order.balance)}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
+            {/* --- END OF CHANGE --- */}
+
             <div className="space-y-2">
               <Label htmlFor="amount">Payment Amount (LKR) *</Label>
               <Input
@@ -891,8 +935,8 @@ export default function PaymentsPage() {
                                   {account.banks
                                     ? `${account.banks.bank_code} - ${account.banks.bank_name}`
                                     : "Cash on Hand"}{" "}
-                                  | Balance: LKR{" "}
-                                  {account.current_balance.toLocaleString()}
+                                  | Balance:{" "}
+                                  {formatCurrency(account.current_balance)}
                                 </span>
                               </div>
                             </CommandItem>
@@ -1036,10 +1080,6 @@ export default function PaymentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* --- START OF CHANGE --- */}
-      {/* Removed the Cheque Action Confirmation Dialog */}
-      {/* --- END OF CHANGE --- */}
     </div>
   );
 }
