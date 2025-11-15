@@ -185,22 +185,45 @@ export default function EditPurchasePage() {
           purchaseData.items || purchaseData.purchase_items || [];
 
         if (itemsArray.length > 0) {
-          const transformedItems = itemsArray.map((item: any) => ({
-            id: item.id,
-            // Handle both camelCase (productId) and snake_case (product_id)
-            productId: item.productId || item.product_id,
-            // Handle both direct fields and nested products object
-            productName:
-              item.productName || item.products?.name || "Unknown Product",
-            productSku: item.productSku || item.products?.sku || "N/A",
-            quantity: item.quantity || 0,
-            mrp: item.mrp || 0,
-            // Handle both camelCase and snake_case
-            discountPercent: item.discountPercent || item.discount_percent || 0,
-            discountAmount: item.discountAmount || item.discount_amount || 0,
-            costPrice: item.unitPrice || item.unit_price || 0,
-            total: item.lineTotal || item.line_total || 0,
-          }));
+          // --- START OF FIX ---
+          // We must recalculate totals on load, not trust the DB values
+          const transformedItems = itemsArray.map((item: any) => {
+            // Get the base values
+            const quantity = item.quantity || 0;
+            const mrp = item.mrp || 0;
+            const discountPercent =
+              item.discountPercent || item.discount_percent || 0;
+            const costPrice = item.unitPrice || item.unit_price || 0;
+
+            // Recalculate discount and total to ensure consistency
+            const itemSubtotal = mrp * quantity;
+            const discountAmount = (itemSubtotal * discountPercent) / 100;
+
+            // If costPrice (unitPrice) is available and discount is 0,
+            // the total is likely based on costPrice, not MRP.
+            // But if discount is present, total is based on MRP - discount.
+            // The logic from handleItemChange is (MRP * Qty) - DiscountAmount
+            const total = itemSubtotal - discountAmount;
+
+            // Let's refine: if discountPercent is present, use it.
+            // If not, and costPrice is different from mrp, infer discount.
+            // For now, let's stick to the logic in handleItemChange
+
+            return {
+              id: item.id,
+              productId: item.productId || item.product_id,
+              productName:
+                item.productName || item.products?.name || "Unknown Product",
+              productSku: item.productSku || item.products?.sku || "N/A",
+              quantity: quantity,
+              mrp: mrp,
+              discountPercent: discountPercent,
+              discountAmount: discountAmount, // Use RECALCULATED value
+              costPrice: costPrice,
+              total: total, // Use RECALCULATED value
+            };
+          });
+          // --- END OF FIX ---
 
           setItems(transformedItems);
         } else {
@@ -252,6 +275,7 @@ export default function EditPurchasePage() {
     setItems(items.filter((_, i) => i !== index));
   };
 
+  // This function now correctly calculates totals on every change
   const handleItemChange = (index: number, field: string, value: any) => {
     const updatedItems = [...items];
     const item = updatedItems[index];
@@ -271,15 +295,14 @@ export default function EditPurchasePage() {
       item.mrp = parseFloat(value) || 0;
     } else if (field === "discountPercent") {
       item.discountPercent = parseFloat(value) || 0;
-      item.discountAmount =
-        (item.mrp * item.quantity * item.discountPercent) / 100;
     } else if (field === "costPrice") {
       item.costPrice = parseFloat(value) || 0;
     }
 
-    // Calculate total
-    const subtotal = item.mrp * item.quantity;
-    item.total = subtotal - item.discountAmount;
+    // Always recalculate discount and total after *any* relevant change
+    const itemSubtotal = item.mrp * item.quantity;
+    item.discountAmount = (itemSubtotal * item.discountPercent) / 100;
+    item.total = itemSubtotal - item.discountAmount;
 
     updatedItems[index] = item;
     setItems(updatedItems);
