@@ -18,6 +18,7 @@ import {
   AlertCircle,
   Receipt,
   Landmark,
+  TrendingDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ const navigation = [
   { name: "Suppliers", href: "/suppliers", icon: Truck },
   { name: "Products", href: "/products", icon: Package },
   { name: "Purchases", href: "/purchases", icon: ShoppingCart },
+  { name: "Supplier Payments", href: "/supplier-payments", icon: TrendingDown },
   { name: "Bills", href: "/bills", icon: FileText },
   { name: "Expenses", href: "/expenses", icon: Receipt },
   { name: "Payments", href: "/payments", icon: DollarSign },
