@@ -1,35 +1,52 @@
-'use client';
+// src/components/layout/header.tsx
+"use client";
 
-import React from 'react';
-import { Bell, Search } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import React from "react";
+import { Search, Menu } from "lucide-react"; // Import Menu icon
+import { Input } from "@/components/ui/input";
+// --- START OF FIX ---
+// Import Sheet components, SheetTitle, and the Sidebar
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+  SheetTitle, // 1. Import SheetTitle
+} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Sidebar } from "@/components/layout/sidebar"; // Import the sidebar
+// --- END OF FIX ---
 
 export function Header() {
   return (
-    <header className="flex h-16 items-center gap-4 border-b bg-card px-6">
-      {/* Search */}
-      <div className="flex-1 max-w-md">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search customers, products, bills..."
-            className="pl-9"
-          />
-        </div>
-      </div>
+    <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-card px-4 md:px-6">
+      {/* --- START OF CHANGE --- */}
+      {/* Mobile Hamburger Menu */}
+      <div className="lg:hidden">
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="outline" size="icon">
+              <Menu className="h-4 w-4" />
+              <span className="sr-only">Toggle Menu</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="p-0 w-64">
+            {/* 2. Add a hidden title for accessibility */}
+            <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
 
-      {/* Right side */}
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive" />
-        </Button>
-        <div className="ml-2 text-sm">
-          <p className="font-medium">Admin User</p>
-          <p className="text-xs text-muted-foreground">Administrator</p>
-        </div>
+            {/* Use the existing Sidebar component inside the sheet */}
+            <Sidebar />
+          </SheetContent>
+        </Sheet>
+      </div>
+      {/* --- END OF CHANGE --- */}
+
+      {/* Original Search Bar */}
+      <div className="relative flex-1">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search..."
+          className="pl-9 bg-background focus:bg-card"
+        />
       </div>
     </header>
   );

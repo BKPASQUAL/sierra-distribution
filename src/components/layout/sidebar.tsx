@@ -24,33 +24,136 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 
-// Define navigation items with optional role restrictions
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Customers", href: "/customers", icon: Users },
-  { name: "Suppliers", href: "/suppliers", icon: Truck },
-  { name: "Products", href: "/products", icon: Package },
-  { name: "Purchases", href: "/purchases", icon: ShoppingCart },
-  { name: "Supplier Payments", href: "/supplier-payments", icon: TrendingDown },
-  { name: "Bills", href: "/bills", icon: FileText },
-  { name: "Expenses", href: "/expenses", icon: Receipt },
-  { name: "Payments", href: "/payments", icon: DollarSign },
-  { name: "Cheque Management", href: "/cheques", icon: Landmark },
-  { name: "Accounts", href: "/accounts", icon: Landmark, adminOnly: true },
-  { name: "Due Invoices", href: "/due-invoices", icon: AlertCircle },
+// --- START OF ORGANIZATION ---
+
+// Define navigation structure
+export interface NavItem {
+  name: string;
+  href: string;
+  icon: React.ElementType;
+  adminOnly?: boolean;
+}
+
+export interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
+// Define organized navigation items
+const navigation: NavGroup[] = [
   {
-    name: "Reports",
-    href: "/reports",
-    icon: TrendingUp,
-    adminOnly: true, // Only show to admins
+    title: "Main",
+    items: [{ name: "Dashboard", href: "/dashboard", icon: LayoutDashboard }],
   },
   {
-    name: "Settings",
-    href: "/settings",
-    icon: Settings,
-    adminOnly: true, // Only show to admins
+    title: "Sales",
+    items: [
+      { name: "Customers", href: "/customers", icon: Users },
+      { name: "Customers Bills", href: "/bills", icon: FileText },
+      { name: "Customers Payments", href: "/payments", icon: DollarSign },
+      { name: "Due Invoices", href: "/due-invoices", icon: AlertCircle },
+    ],
+  },
+  {
+    title: "Purchases",
+    items: [
+      { name: "Suppliers", href: "/suppliers", icon: Truck },
+      { name: "Purchases", href: "/purchases", icon: ShoppingCart },
+      {
+        name: "Supplier Payments",
+        href: "/supplier-payments",
+        icon: TrendingDown,
+      },
+    ],
+  },
+  {
+    title: "Inventory",
+    items: [{ name: "Products", href: "/products", icon: Package }],
+  },
+  {
+    title: "Finance",
+    items: [
+      { name: "Expenses", href: "/expenses", icon: Receipt },
+      { name: "Cheque Management", href: "/cheques", icon: Landmark },
+      { name: "Accounts", href: "/accounts", icon: Landmark, adminOnly: true },
+    ],
+  },
+  {
+    title: "System",
+    items: [
+      { name: "Reports", href: "/reports", icon: TrendingUp, adminOnly: true },
+      { name: "Settings", href: "/settings", icon: Settings, adminOnly: true },
+    ],
   },
 ];
+
+/**
+ * Renders the grouped navigation items.
+ */
+function SidebarNav({
+  groups,
+  pathname,
+  userRole,
+}: {
+  groups: NavGroup[];
+  pathname: string;
+  userRole: string | null;
+}) {
+  return (
+    // --- START OF FIX ---
+    // Added overflow-y-auto to make the nav list scrollable on short screens
+    <nav className="flex-1 space-y-2 p-4 overflow-y-auto">
+      {/* --- END OF FIX --- */}
+      {groups.map((group) => {
+        // Filter items in this group based on user role
+        const filteredItems = group.items.filter(
+          (item) => !item.adminOnly || userRole === "Admin"
+        );
+
+        // If all items in the group are hidden, don't render the group
+        if (filteredItems.length === 0) {
+          return null;
+        }
+
+        return (
+          <div key={group.title} className="space-y-1">
+            {/* Don't show "Main" title */}
+            {group.title !== "Main" && (
+              <h3 className="px-3 pt-3 pb-1 text-xs font-semibold uppercase text-muted-foreground tracking-wider">
+                {group.title}
+              </h3>
+            )}
+            {filteredItems.map((item) => {
+              // Check if the item is active
+              // Special case for dashboard to not match all routes
+              const isDashboard = item.href === "/dashboard";
+              const isActive = isDashboard
+                ? pathname === item.href
+                : pathname.startsWith(item.href);
+
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  )}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+// --- END OF ORGANIZATION ---
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -115,15 +218,6 @@ export function Sidebar() {
     }
   };
 
-  // Filter navigation items based on user role
-  const filteredNavigation = navigation.filter((item) => {
-    // If item requires admin access and user is not admin, hide it
-    if (item.adminOnly && userRole !== "Admin") {
-      return false;
-    }
-    return true;
-  });
-
   return (
     <div className="flex h-full w-64 flex-col border-r bg-card">
       {/* Logo */}
@@ -132,27 +226,8 @@ export function Sidebar() {
         <span className="ml-2 text-lg font-semibold">Sierra Distribution</span>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 space-y-1 p-4">
-        {filteredNavigation.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.name}
-            </Link>
-          );
-        })}
-      </nav>
+      {/* Replaced flat nav with grouped SidebarNav component */}
+      <SidebarNav groups={navigation} pathname={pathname} userRole={userRole} />
 
       {/* User Profile & Logout */}
       <div className="border-t p-4">
