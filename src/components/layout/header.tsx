@@ -2,24 +2,20 @@
 "use client";
 
 import React from "react";
-import { Search, Menu } from "lucide-react"; // Import Menu icon
+import { Search, Menu } from "lucide-react";
 import { Input } from "@/components/ui/input";
-// --- START OF FIX ---
-// Import Sheet components, SheetTitle, and the Sidebar
 import {
   Sheet,
   SheetContent,
   SheetTrigger,
-  SheetTitle, // 1. Import SheetTitle
+  SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Sidebar } from "@/components/layout/sidebar"; // Import the sidebar
-// --- END OF FIX ---
+import { Sidebar } from "@/components/layout/sidebar";
 
 export function Header() {
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-card px-4 md:px-6">
-      {/* --- START OF CHANGE --- */}
       {/* Mobile Hamburger Menu */}
       <div className="lg:hidden">
         <Sheet>
@@ -29,16 +25,16 @@ export function Header() {
               <span className="sr-only">Toggle Menu</span>
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-64">
-            {/* 2. Add a hidden title for accessibility */}
+          {/* --- START OF FIX --- */}
+          {/* Added 'h-full' to make the slide-out panel full height */}
+          <SheetContent side="left" className="p-0 w-64 h-full">
+            {/* --- END OF FIX --- */}
             <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
-
             {/* Use the existing Sidebar component inside the sheet */}
             <Sidebar />
           </SheetContent>
         </Sheet>
       </div>
-      {/* --- END OF CHANGE --- */}
 
       {/* Original Search Bar */}
       <div className="relative flex-1">

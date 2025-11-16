@@ -24,8 +24,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 
-// --- START OF ORGANIZATION ---
-
 // Define navigation structure
 export interface NavItem {
   name: string;
@@ -100,10 +98,7 @@ function SidebarNav({
   userRole: string | null;
 }) {
   return (
-    // --- START OF FIX ---
-    // Added overflow-y-auto to make the nav list scrollable on short screens
-    <nav className="flex-1 space-y-2 p-4 overflow-y-auto">
-      {/* --- END OF FIX --- */}
+    <nav className="flex-1 space-y-1 p-2 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
       {groups.map((group) => {
         // Filter items in this group based on user role
         const filteredItems = group.items.filter(
@@ -116,16 +111,15 @@ function SidebarNav({
         }
 
         return (
-          <div key={group.title} className="space-y-1">
+          <div key={group.title} className="">
             {/* Don't show "Main" title */}
             {group.title !== "Main" && (
-              <h3 className="px-3 pt-3 pb-1 text-xs font-semibold uppercase text-muted-foreground tracking-wider">
+              <h3 className="px-3 pt-2 pb-1 text-xs font-semibold uppercase text-muted-foreground tracking-wider">
                 {group.title}
               </h3>
             )}
             {filteredItems.map((item) => {
               // Check if the item is active
-              // Special case for dashboard to not match all routes
               const isDashboard = item.href === "/dashboard";
               const isActive = isDashboard
                 ? pathname === item.href
@@ -142,8 +136,8 @@ function SidebarNav({
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   )}
                 >
-                  <item.icon className="h-4 w-4" />
-                  {item.name}
+                  <item.icon className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">{item.name}</span>
                 </Link>
               );
             })}
@@ -153,7 +147,6 @@ function SidebarNav({
     </nav>
   );
 }
-// --- END OF ORGANIZATION ---
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -219,31 +212,33 @@ export function Sidebar() {
   };
 
   return (
-    <div className="flex h-full w-64 flex-col border-r bg-card">
-      {/* Logo */}
-      <div className="flex h-16 items-center border-b px-6">
-        <Package className="h-6 w-6 text-primary" />
-        <span className="ml-2 text-lg font-semibold">Sierra Distribution</span>
+    <div className="flex h-screen w-full md:w-64 flex-col border-r bg-card">
+      {/* Logo (Fixed Top) */}
+      <div className="flex h-14 md:h-16 items-center border-b px-4 md:px-6 flex-shrink-0">
+        <Package className="h-5 w-5 md:h-6 md:w-6 text-primary flex-shrink-0" />
+        <span className="ml-2 text-base md:text-lg font-semibold truncate">
+          Sierra Distribution
+        </span>
       </div>
 
-      {/* Replaced flat nav with grouped SidebarNav component */}
+      {/* Navigation (Scrollable Middle) */}
       <SidebarNav groups={navigation} pathname={pathname} userRole={userRole} />
 
-      {/* User Profile & Logout */}
-      <div className="border-t p-4">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <span className="text-sm font-medium">
+      {/* User Profile & Logout (Fixed Bottom) */}
+      <div className="border-t p-3 md:p-4 flex-shrink-0 bg-card">
+        <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-3">
+          <div className="flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-full bg-primary text-primary-foreground flex-shrink-0">
+            <span className="text-xs md:text-sm font-medium">
               {user?.user_metadata?.name?.charAt(0)?.toUpperCase() ||
                 user?.email?.charAt(0)?.toUpperCase() ||
                 "U"}
             </span>
           </div>
-          <div className="flex-1 overflow-hidden">
-            <p className="text-sm font-medium truncate">
+          <div className="flex-1 overflow-hidden min-w-0">
+            <p className="text-xs md:text-sm font-medium truncate">
               {user?.user_metadata?.name || "User"}
             </p>
-            <p className="text-xs text-muted-foreground truncate">
+            <p className="text-[10px] md:text-xs text-muted-foreground truncate">
               {user?.email || ""}
             </p>
           </div>
@@ -251,11 +246,11 @@ export function Sidebar() {
         <Button
           variant="outline"
           size="sm"
-          className="w-full"
+          className="w-full text-xs md:text-sm h-8 md:h-9"
           onClick={handleLogout}
           disabled={isLoggingOut}
         >
-          <LogOut className="h-4 w-4 mr-2" />
+          <LogOut className="h-3 w-3 md:h-4 md:w-4 mr-2 flex-shrink-0" />
           {isLoggingOut ? "Logging out..." : "Logout"}
         </Button>
       </div>
