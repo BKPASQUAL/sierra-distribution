@@ -1,14 +1,22 @@
 // src/app/api/products/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
+// --- START OF FIX ---
+// Remove old/incorrect imports
+// import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+// import { cookies } from "next/headers";
+// Add the correct server client import
+import { createClient } from "@/lib/supabase/server";
+// --- END OF FIX ---
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    // --- START OF FIX ---
+    // Use the correct client from your lib
+    const supabase = await createClient();
+    // --- END OF FIX ---
     const { id } = params;
 
     // Fetch single product
@@ -45,7 +53,10 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    // --- START OF FIX ---
+    // Use the correct client
+    const supabase = await createClient();
+    // --- END OF FIX ---
     const { id } = params;
     const body = await request.json();
 
@@ -79,7 +90,10 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    // --- START OF FIX ---
+    // Use the correct client
+    const supabase = await createClient();
+    // --- END OF FIX ---
     const { id } = params;
 
     const { error } = await supabase.from("products").delete().eq("id", id);
