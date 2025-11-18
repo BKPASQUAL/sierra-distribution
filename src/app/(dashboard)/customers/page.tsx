@@ -10,7 +10,6 @@ import {
   Trash2,
   Phone,
   MapPin,
-  DollarSign,
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,9 +17,9 @@ import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from "@/components/ui/card";
 import {
   Table,
@@ -48,10 +47,10 @@ import {
 } from "@/components/ui/select";
 
 // -----------------------------------------------------------
-// 1. Define Customer Interface (Mirrors database.types.ts)
+// 1. Define Customer Interface
 // -----------------------------------------------------------
 interface Customer {
-  id: string; // Changed from number to string to match Supabase schema
+  id: string;
   customer_code: string;
   name: string;
   email: string | null;
@@ -63,91 +62,18 @@ interface Customer {
   credit_limit: number;
   outstanding_balance: number;
   status: "active" | "inactive" | "suspended";
-  // Simplified for display:
+  // Fields for UI display (default to 0 if not from API)
   totalOrders: number;
   totalPaid: number;
 }
-
-// Mock Data Conversion (Needed to populate stats/filters initially)
-const mockCustomers = [
-  {
-    id: "1",
-    customer_code: "CUST-001",
-    name: "Perera Hardware",
-    phone: "+94 77 123 4567",
-    city: "Colombo",
-    address: "123 Galle Road, Colombo 03",
-    email: "perera@hardware.lk",
-    outstanding_balance: 45000,
-    credit_limit: 100000,
-    status: "active",
-    totalOrders: 23,
-    totalPaid: 2340000,
-  },
-  {
-    id: "2",
-    customer_code: "CUST-002",
-    name: "Silva Electricals",
-    phone: "+94 71 234 5678",
-    city: "Kandy",
-    address: "45 Peradeniya Road, Kandy",
-    email: "silva@electric.lk",
-    outstanding_balance: 0,
-    credit_limit: 50000,
-    status: "active",
-    totalOrders: 15,
-    totalPaid: 1500000,
-  },
-  {
-    id: "3",
-    customer_code: "CUST-003",
-    name: "Fernando Constructions",
-    phone: "+94 76 345 6789",
-    city: "Galle",
-    address: "78 Main Street, Galle",
-    email: "fernando@constructions.lk",
-    outstanding_balance: 125000,
-    credit_limit: 150000,
-    status: "suspended",
-    totalOrders: 45,
-    totalPaid: 5600000,
-  },
-  {
-    id: "4",
-    customer_code: "CUST-004",
-    name: "Jayasinghe Hardware Store",
-    phone: "+94 75 456 7890",
-    city: "Colombo",
-    address: "234 High Level Road, Nugegoda",
-    email: "jayasinghe@store.lk",
-    outstanding_balance: 23000,
-    credit_limit: 50000,
-    status: "active",
-    totalOrders: 12,
-    totalPaid: 890000,
-  },
-  {
-    id: "5",
-    customer_code: "CUST-005",
-    name: "Mendis Electrician Services",
-    phone: "+94 77 567 8901",
-    city: "Matara",
-    address: "56 Beach Road, Matara",
-    email: "mendis@services.lk",
-    outstanding_balance: 78000,
-    credit_limit: 100000,
-    status: "active",
-    totalOrders: 34,
-    totalPaid: 3200000,
-  },
-] as Customer[];
 
 // -----------------------------------------------------------
 // 2. Main Component
 // -----------------------------------------------------------
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>(mockCustomers);
+  // Initialize with empty array, no mock data
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [cityFilter, setCityFilter] = useState("all");
@@ -164,35 +90,33 @@ export default function CustomersPage() {
     email: "",
   });
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   // Fetch data from API on load
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      // NOTE: In a real app, 'totalOrders' and 'totalPaid' should come from JOINs or aggregated data.
-      // For this integration, we will fetch core data and manually map back to the mock structure.
       const response = await fetch("/api/customers");
       const data = await response.json();
 
-      if (response.ok) {
-        // Map fetched data to include mock derived fields for consistency with the UI
+      if (response.ok && data.customers) {
+        // Map fetched data
         const mappedCustomers: Customer[] = data.customers.map((c: any) => ({
           ...c,
-          // Fallback for mock data demonstration
-          totalOrders:
-            mockCustomers.find((m) => m.name === c.name)?.totalOrders || 0,
-          totalPaid:
-            mockCustomers.find((m) => m.name === c.name)?.totalPaid || 0,
+          // Default values for fields not yet provided by this specific API endpoint
+          totalOrders: 0,
+          totalPaid: 0,
           outstanding_balance: c.outstanding_balance ?? 0,
         }));
 
         setCustomers(mappedCustomers);
       } else {
         console.error("Failed to fetch customers:", data.error);
-        alert(`Error fetching customers: ${data.error}`);
       }
     } catch (error) {
       console.error("Network error fetching customers:", error);
-      alert("Network error fetching customers");
     } finally {
       setLoading(false);
     }
@@ -203,7 +127,7 @@ export default function CustomersPage() {
   }, []);
 
   // -----------------------------------------------------------
-  // 3. CRUD Handlers using API Routes
+  // 3. CRUD Handlers
   // -----------------------------------------------------------
 
   const handleAddCustomer = async () => {
@@ -217,14 +141,12 @@ export default function CustomersPage() {
       return;
     }
 
-    // Prepare data for POST/PUT (matches expected Supabase schema Insert/Update fields)
     const payload = {
       name: formData.name,
       phone: formData.phone,
       city: formData.city,
       address: formData.address,
       email: formData.email || null,
-      // Default values for new/update records in this simplified payload
       credit_limit: 0,
       outstanding_balance: 0,
       status: "active",
@@ -253,11 +175,10 @@ export default function CustomersPage() {
         alert("Customer added successfully!");
       }
 
-      // Re-fetch data to update UI
       fetchCustomers();
     } catch (error) {
       console.error("Error saving customer:", error);
-      alert(`Error saving customer. See console for details.`);
+      alert(`Error saving customer.`);
     }
 
     setIsAddDialogOpen(false);
@@ -276,10 +197,10 @@ export default function CustomersPage() {
       if (!response.ok) throw new Error("Failed to delete customer");
 
       alert(`Customer ${selectedCustomer.name} deleted successfully!`);
-      fetchCustomers(); // Re-fetch data to update UI
+      fetchCustomers();
     } catch (error) {
       console.error("Error deleting customer:", error);
-      alert(`Error deleting customer. See console for details.`);
+      alert(`Error deleting customer.`);
     }
 
     setIsDeleteDialogOpen(false);
@@ -315,7 +236,7 @@ export default function CustomersPage() {
   };
 
   // -----------------------------------------------------------
-  // 4. Filtering and Calculations
+  // 4. Filtering and Pagination
   // -----------------------------------------------------------
   const filteredCustomers = customers.filter((customer) => {
     const matchesSearch =
@@ -329,7 +250,28 @@ export default function CustomersPage() {
     return matchesSearch && matchesCity;
   });
 
-  // Get unique cities for filter from the current customer list
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, cityFilter]);
+
+  // Pagination Calculations
+  const totalItems = filteredCustomers.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedCustomers = filteredCustomers.slice(startIndex, endIndex);
+
+  // Handlers
+  const handleNextPage = () => {
+    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) setCurrentPage(currentPage - 1);
+  };
+
+  // Get unique cities for filter
   const cities = [
     "all",
     ...new Set(
@@ -341,6 +283,7 @@ export default function CustomersPage() {
     (sum, c) => sum + c.outstanding_balance,
     0
   );
+  // Note: totalPaid will be 0 until API supports it
   const totalLifetimePaid = customers.reduce((sum, c) => sum + c.totalPaid, 0);
 
   return (
@@ -466,7 +409,7 @@ export default function CustomersPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredCustomers.map((customer) => (
+                  paginatedCustomers.map((customer) => (
                     <TableRow key={customer.id}>
                       <TableCell className="font-medium">
                         {customer.name}
@@ -531,6 +474,33 @@ export default function CustomersPage() {
             </Table>
           )}
         </CardContent>
+        {/* Pagination Footer */}
+        {!loading && filteredCustomers.length > 0 && (
+          <CardFooter className="flex items-center justify-between py-4 border-t">
+            <div className="text-sm text-muted-foreground">
+              Showing {Math.min(startIndex + 1, totalItems)} to{" "}
+              {Math.min(endIndex, totalItems)} of {totalItems} entries
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePreviousPage}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNextPage}
+                disabled={currentPage === totalPages || totalPages === 0}
+              >
+                Next
+              </Button>
+            </div>
+          </CardFooter>
+        )}
       </Card>
 
       {/* Add/Edit Customer Dialog */}
