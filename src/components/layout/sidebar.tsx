@@ -114,7 +114,7 @@ function SidebarNav({
           <div key={group.title} className="">
             {/* Don't show "Main" title */}
             {group.title !== "Main" && (
-              <h3 className="px-3 pt-2 pb-1 text-xs font-semibold uppercase text-muted-foreground tracking-wider">
+              <h3 className="px-3 pt-2 pb-1 text-xs text-black font-bold uppercase tracking-wider">
                 {group.title}
               </h3>
             )}

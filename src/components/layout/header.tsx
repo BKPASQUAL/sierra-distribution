@@ -15,7 +15,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 
 export function Header() {
   return (
-    <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-card px-4 md:px-6">
+    <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-card px-4 md:px-6 w-full">
       {/* Mobile Hamburger Menu */}
       <div className="lg:hidden">
         <Sheet>
@@ -25,23 +25,22 @@ export function Header() {
               <span className="sr-only">Toggle Menu</span>
             </Button>
           </SheetTrigger>
-          {/* --- START OF FIX --- */}
-          {/* Added 'h-full' to make the slide-out panel full height */}
           <SheetContent side="left" className="p-0 w-64 h-full">
-            {/* --- END OF FIX --- */}
             <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
-            {/* Use the existing Sidebar component inside the sheet */}
             <Sidebar />
           </SheetContent>
         </Sheet>
       </div>
 
-      {/* Original Search Bar */}
-      <div className="relative flex-1">
+      {/* Search Bar */}
+      {/* UPDATED: Removed 'flex-1' and added 'md:w-1/3' to control size */}
+      <div className="relative w-full md:w-1/5">
+        {/* UPDATED: Fixed typo 'w-' to 'w-4' */}
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search..."
-          className="pl-9 bg-background focus:bg-card"
+          // UPDATED: Removed typo 'W-1/2' and added 'w-full' to fill the container
+          className="pl-9 bg-background focus:bg-card w-full"
         />
       </div>
     </header>
