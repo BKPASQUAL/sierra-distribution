@@ -13,6 +13,8 @@ import {
   FileText,
   CheckCircle2,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +24,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from "@/components/ui/card";
 import {
   Table,
@@ -86,13 +89,21 @@ export default function BillsPage() {
     []
   );
   const [loading, setLoading] = useState(true);
+
+  // Filter States
   const [searchQuery, setSearchQuery] = useState("");
   const [customerFilter, setCustomerFilter] = useState("all");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [paymentMethodFilter, setPaymentMethodFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
+
+  // Alert States
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Fetch orders and payments from API
   useEffect(() => {
@@ -161,6 +172,17 @@ export default function BillsPage() {
     fetchCustomers();
   }, []);
 
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchQuery,
+    customerFilter,
+    paymentStatusFilter,
+    paymentMethodFilter,
+    dateFilter,
+  ]);
+
   // Filter orders
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
@@ -204,6 +226,21 @@ export default function BillsPage() {
     );
   });
 
+  // Pagination Logic
+  const totalItems = filteredOrders.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) setCurrentPage(currentPage - 1);
+  };
+
   // Calculate stats
   const totalBills = orders.length;
   const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
@@ -224,29 +261,6 @@ export default function BillsPage() {
       default:
         return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
     }
-  };
-
-  const getPaymentMethodBadge = (method: string | null) => {
-    if (!method) return "-";
-
-    const colors: { [key: string]: string } = {
-      cash: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-      credit:
-        "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
-      bank: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-      cheque:
-        "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400",
-    };
-
-    const color = colors[method.toLowerCase()] || colors.cash;
-
-    return (
-      <span
-        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}
-      >
-        {method.charAt(0).toUpperCase() + method.slice(1)}
-      </span>
-    );
   };
 
   // Report Generation Functions
@@ -595,7 +609,7 @@ export default function BillsPage() {
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex-1 max-w-sm">
+            <div className="flex-1 max-w-sm ">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -607,8 +621,27 @@ export default function BillsPage() {
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Rows per page Selector */}
+              <Select
+                value={itemsPerPage.toString()}
+                onValueChange={(v) => {
+                  setItemsPerPage(Number(v));
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[80px]">
+                  <SelectValue placeholder="10" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                </SelectContent>
+              </Select>
+
               <Select value={customerFilter} onValueChange={setCustomerFilter}>
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Filter by customer" />
                 </SelectTrigger>
                 <SelectContent>
@@ -624,8 +657,8 @@ export default function BillsPage() {
                 value={paymentStatusFilter}
                 onValueChange={setPaymentStatusFilter}
               >
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Payment Status" />
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
@@ -638,8 +671,8 @@ export default function BillsPage() {
                 value={paymentMethodFilter}
                 onValueChange={setPaymentMethodFilter}
               >
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Payment Method" />
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Method" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Methods</SelectItem>
@@ -650,7 +683,7 @@ export default function BillsPage() {
                 </SelectContent>
               </Select>
               <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger className="w-[160px]">
+                <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="Date" />
                 </SelectTrigger>
                 <SelectContent>
@@ -678,7 +711,7 @@ export default function BillsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredOrders.length === 0 ? (
+              {paginatedOrders.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={8}
@@ -688,7 +721,7 @@ export default function BillsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredOrders.map((order) => (
+                paginatedOrders.map((order) => (
                   <TableRow key={order.id}>
                     <TableCell>
                       <div className="flex items-center gap-2 text-sm">
@@ -742,6 +775,35 @@ export default function BillsPage() {
             </TableBody>
           </Table>
         </CardContent>
+        {/* Pagination Footer */}
+        {filteredOrders.length > 0 && (
+          <CardFooter className="flex items-center justify-between border-t py-4">
+            <div className="text-sm text-muted-foreground">
+              Showing {Math.min(startIndex + 1, totalItems)} to{" "}
+              {Math.min(endIndex, totalItems)} of {totalItems} entries
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePreviousPage}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-2" />
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNextPage}
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          </CardFooter>
+        )}
       </Card>
     </div>
   );
