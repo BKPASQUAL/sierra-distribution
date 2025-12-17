@@ -11,17 +11,20 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
+  FileWarning,
   CheckCircle2,
   X,
   ChevronLeft,
   ChevronRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   CardFooter,
@@ -46,6 +49,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -96,6 +100,12 @@ export default function BillsPage() {
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [paymentMethodFilter, setPaymentMethodFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
+
+  // Sorting State
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: "asc" | "desc";
+  } | null>(null);
 
   // Alert States
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
@@ -226,12 +236,49 @@ export default function BillsPage() {
     );
   });
 
-  // Pagination Logic
-  const totalItems = filteredOrders.length;
+  // Sorting Logic
+  const handleSort = (key: string) => {
+    let direction: "asc" | "desc" = "asc";
+    if (
+      sortConfig &&
+      sortConfig.key === key &&
+      sortConfig.direction === "asc"
+    ) {
+      direction = "desc";
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedOrders = React.useMemo(() => {
+    let sortableItems = [...filteredOrders];
+    if (sortConfig !== null) {
+      sortableItems.sort((a: any, b: any) => {
+        // Handle nested properties like customers.name
+        const getValue = (obj: any, path: string) => {
+          return path.split(".").reduce((o, i) => (o ? o[i] : null), obj);
+        };
+
+        const aValue = getValue(a, sortConfig.key);
+        const bValue = getValue(b, sortConfig.key);
+
+        if (aValue < bValue) {
+          return sortConfig.direction === "asc" ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === "asc" ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [filteredOrders, sortConfig]);
+
+  // Pagination Logic (Uses sortedOrders)
+  const totalItems = sortedOrders.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
+  const paginatedOrders = sortedOrders.slice(startIndex, endIndex);
 
   const handleNextPage = () => {
     if (currentPage < totalPages) setCurrentPage(currentPage + 1);
@@ -241,13 +288,21 @@ export default function BillsPage() {
     if (currentPage > 1) setCurrentPage(currentPage - 1);
   };
 
+  const getSortIcon = (columnKey: string) => {
+    if (sortConfig?.key === columnKey) {
+      return sortConfig.direction === "asc" ? (
+        <ArrowUp className="ml-2 h-4 w-4" />
+      ) : (
+        <ArrowDown className="ml-2 h-4 w-4" />
+      );
+    }
+    return <ArrowUpDown className="ml-2 h-4 w-4 text-muted-foreground" />;
+  };
+
   // Calculate stats
   const totalBills = orders.length;
   const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
-
-  // Calculate total balance (sum of all due amounts)
   const totalBalance = orders.reduce((sum, o) => sum + (o.due_amount || 0), 0);
-
   const pendingBills = orders.filter((o) => o.payment_status !== "paid").length;
 
   const getPaymentStatusColor = (status: string) => {
@@ -263,14 +318,16 @@ export default function BillsPage() {
     }
   };
 
-  // Report Generation Functions
+  // --- REPORT GENERATION FUNCTIONS ---
+
   const generateExcelReport = () => {
-    if (filteredOrders.length === 0) {
+    // UPDATED: Use sortedOrders to reflect table sorting
+    if (sortedOrders.length === 0) {
       alert("No bills to export. Please adjust your filters.");
       return;
     }
 
-    const excelData = filteredOrders.map((order) => ({
+    const excelData = sortedOrders.map((order) => ({
       "Invoice No": order.order_number,
       Date: new Date(order.order_date).toLocaleDateString(),
       Customer: order.customers.name,
@@ -283,15 +340,15 @@ export default function BillsPage() {
     }));
 
     // Add summary row
-    const totalAmount = filteredOrders.reduce(
+    const totalAmount = sortedOrders.reduce(
       (sum, o) => sum + o.total_amount,
       0
     );
-    const totalPaid = filteredOrders.reduce(
+    const totalPaid = sortedOrders.reduce(
       (sum, o) => sum + (o.paid_amount || 0),
       0
     );
-    const totalDue = filteredOrders.reduce(
+    const totalDue = sortedOrders.reduce(
       (sum, o) => sum + (o.due_amount || 0),
       0
     );
@@ -331,14 +388,15 @@ export default function BillsPage() {
     XLSX.writeFile(wb, fileName);
 
     setSuccessMessage(
-      `Excel report generated successfully! (${filteredOrders.length} bills)`
+      `Excel report generated successfully! (${sortedOrders.length} bills)`
     );
     setShowSuccessAlert(true);
     setTimeout(() => setShowSuccessAlert(false), 3000);
   };
 
   const generatePDFReport = () => {
-    if (filteredOrders.length === 0) {
+    // UPDATED: Use sortedOrders to reflect table sorting
+    if (sortedOrders.length === 0) {
       alert("No bills to export. Please adjust your filters.");
       return;
     }
@@ -360,7 +418,7 @@ export default function BillsPage() {
     doc.setFontSize(8);
     doc.setTextColor(100);
     doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
-    doc.text(`Total Bills: ${filteredOrders.length}`, 14, 33);
+    doc.text(`Total Bills: ${sortedOrders.length}`, 14, 33);
 
     // Add filter information
     let filterText = "Filters: ";
@@ -377,12 +435,16 @@ export default function BillsPage() {
     if (dateFilter !== "all") {
       filterText += `Period: ${dateFilter} | `;
     }
+    if (sortConfig) {
+      filterText += `Sorted By: ${sortConfig.key} (${sortConfig.direction}) | `;
+    }
+
     if (filterText !== "Filters: ") {
       doc.text(filterText, 14, 38);
     }
 
-    // Prepare table data (removed Phone column to fit portrait)
-    const tableData = filteredOrders.map((order) => [
+    // Prepare table data (using sortedOrders)
+    const tableData = sortedOrders.map((order) => [
       new Date(order.order_date).toLocaleDateString("en-GB"),
       order.order_number,
       order.customers.name,
@@ -394,15 +456,15 @@ export default function BillsPage() {
     ]);
 
     // Add totals row
-    const totalAmount = filteredOrders.reduce(
+    const totalAmount = sortedOrders.reduce(
       (sum, o) => sum + o.total_amount,
       0
     );
-    const totalPaid = filteredOrders.reduce(
+    const totalPaid = sortedOrders.reduce(
       (sum, o) => sum + (o.paid_amount || 0),
       0
     );
-    const totalDue = filteredOrders.reduce(
+    const totalDue = sortedOrders.reduce(
       (sum, o) => sum + (o.due_amount || 0),
       0
     );
@@ -483,7 +545,135 @@ export default function BillsPage() {
     doc.save(fileName);
 
     setSuccessMessage(
-      `PDF report generated successfully! (${filteredOrders.length} bills)`
+      `PDF report generated successfully! (${sortedOrders.length} bills)`
+    );
+    setShowSuccessAlert(true);
+    setTimeout(() => setShowSuccessAlert(false), 3000);
+  };
+
+  // --- NEW: generateOutstandingReport ---
+  const generateOutstandingReport = () => {
+    // Specifically filter for UNPAID or PARTIAL only (ignoring current view filters)
+    const outstandingOrders = orders.filter(
+      (o) => o.payment_status === "unpaid" || o.payment_status === "partial"
+    );
+
+    // Optional: Sort outstanding orders by due amount descending for better utility
+    outstandingOrders.sort((a, b) => (b.due_amount || 0) - (a.due_amount || 0));
+
+    if (outstandingOrders.length === 0) {
+      alert("No outstanding bills found.");
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+
+    // Add title (Red color for urgency)
+    doc.setFontSize(16);
+    doc.setTextColor(40);
+    doc.text("Sierra Distribution", 14, 15);
+    doc.setFontSize(12);
+    doc.setTextColor(220, 38, 38); // Red color
+    doc.text("Outstanding Bills Report", 14, 22);
+
+    // Add metadata
+    doc.setFontSize(8);
+    doc.setTextColor(100);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
+    doc.text(`Total Outstanding Bills: ${outstandingOrders.length}`, 14, 33);
+
+    // Prepare table data
+    const tableData = outstandingOrders.map((order) => [
+      new Date(order.order_date).toLocaleDateString("en-GB"),
+      order.order_number,
+      order.customers.name,
+      order.total_amount.toLocaleString(),
+      (order.paid_amount || 0).toLocaleString(),
+      (order.due_amount || 0).toLocaleString(),
+      order.payment_status.charAt(0).toUpperCase() +
+        order.payment_status.slice(1),
+    ]);
+
+    // Add totals row
+    const totalAmount = outstandingOrders.reduce(
+      (sum, o) => sum + o.total_amount,
+      0
+    );
+    const totalPaid = outstandingOrders.reduce(
+      (sum, o) => sum + (o.paid_amount || 0),
+      0
+    );
+    const totalDue = outstandingOrders.reduce(
+      (sum, o) => sum + (o.due_amount || 0),
+      0
+    );
+
+    tableData.push([
+      "",
+      "TOTAL OUTSTANDING",
+      "",
+      totalAmount.toLocaleString(),
+      totalPaid.toLocaleString(),
+      totalDue.toLocaleString(),
+      "",
+    ]);
+
+    // Generate table
+    autoTable(doc, {
+      head: [
+        [
+          "Date",
+          "Invoice No",
+          "Customer",
+          "Total (LKR)",
+          "Paid (LKR)",
+          "Due (LKR)",
+          "Status",
+        ],
+      ],
+      body: tableData,
+      startY: 38,
+      theme: "grid",
+      headStyles: {
+        fillColor: [220, 38, 38], // Red header for outstanding
+        textColor: 255,
+        fontSize: 8,
+        fontStyle: "bold",
+        halign: "center",
+      },
+      bodyStyles: {
+        fontSize: 7,
+      },
+      columnStyles: {
+        0: { cellWidth: 22, halign: "center" }, // Date
+        1: { cellWidth: 28, halign: "left" }, // Invoice No
+        2: { cellWidth: 50, halign: "left" }, // Customer
+        3: { cellWidth: 25, halign: "right" }, // Total
+        4: { cellWidth: 25, halign: "right" }, // Paid
+        5: { cellWidth: 25, halign: "right" }, // Due
+        6: { cellWidth: 20, halign: "center" }, // Status
+      },
+      didParseCell: (data: any) => {
+        // Highlight total row in light red
+        if (data.row.index === tableData.length - 1) {
+          data.cell.styles.fontStyle = "bold";
+          data.cell.styles.fillColor = [254, 226, 226];
+        }
+      },
+      margin: { left: 14, right: 14 },
+    });
+
+    const fileName = `Outstanding_Bills_${
+      new Date().toISOString().split("T")[0]
+    }.pdf`;
+    doc.save(fileName);
+
+    setSuccessMessage(
+      `Outstanding report generated successfully! (${outstandingOrders.length} bills)`
     );
     setShowSuccessAlert(true);
     setTimeout(() => setShowSuccessAlert(false), 3000);
@@ -535,14 +725,19 @@ export default function BillsPage() {
                 Generate Report
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem onClick={generateExcelReport}>
                 <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" />
-                Export to Excel (.xlsx)
+                Export Current View (.xlsx)
               </DropdownMenuItem>
               <DropdownMenuItem onClick={generatePDFReport}>
-                <FileText className="w-4 h-4 mr-2 text-red-600" />
-                Export to PDF
+                <FileText className="w-4 h-4 mr-2 text-blue-600" />
+                Export Current View (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={generateOutstandingReport}>
+                <FileWarning className="w-4 h-4 mr-2 text-red-600" />
+                Outstanding Report (PDF)
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -700,13 +895,62 @@ export default function BillsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Invoice No</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead className="text-right">Paid</TableHead>
-                <TableHead className="text-right">Due Amount</TableHead>
-                <TableHead>Payment Status</TableHead>
+                <TableHead
+                  onClick={() => handleSort("order_date")}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-center">
+                    Date {getSortIcon("order_date")}
+                  </div>
+                </TableHead>
+                <TableHead
+                  onClick={() => handleSort("customers.name")}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-center">
+                    Customer {getSortIcon("customers.name")}
+                  </div>
+                </TableHead>
+                <TableHead
+                  onClick={() => handleSort("order_number")}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-center">
+                    Invoice No {getSortIcon("order_number")}
+                  </div>
+                </TableHead>
+                <TableHead
+                  className="text-right cursor-pointer"
+                  onClick={() => handleSort("total_amount")}
+                >
+                  <div className="flex items-center justify-end">
+                    Total {getSortIcon("total_amount")}
+                  </div>
+                </TableHead>
+                <TableHead
+                  className="text-right cursor-pointer"
+                  onClick={() => handleSort("paid_amount")}
+                >
+                  <div className="flex items-center justify-end">
+                    Paid {getSortIcon("paid_amount")}
+                  </div>
+                </TableHead>
+                <TableHead
+                  className="text-right cursor-pointer"
+                  onClick={() => handleSort("due_amount")}
+                >
+                  <div className="flex items-center justify-end">
+                    Due Amount {getSortIcon("due_amount")}
+                  </div>
+                </TableHead>
+                <TableHead
+                  onClick={() => handleSort("payment_status")}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-center">
+                    Payment Status {getSortIcon("payment_status")}
+                  </div>
+                </TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -776,7 +1020,7 @@ export default function BillsPage() {
           </Table>
         </CardContent>
         {/* Pagination Footer */}
-        {filteredOrders.length > 0 && (
+        {sortedOrders.length > 0 && (
           <CardFooter className="flex items-center justify-between border-t py-4">
             <div className="text-sm text-muted-foreground">
               Showing {Math.min(startIndex + 1, totalItems)} to{" "}
