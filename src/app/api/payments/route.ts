@@ -1,18 +1,12 @@
 // src/app/api/payments/route.ts
 import { createClient } from "@/lib/supabase/server";
-// --- START OF CHANGE ---
 import { NextResponse, NextRequest } from "next/server";
-// --- END OF CHANGE ---
 
 // GET all payments with company account details
-// --- START OF CHANGE ---
 export async function GET(request: NextRequest) {
-  // Add 'request: NextRequest'
-  // --- END OF CHANGE ---
   try {
     const supabase = await createClient();
 
-    // --- START OF CHANGE ---
     // Read filters from the URL
     const { searchParams } = new URL(request.url);
     const paymentMethod = searchParams.get("payment_method");
@@ -56,7 +50,6 @@ export async function GET(request: NextRequest) {
 
     // Execute the final query
     const { data: payments, error } = await query;
-    // --- END OF CHANGE ---
 
     if (error) {
       console.error("Error fetching payments:", error);
@@ -114,7 +107,7 @@ export async function POST(request: Request) {
       cheque_number,
       cheque_date,
       cheque_status,
-      bank_id,
+      bank_account_id, // UPDATED: Changed from bank_id to bank_account_id
     } = body;
 
     // Validate required fields
@@ -144,7 +137,8 @@ export async function POST(request: Request) {
 
     // Validate cheque fields if payment method is cheque
     if (payment_method.toLowerCase() === "cheque") {
-      if (!cheque_number || !cheque_date || !bank_id) {
+      // UPDATED: Check bank_account_id instead of bank_id
+      if (!cheque_number || !cheque_date || !bank_account_id) {
         return NextResponse.json(
           {
             error:
@@ -175,7 +169,6 @@ export async function POST(request: Request) {
     }
 
     // Create payment record
-    // Note: bank_account_id stores the cheque's bank (for cheque payments)
     const { data: payment, error: paymentError } = await supabase
       .from("payments")
       .insert([
@@ -192,7 +185,8 @@ export async function POST(request: Request) {
           cheque_number: cheque_number || null,
           cheque_date: cheque_date || null,
           cheque_status: cheque_status || null,
-          bank_account_id: bank_id || null, // This stores the cheque's bank ID
+          // UPDATED: Use bank_account_id
+          bank_account_id: bank_account_id || null,
         },
       ])
       .select()
@@ -207,7 +201,6 @@ export async function POST(request: Request) {
     }
 
     // Update company account balance if deposit account is provided
-    // This will now only run for cash/bank, or for cheques *if* a deposit account was chosen
     if (deposit_account_id) {
       const newBalance = accountBalance + parseFloat(amount);
 
@@ -218,8 +211,6 @@ export async function POST(request: Request) {
 
       if (balanceUpdateError) {
         console.error("Error updating account balance:", balanceUpdateError);
-        // Note: Payment was created, but balance update failed
-        // You might want to implement a rollback strategy here
         return NextResponse.json(
           {
             warning:

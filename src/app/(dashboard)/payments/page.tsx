@@ -12,13 +12,15 @@ import {
   Clock,
   Loader2,
   Banknote,
+  Pencil,
+  Check,
+  ChevronsUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -61,12 +63,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { toast } from "sonner";
-import { Check, ChevronsUpDown } from "lucide-react";
-import { cn } from "@/lib/utils";
-// --- START OF CHANGE ---
-// Import formatCurrency
-import { formatCurrency } from "@/lib/utils";
-// --- END OF CHANGE ---
+import { cn, formatCurrency } from "@/lib/utils";
 
 // Bank type definition
 interface Bank {
@@ -102,7 +99,7 @@ interface Payment {
   cheque_number: string | null;
   cheque_date: string | null;
   cheque_status: "pending" | "deposited" | "passed" | "returned" | null;
-  bank_id: string | null;
+  bank_account_id: string | null; // Changed from bank_id to match DB
   deposit_account_id: string | null;
   customers?: {
     name: string;
@@ -112,6 +109,7 @@ interface Payment {
     total_amount: number;
   } | null;
   banks?: {
+    id: string;
     bank_code: string;
     bank_name: string;
   };
@@ -138,30 +136,35 @@ export default function PaymentsPage() {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [companyAccounts, setCompanyAccounts] = useState<CompanyAccount[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Dialog State
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [customerFilter, setCustomerFilter] = useState("all");
   const [methodFilter, setMethodFilter] = useState("all");
   const [chequeStatusFilter, setChequeStatusFilter] = useState("all");
+
+  // Popover States
   const [bankSearchOpen, setBankSearchOpen] = useState(false);
   const [accountSearchOpen, setAccountSearchOpen] = useState(false);
-  // --- START OF CHANGE ---
-  // Add state for the new order search popover
   const [orderSearchOpen, setOrderSearchOpen] = useState(false);
-  // --- END OF CHANGE ---
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
+  // Form State
   const [formData, setFormData] = useState({
+    id: "", // For edit mode
     orderId: "",
     amount: 0,
     date: new Date().toISOString().split("T")[0],
     method: "cash",
     bankId: "",
-    depositAccountId: "", // New field for deposit account
+    depositAccountId: "",
     chequeNo: "",
     chequeDate: "",
     notes: "",
@@ -174,7 +177,6 @@ export default function PaymentsPage() {
     fetchCompanyAccounts();
   }, []);
 
-  // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, methodFilter, chequeStatusFilter]);
@@ -238,26 +240,21 @@ export default function PaymentsPage() {
       payment.orders?.order_number
         ?.toLowerCase()
         .includes(searchTerm.toLowerCase());
-
     const matchesCustomer =
       customerFilter === "all" || payment.customers?.name === customerFilter;
-
     const matchesMethod =
       methodFilter === "all" ||
       payment.payment_method.toLowerCase() === methodFilter.toLowerCase();
-
     const matchesChequeStatus =
       chequeStatusFilter === "all" ||
       (chequeStatusFilter === "cheque" &&
         payment.payment_method.toLowerCase() === "cheque") ||
       payment.cheque_status === chequeStatusFilter;
-
     return (
       matchesSearch && matchesCustomer && matchesMethod && matchesChequeStatus
     );
   });
 
-  // Calculate stats
   const totalPayments = payments.length;
   const totalReceived = payments.reduce((sum, p) => sum + p.amount, 0);
   const pendingCheques = payments.filter(
@@ -267,7 +264,6 @@ export default function PaymentsPage() {
     (p) => p.cheque_status === "returned"
   ).length;
 
-  // Pagination logic
   const totalItems = filteredPayments.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -282,7 +278,6 @@ export default function PaymentsPage() {
     setCurrentPage((prev) => Math.max(prev - 1, 1));
   };
 
-  // Get available accounts based on payment method
   const getAvailableAccounts = () => {
     if (formData.method === "cash") {
       return companyAccounts.filter((acc) => acc.account_type === "cash");
@@ -294,13 +289,13 @@ export default function PaymentsPage() {
     return [];
   };
 
+  // --- ADD PAYMENT HANDLER ---
   const handleAddPayment = async () => {
     if (!formData.orderId || formData.amount <= 0) {
       toast.error("Please select an order and enter valid amount");
       return;
     }
 
-    // Validate payment amount doesn't exceed balance
     const selectedOrder = unpaidOrders.find((o) => o.id === formData.orderId);
     if (selectedOrder && formData.amount > selectedOrder.balance) {
       toast.error(
@@ -313,7 +308,6 @@ export default function PaymentsPage() {
       return;
     }
 
-    // Validate deposit account selection (Cheque removed from this validation)
     if (
       (formData.method === "bank" || formData.method === "cash") &&
       !formData.depositAccountId
@@ -337,7 +331,6 @@ export default function PaymentsPage() {
     setIsSubmitting(true);
     try {
       const payment_number = `PAY-${Date.now()}`;
-
       const paymentData = {
         payment_number,
         order_id: formData.orderId,
@@ -345,7 +338,6 @@ export default function PaymentsPage() {
         payment_date: formData.date,
         amount: formData.amount,
         payment_method: formData.method,
-        // Set deposit_account_id to null if method is cheque
         deposit_account_id:
           formData.method === "cheque" ? null : formData.depositAccountId,
         reference_number: null,
@@ -353,7 +345,7 @@ export default function PaymentsPage() {
         cheque_number: formData.method === "cheque" ? formData.chequeNo : null,
         cheque_date: formData.method === "cheque" ? formData.chequeDate : null,
         cheque_status: formData.method === "cheque" ? "pending" : null,
-        bank_id: formData.method === "cheque" ? formData.bankId : null,
+        bank_account_id: formData.method === "cheque" ? formData.bankId : null, // Changed key
       };
 
       const response = await fetch("/api/payments", {
@@ -363,18 +355,12 @@ export default function PaymentsPage() {
       });
 
       const result = await response.json();
-
       if (!response.ok) {
         throw new Error(result.error || "Failed to add payment");
       }
 
       toast.success("Payment recorded successfully!");
-
-      // Refetch all data to ensure consistency
-      await fetchPayments();
-      await fetchUnpaidOrders();
-      await fetchCompanyAccounts(); // Refresh account balances
-
+      await refreshData();
       setIsAddDialogOpen(false);
       resetForm();
     } catch (error) {
@@ -385,8 +371,85 @@ export default function PaymentsPage() {
     }
   };
 
+  // --- OPEN EDIT DIALOG ---
+  const handleOpenEdit = (payment: Payment) => {
+    setFormData({
+      id: payment.id,
+      orderId: payment.order_id || "",
+      amount: payment.amount,
+      date: payment.payment_date.split("T")[0],
+      method: payment.payment_method,
+      bankId: payment.bank_account_id || "", // Read from bank_account_id
+      depositAccountId: payment.deposit_account_id || "",
+      chequeNo: payment.cheque_number || "",
+      chequeDate: payment.cheque_date ? payment.cheque_date.split("T")[0] : "",
+      notes: payment.notes || "",
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  // --- SUBMIT EDIT HANDLER ---
+  const handleEditSubmit = async () => {
+    if (formData.amount <= 0) {
+      toast.error("Please enter a valid amount");
+      return;
+    }
+
+    if (
+      formData.method === "cheque" &&
+      (!formData.chequeNo || !formData.chequeDate || !formData.bankId)
+    ) {
+      toast.error("Please provide all cheque details");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const updateData = {
+        order_id: formData.orderId,
+        amount: formData.amount,
+        payment_date: formData.date,
+        payment_method: formData.method,
+        notes: formData.notes,
+        cheque_number: formData.method === "cheque" ? formData.chequeNo : null,
+        cheque_date: formData.method === "cheque" ? formData.chequeDate : null,
+        bank_account_id: formData.method === "cheque" ? formData.bankId : null, // Changed key
+        deposit_account_id:
+          formData.method !== "cheque" ? formData.depositAccountId : undefined,
+      };
+
+      const response = await fetch(`/api/payments/${formData.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateData),
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to update payment");
+      }
+
+      toast.success("Payment updated successfully!");
+      await refreshData();
+      setIsEditDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error("Error updating payment:", error);
+      toast.error(`Error updating payment: ${(error as Error).message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const refreshData = async () => {
+    await fetchPayments();
+    await fetchUnpaidOrders();
+    await fetchCompanyAccounts();
+  };
+
   const resetForm = () => {
     setFormData({
+      id: "",
       orderId: "",
       amount: 0,
       date: new Date().toISOString().split("T")[0],
@@ -399,7 +462,6 @@ export default function PaymentsPage() {
     });
   };
 
-  // Updated function to handle 'deposited' status
   const getChequeStatusBadge = (
     status: Payment["cheque_status"],
     chequeDate: string | null
@@ -584,12 +646,13 @@ export default function PaymentsPage() {
                 <TableHead>Deposit Account</TableHead>
                 <TableHead>Cheque/Bank Details</TableHead>
                 <TableHead className="text-right">Cheque Status</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedPayments.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-10">
+                  <TableCell colSpan={10} className="text-center py-10">
                     No payments found
                   </TableCell>
                 </TableRow>
@@ -671,6 +734,15 @@ export default function PaymentsPage() {
                           payment.cheque_date
                         )}
                     </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleOpenEdit(payment)}
+                      >
+                        <Pencil className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -678,7 +750,6 @@ export default function PaymentsPage() {
           </Table>
         </CardContent>
 
-        {/* Pagination Controls */}
         <CardFooter className="flex items-center justify-between py-4">
           <div className="text-sm text-muted-foreground">
             Showing {Math.min(startIndex + 1, totalItems)} to{" "}
@@ -705,7 +776,7 @@ export default function PaymentsPage() {
         </CardFooter>
       </Card>
 
-      {/* Add Payment Dialog */}
+      {/* --- ADD PAYMENT DIALOG --- */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -715,53 +786,42 @@ export default function PaymentsPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4">
-            {/* --- START OF CHANGE --- */}
-            {/* Replaced Select with Popover/Command */}
             <div className="col-span-2 space-y-2">
               <Label htmlFor="order">Select Order *</Label>
-              <Popover
-                open={orderSearchOpen}
-                onOpenChange={setOrderSearchOpen}
-              >
+              <Popover open={orderSearchOpen} onOpenChange={setOrderSearchOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     role="combobox"
-                    aria-expanded={orderSearchOpen}
                     className="w-full justify-between h-10"
                   >
                     <span className="truncate">
                       {formData.orderId
-                        ? (() => {
-                            const order = unpaidOrders.find(
-                              (o) => o.id === formData.orderId
-                            );
-                            return order
-                              ? `${order.order_number} - ${
-                                  order.customer_name
-                                } (${formatCurrency(order.balance)})`
-                              : "Select an order...";
-                          })()
+                        ? unpaidOrders.find((o) => o.id === formData.orderId)
+                            ?.order_number || "Selected Order"
                         : "Select an order..."}
                     </span>
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <PopoverContent
+                  className="w-[--radix-popover-trigger-width] p-0"
+                  align="start"
+                >
                   <Command>
-                    <CommandInput placeholder="Search by order, customer, or balance..." />
+                    <CommandInput placeholder="Search order..." />
                     <CommandList>
-                      <CommandEmpty>No unpaid orders found.</CommandEmpty>
+                      <CommandEmpty>No orders.</CommandEmpty>
                       <CommandGroup>
                         {unpaidOrders.map((order) => (
                           <CommandItem
                             key={order.id}
-                            value={`${order.order_number} ${order.customer_name} ${order.balance}`}
+                            value={`${order.order_number}`}
                             onSelect={() => {
                               setFormData({
                                 ...formData,
                                 orderId: order.id,
-                                amount: order.balance, // Automatically set amount
+                                amount: order.balance,
                               });
                               setOrderSearchOpen(false);
                             }}
@@ -774,22 +834,8 @@ export default function PaymentsPage() {
                                   : "opacity-0"
                               )}
                             />
-                            <div className="flex justify-between w-full">
-                              <div className="flex flex-col">
-                                <span className="font-medium">
-                                  {order.order_number} - {order.customer_name}
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                  Order Date:{" "}
-                                  {new Date(
-                                    order.order_date
-                                  ).toLocaleDateString()}
-                                </span>
-                              </div>
-                              <span className="font-medium">
-                                {formatCurrency(order.balance)}
-                              </span>
-                            </div>
+                            {order.order_number} - {order.customer_name} (
+                            {formatCurrency(order.balance)})
                           </CommandItem>
                         ))}
                       </CommandGroup>
@@ -798,15 +844,11 @@ export default function PaymentsPage() {
                 </PopoverContent>
               </Popover>
             </div>
-            {/* --- END OF CHANGE --- */}
 
             <div className="space-y-2">
-              <Label htmlFor="amount">Payment Amount (LKR) *</Label>
+              <Label>Amount (LKR) *</Label>
               <Input
-                id="amount"
                 type="number"
-                step="0.01"
-                placeholder="Enter amount"
                 value={formData.amount}
                 onChange={(e) =>
                   setFormData({
@@ -814,243 +856,302 @@ export default function PaymentsPage() {
                     amount: parseFloat(e.target.value) || 0,
                   })
                 }
-                className="w-full h-10"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="date">Payment Date *</Label>
+              <Label>Date *</Label>
               <Input
-                id="date"
                 type="date"
                 value={formData.date}
                 onChange={(e) =>
                   setFormData({ ...formData, date: e.target.value })
                 }
-                className="w-full h-10"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="method">Payment Method *</Label>
+              <Label>Method</Label>
               <Select
                 value={formData.method}
-                onValueChange={(value) =>
-                  setFormData({
-                    ...formData,
-                    method: value,
-                    depositAccountId: "", // Reset account when method changes
-                    bankId: "",
-                    chequeNo: "",
-                    chequeDate: "",
-                  })
+                onValueChange={(val) =>
+                  setFormData({ ...formData, method: val })
                 }
               >
-                <SelectTrigger className="w-full h-10">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="bank">Bank Transfer</SelectItem>
-                  <SelectItem value="credit">Credit</SelectItem>
+                  <SelectItem value="bank">Bank</SelectItem>
                   <SelectItem value="cheque">Cheque</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Deposit Account Selection - Show for Cash and Bank Transfer ONLY */}
             {(formData.method === "cash" || formData.method === "bank") && (
               <div className="space-y-2">
-                <Label>
-                  {formData.method === "cash"
-                    ? "Cash Account *"
-                    : "Deposit to Bank Account *"}
-                </Label>
-                <Popover
-                  open={accountSearchOpen}
-                  onOpenChange={setAccountSearchOpen}
+                <Label>Deposit Account</Label>
+                <Select
+                  value={formData.depositAccountId}
+                  onValueChange={(val) =>
+                    setFormData({ ...formData, depositAccountId: val })
+                  }
                 >
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={accountSearchOpen}
-                      className="w-full justify-between h-10"
-                    >
-                      <span className="truncate">
-                        {formData.depositAccountId
-                          ? (() => {
-                              const account = companyAccounts.find(
-                                (a) => a.id === formData.depositAccountId
-                              );
-                              return account ? (
-                                <span>
-                                  {account.account_name}
-                                  {account.banks && (
-                                    <span className="text-muted-foreground ml-2">
-                                      ({account.banks.bank_code})
-                                    </span>
-                                  )}
-                                </span>
-                              ) : (
-                                "Select account..."
-                              );
-                            })()
-                          : "Select account..."}
-                      </span>
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0">
-                    <Command>
-                      <CommandInput placeholder="Search account..." />
-                      <CommandList>
-                        <CommandEmpty>No account found.</CommandEmpty>
-                        <CommandGroup>
-                          {getAvailableAccounts().map((account) => (
-                            <CommandItem
-                              key={account.id}
-                              value={`${account.account_name} ${
-                                account.banks?.bank_name || ""
-                              }`}
-                              onSelect={() => {
-                                setFormData({
-                                  ...formData,
-                                  depositAccountId: account.id,
-                                });
-                                setAccountSearchOpen(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  formData.depositAccountId === account.id
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              <div className="flex flex-col">
-                                <span className="font-medium">
-                                  {account.account_name}
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                  {account.banks
-                                    ? `${account.banks.bank_code} - ${account.banks.bank_name}`
-                                    : "Cash on Hand"}{" "}
-                                  | Balance:{" "}
-                                  {formatCurrency(account.current_balance)}
-                                </span>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getAvailableAccounts().map((acc) => (
+                      <SelectItem key={acc.id} value={acc.id}>
+                        {acc.account_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
-            {/* Cheque specific fields */}
             {formData.method === "cheque" && (
               <>
                 <div className="space-y-2">
-                  <Label>Cheque Bank *</Label>
-                  <Popover
-                    open={bankSearchOpen}
-                    onOpenChange={setBankSearchOpen}
+                  <Label>Bank</Label>
+                  <Select
+                    value={formData.bankId}
+                    onValueChange={(val) =>
+                      setFormData({ ...formData, bankId: val })
+                    }
                   >
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={bankSearchOpen}
-                        className="w-full justify-between h-10"
-                      >
-                        <span className="truncate">
-                          {formData.bankId
-                            ? (() => {
-                                const bank = banks.find(
-                                  (b) => b.id === formData.bankId
-                                );
-                                return bank
-                                  ? `${bank.bank_code} - ${bank.bank_name}`
-                                  : "Select bank...";
-                              })()
-                            : "Select bank..."}
-                        </span>
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0">
-                      <Command>
-                        <CommandInput placeholder="Search bank..." />
-                        <CommandList>
-                          <CommandEmpty>No bank found.</CommandEmpty>
-                          <CommandGroup>
-                            {banks.map((bank) => (
-                              <CommandItem
-                                key={bank.id}
-                                value={`${bank.bank_code} ${bank.bank_name}`}
-                                onSelect={() => {
-                                  setFormData({
-                                    ...formData,
-                                    bankId: bank.id,
-                                  });
-                                  setBankSearchOpen(false);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    formData.bankId === bank.id
-                                      ? "opacity-100"
-                                      : "opacity-0"
-                                  )}
-                                />
-                                {bank.bank_code} - {bank.bank_name}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Bank" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {banks.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.bank_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="chequeNo">Cheque Number *</Label>
+                  <Label>Cheque No</Label>
                   <Input
-                    id="chequeNo"
-                    placeholder="Enter cheque number"
                     value={formData.chequeNo}
                     onChange={(e) =>
                       setFormData({ ...formData, chequeNo: e.target.value })
                     }
-                    className="w-full h-10"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="chequeDate">Cheque Date *</Label>
+                  <Label>Cheque Date</Label>
                   <Input
-                    id="chequeDate"
                     type="date"
                     value={formData.chequeDate}
                     onChange={(e) =>
                       setFormData({ ...formData, chequeDate: e.target.value })
                     }
-                    className="w-full h-10"
                   />
                 </div>
               </>
             )}
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="notes">Notes</Label>
+
+            <div className="col-span-2">
+              <Label>Notes</Label>
               <Input
-                id="notes"
-                placeholder="Additional notes..."
                 value={formData.notes}
                 onChange={(e) =>
                   setFormData({ ...formData, notes: e.target.value })
                 }
-                className="w-full h-10"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddPayment} disabled={isSubmitting}>
+              {isSubmitting ? "Processing..." : "Add Payment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- EDIT PAYMENT DIALOG --- */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Payment</DialogTitle>
+            <DialogDescription>
+              Modify payment details. (Note: Changing amount or order affects
+              balances)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2 space-y-2">
+              <Label>Select Order</Label>
+              <Popover open={orderSearchOpen} onOpenChange={setOrderSearchOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between h-10"
+                  >
+                    <span className="truncate">
+                      {formData.orderId
+                        ? (() => {
+                            const order = unpaidOrders.find(
+                              (o) => o.id === formData.orderId
+                            );
+                            if (order)
+                              return `${order.order_number} - ${order.customer_name}`;
+                            // Fallback if not in unpaid list (e.g. it's the currently assigned order)
+                            const currentPayment = payments.find(
+                              (p) => p.id === formData.id
+                            );
+                            if (currentPayment?.order_id === formData.orderId)
+                              return `${currentPayment.orders?.order_number} (Current)`;
+                            return "Unknown Order";
+                          })()
+                        : "Select an order..."}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[--radix-popover-trigger-width] p-0"
+                  align="start"
+                >
+                  <Command>
+                    <CommandInput placeholder="Search orders..." />
+                    <CommandList>
+                      <CommandEmpty>No unpaid orders found.</CommandEmpty>
+                      <CommandGroup>
+                        {unpaidOrders.map((order) => (
+                          <CommandItem
+                            key={order.id}
+                            value={`${order.order_number} ${order.customer_name}`}
+                            onSelect={() => {
+                              setFormData({
+                                ...formData,
+                                orderId: order.id,
+                              });
+                              setOrderSearchOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                formData.orderId === order.id
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              )}
+                            />
+                            {order.order_number} - {order.customer_name} (
+                            {formatCurrency(order.balance)})
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Amount (LKR) *</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={formData.amount}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    amount: parseFloat(e.target.value) || 0,
+                  })
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Payment Date *</Label>
+              <Input
+                type="date"
+                value={formData.date}
+                onChange={(e) =>
+                  setFormData({ ...formData, date: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Payment Method</Label>
+              <Select
+                value={formData.method}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, method: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bank">Bank Transfer</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.method === "cheque" && (
+              <>
+                <div className="space-y-2">
+                  <Label>Cheque Bank</Label>
+                  <Select
+                    value={formData.bankId}
+                    onValueChange={(val) =>
+                      setFormData({ ...formData, bankId: val })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Bank" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {banks.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.bank_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Cheque No</Label>
+                  <Input
+                    value={formData.chequeNo}
+                    onChange={(e) =>
+                      setFormData({ ...formData, chequeNo: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Cheque Date</Label>
+                  <Input
+                    type="date"
+                    value={formData.chequeDate}
+                    onChange={(e) =>
+                      setFormData({ ...formData, chequeDate: e.target.value })
+                    }
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="col-span-2 space-y-2">
+              <Label>Notes</Label>
+              <Input
+                value={formData.notes}
+                onChange={(e) =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
               />
             </div>
           </div>
@@ -1058,23 +1159,20 @@ export default function PaymentsPage() {
             <Button
               variant="outline"
               onClick={() => {
-                setIsAddDialogOpen(false);
+                setIsEditDialogOpen(false);
                 resetForm();
               }}
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleAddPayment}
-              disabled={unpaidOrders.length === 0 || isSubmitting}
-            >
+            <Button onClick={handleEditSubmit} disabled={isSubmitting}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Processing...
+                  Updating...
                 </>
               ) : (
-                "Add Payment"
+                "Save Changes"
               )}
             </Button>
           </DialogFooter>
