@@ -90,7 +90,7 @@ export default function BillsPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>(
-    []
+    [],
   );
   const [loading, setLoading] = useState(true);
 
@@ -132,12 +132,12 @@ export default function BillsPage() {
             // Calculate paid amount for this order (exclude returned cheques)
             const orderPayments = paymentsData.payments.filter(
               (p: Payment) =>
-                p.order_id === order.id && p.cheque_status !== "returned"
+                p.order_id === order.id && p.cheque_status !== "returned",
             );
 
             const paidAmount = orderPayments.reduce(
               (sum: number, p: Payment) => sum + p.amount,
-              0
+              0,
             );
 
             const dueAmount = order.total_amount - paidAmount;
@@ -321,7 +321,6 @@ export default function BillsPage() {
   // --- REPORT GENERATION FUNCTIONS ---
 
   const generateExcelReport = () => {
-    // UPDATED: Use sortedOrders to reflect table sorting
     if (sortedOrders.length === 0) {
       alert("No bills to export. Please adjust your filters.");
       return;
@@ -342,15 +341,15 @@ export default function BillsPage() {
     // Add summary row
     const totalAmount = sortedOrders.reduce(
       (sum, o) => sum + o.total_amount,
-      0
+      0,
     );
     const totalPaid = sortedOrders.reduce(
       (sum, o) => sum + (o.paid_amount || 0),
-      0
+      0,
     );
     const totalDue = sortedOrders.reduce(
       (sum, o) => sum + (o.due_amount || 0),
-      0
+      0,
     );
 
     excelData.push({
@@ -365,12 +364,10 @@ export default function BillsPage() {
       "Payment Method": "",
     } as any);
 
-    // Create workbook and worksheet
     const ws = XLSX.utils.json_to_sheet(excelData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Bills Report");
 
-    // Auto-width columns
     const maxWidth = excelData.reduce((w: any, r: any) => {
       return Object.keys(r).map((k, i) => {
         const currentWidth = w[i] || 10;
@@ -381,21 +378,19 @@ export default function BillsPage() {
 
     ws["!cols"] = maxWidth.map((w: number) => ({ width: w }));
 
-    // Generate file
     const fileName = `Bills_Report_${
       new Date().toISOString().split("T")[0]
     }.xlsx`;
     XLSX.writeFile(wb, fileName);
 
     setSuccessMessage(
-      `Excel report generated successfully! (${sortedOrders.length} bills)`
+      `Excel report generated successfully! (${sortedOrders.length} bills)`,
     );
     setShowSuccessAlert(true);
     setTimeout(() => setShowSuccessAlert(false), 3000);
   };
 
   const generatePDFReport = () => {
-    // UPDATED: Use sortedOrders to reflect table sorting
     if (sortedOrders.length === 0) {
       alert("No bills to export. Please adjust your filters.");
       return;
@@ -407,20 +402,17 @@ export default function BillsPage() {
       format: "a4",
     });
 
-    // Add title
     doc.setFontSize(16);
     doc.setTextColor(40);
     doc.text("Sierra Distribution", 14, 15);
     doc.setFontSize(12);
     doc.text("Customer Bills Report", 14, 22);
 
-    // Add metadata
     doc.setFontSize(8);
     doc.setTextColor(100);
     doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
     doc.text(`Total Bills: ${sortedOrders.length}`, 14, 33);
 
-    // Add filter information
     let filterText = "Filters: ";
     if (customerFilter !== "all") {
       const customer = customers.find((c) => c.id === customerFilter);
@@ -443,7 +435,6 @@ export default function BillsPage() {
       doc.text(filterText, 14, 38);
     }
 
-    // Prepare table data (using sortedOrders)
     const tableData = sortedOrders.map((order) => [
       new Date(order.order_date).toLocaleDateString("en-GB"),
       order.order_number,
@@ -455,18 +446,17 @@ export default function BillsPage() {
         order.payment_status.slice(1),
     ]);
 
-    // Add totals row
     const totalAmount = sortedOrders.reduce(
       (sum, o) => sum + o.total_amount,
-      0
+      0,
     );
     const totalPaid = sortedOrders.reduce(
       (sum, o) => sum + (o.paid_amount || 0),
-      0
+      0,
     );
     const totalDue = sortedOrders.reduce(
       (sum, o) => sum + (o.due_amount || 0),
-      0
+      0,
     );
 
     tableData.push([
@@ -479,7 +469,6 @@ export default function BillsPage() {
       "",
     ]);
 
-    // Generate table using autoTable
     autoTable(doc, {
       head: [
         [
@@ -506,16 +495,15 @@ export default function BillsPage() {
         fontSize: 7,
       },
       columnStyles: {
-        0: { cellWidth: 22, halign: "center" }, // Date
-        1: { cellWidth: 28, halign: "left" }, // Invoice No
-        2: { cellWidth: 50, halign: "left" }, // Customer
-        3: { cellWidth: 25, halign: "right" }, // Total
-        4: { cellWidth: 25, halign: "right" }, // Paid
-        5: { cellWidth: 25, halign: "right" }, // Due
-        6: { cellWidth: 20, halign: "center" }, // Status
+        0: { cellWidth: 22, halign: "center" },
+        1: { cellWidth: 28, halign: "left" },
+        2: { cellWidth: 50, halign: "left" },
+        3: { cellWidth: 25, halign: "right" },
+        4: { cellWidth: 25, halign: "right" },
+        5: { cellWidth: 25, halign: "right" },
+        6: { cellWidth: 20, halign: "center" },
       },
       didParseCell: (data: any) => {
-        // Bold and highlight the total row
         if (data.row.index === tableData.length - 1) {
           data.cell.styles.fontStyle = "bold";
           data.cell.styles.fillColor = [240, 240, 240];
@@ -524,7 +512,6 @@ export default function BillsPage() {
       margin: { left: 14, right: 14 },
     });
 
-    // Add footer with page numbers
     const pageCount = doc.getNumberOfPages();
     doc.setFontSize(8);
     doc.setTextColor(150);
@@ -534,32 +521,40 @@ export default function BillsPage() {
         `Page ${i} of ${pageCount}`,
         doc.internal.pageSize.getWidth() / 2,
         doc.internal.pageSize.getHeight() - 10,
-        { align: "center" }
+        { align: "center" },
       );
     }
 
-    // Save PDF
     const fileName = `Bills_Report_${
       new Date().toISOString().split("T")[0]
     }.pdf`;
     doc.save(fileName);
 
     setSuccessMessage(
-      `PDF report generated successfully! (${sortedOrders.length} bills)`
+      `PDF report generated successfully! (${sortedOrders.length} bills)`,
     );
     setShowSuccessAlert(true);
     setTimeout(() => setShowSuccessAlert(false), 3000);
   };
 
-  // --- NEW: generateOutstandingReport ---
+  // --- MODIFIED FUNCTION START ---
   const generateOutstandingReport = () => {
-    // Specifically filter for UNPAID or PARTIAL only (ignoring current view filters)
+    // 1. Filter for UNPAID or PARTIAL only
     const outstandingOrders = orders.filter(
-      (o) => o.payment_status === "unpaid" || o.payment_status === "partial"
+      (o) => o.payment_status === "unpaid" || o.payment_status === "partial",
     );
 
-    // Optional: Sort outstanding orders by due amount descending for better utility
-    outstandingOrders.sort((a, b) => (b.due_amount || 0) - (a.due_amount || 0));
+    // 2. Sort by Customer Name (A-Z), then by Due Amount (Desc)
+    outstandingOrders.sort((a, b) => {
+      // Primary Sort: Customer Name
+      const nameA = a.customers.name.toLowerCase();
+      const nameB = b.customers.name.toLowerCase();
+      if (nameA < nameB) return -1;
+      if (nameA > nameB) return 1;
+
+      // Secondary Sort: Due Amount (High to Low)
+      return (b.due_amount || 0) - (a.due_amount || 0);
+    });
 
     if (outstandingOrders.length === 0) {
       alert("No outstanding bills found.");
@@ -572,74 +567,117 @@ export default function BillsPage() {
       format: "a4",
     });
 
-    // Add title (Red color for urgency)
     doc.setFontSize(16);
     doc.setTextColor(40);
     doc.text("Sierra Distribution", 14, 15);
     doc.setFontSize(12);
-    doc.setTextColor(220, 38, 38); // Red color
-    doc.text("Outstanding Bills Report", 14, 22);
+    doc.setTextColor(220, 38, 38);
+    doc.text("Outstanding Bills (Grouped by Customer)", 14, 22);
 
-    // Add metadata
     doc.setFontSize(8);
     doc.setTextColor(100);
     doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
     doc.text(`Total Outstanding Bills: ${outstandingOrders.length}`, 14, 33);
 
-    // Prepare table data
-    const tableData = outstandingOrders.map((order) => [
-      new Date(order.order_date).toLocaleDateString("en-GB"),
-      order.order_number,
-      order.customers.name,
-      order.total_amount.toLocaleString(),
-      (order.paid_amount || 0).toLocaleString(),
-      (order.due_amount || 0).toLocaleString(),
-      order.payment_status.charAt(0).toUpperCase() +
-        order.payment_status.slice(1),
-    ]);
+    // 3. Construct Table Data with Group Headers
+    const tableBody: any[] = [];
+    let currentCustomer = "";
+    let customerTotalDue = 0;
+    let customerStartIndex = 0;
 
-    // Add totals row
+    outstandingOrders.forEach((order, index) => {
+      // Check if customer changed
+      if (order.customers.name !== currentCustomer) {
+        // If not the first customer, add the previous customer's total row (optional)
+        // For cleaner look, we create a GROUP HEADER for the new customer
+        currentCustomer = order.customers.name;
+
+        // Calculate total for this new customer to display in header (look ahead)
+        customerTotalDue = outstandingOrders
+          .filter((o) => o.customers.name === currentCustomer)
+          .reduce((sum, o) => sum + (o.due_amount || 0), 0);
+
+        // Add Group Header Row
+        tableBody.push([
+          {
+            content: `${currentCustomer} (Total Due: LKR ${customerTotalDue.toLocaleString()})`,
+            colSpan: 6,
+            styles: {
+              fillColor: [240, 240, 240],
+              fontStyle: "bold",
+              textColor: [50, 50, 50],
+              halign: "left",
+            },
+          },
+        ]);
+      }
+
+      // Add the bill row
+      tableBody.push([
+        new Date(order.order_date).toLocaleDateString("en-GB"),
+        order.order_number,
+        order.total_amount.toLocaleString(),
+        (order.paid_amount || 0).toLocaleString(),
+        (order.due_amount || 0).toLocaleString(),
+        order.payment_status.toUpperCase(),
+      ]);
+    });
+
+    // Grand Totals
     const totalAmount = outstandingOrders.reduce(
       (sum, o) => sum + o.total_amount,
-      0
+      0,
     );
     const totalPaid = outstandingOrders.reduce(
       (sum, o) => sum + (o.paid_amount || 0),
-      0
+      0,
     );
     const totalDue = outstandingOrders.reduce(
       (sum, o) => sum + (o.due_amount || 0),
-      0
+      0,
     );
 
-    tableData.push([
-      "",
-      "TOTAL OUTSTANDING",
-      "",
-      totalAmount.toLocaleString(),
-      totalPaid.toLocaleString(),
-      totalDue.toLocaleString(),
+    tableBody.push([
+      {
+        content: "GRAND TOTAL",
+        colSpan: 2,
+        styles: { fontStyle: "bold", halign: "right" },
+      },
+      {
+        content: totalAmount.toLocaleString(),
+        styles: { fontStyle: "bold", halign: "right" },
+      },
+      {
+        content: totalPaid.toLocaleString(),
+        styles: { fontStyle: "bold", halign: "right" },
+      },
+      {
+        content: totalDue.toLocaleString(),
+        styles: {
+          fontStyle: "bold",
+          halign: "right",
+          textColor: [220, 38, 38],
+        },
+      },
       "",
     ]);
 
-    // Generate table
     autoTable(doc, {
       head: [
         [
           "Date",
           "Invoice No",
-          "Customer",
           "Total (LKR)",
           "Paid (LKR)",
           "Due (LKR)",
           "Status",
         ],
       ],
-      body: tableData,
+      body: tableBody,
       startY: 38,
       theme: "grid",
       headStyles: {
-        fillColor: [220, 38, 38], // Red header for outstanding
+        fillColor: [220, 38, 38],
         textColor: 255,
         fontSize: 8,
         fontStyle: "bold",
@@ -649,35 +687,28 @@ export default function BillsPage() {
         fontSize: 7,
       },
       columnStyles: {
-        0: { cellWidth: 22, halign: "center" }, // Date
-        1: { cellWidth: 28, halign: "left" }, // Invoice No
-        2: { cellWidth: 50, halign: "left" }, // Customer
-        3: { cellWidth: 25, halign: "right" }, // Total
-        4: { cellWidth: 25, halign: "right" }, // Paid
-        5: { cellWidth: 25, halign: "right" }, // Due
-        6: { cellWidth: 20, halign: "center" }, // Status
-      },
-      didParseCell: (data: any) => {
-        // Highlight total row in light red
-        if (data.row.index === tableData.length - 1) {
-          data.cell.styles.fontStyle = "bold";
-          data.cell.styles.fillColor = [254, 226, 226];
-        }
+        0: { cellWidth: 25, halign: "center" }, // Date
+        1: { cellWidth: 35, halign: "left" }, // Invoice
+        2: { cellWidth: 30, halign: "right" }, // Total
+        3: { cellWidth: 30, halign: "right" }, // Paid
+        4: { cellWidth: 30, halign: "right" }, // Due
+        5: { cellWidth: 25, halign: "center" }, // Status
       },
       margin: { left: 14, right: 14 },
     });
 
-    const fileName = `Outstanding_Bills_${
+    const fileName = `Outstanding_By_Customer_${
       new Date().toISOString().split("T")[0]
     }.pdf`;
     doc.save(fileName);
 
     setSuccessMessage(
-      `Outstanding report generated successfully! (${outstandingOrders.length} bills)`
+      `Outstanding report generated! (${outstandingOrders.length} bills grouped by customer)`,
     );
     setShowSuccessAlert(true);
     setTimeout(() => setShowSuccessAlert(false), 3000);
   };
+  // --- MODIFIED FUNCTION END ---
 
   if (loading) {
     return (
@@ -737,7 +768,7 @@ export default function BillsPage() {
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={generateOutstandingReport}>
                 <FileWarning className="w-4 h-4 mr-2 text-red-600" />
-                Outstanding Report (PDF)
+                Outstanding (By Customer)
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -995,7 +1026,7 @@ export default function BillsPage() {
                     <TableCell>
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(
-                          order.payment_status
+                          order.payment_status,
                         )}`}
                       >
                         {order.payment_status.charAt(0).toUpperCase() +
