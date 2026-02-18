@@ -21,6 +21,7 @@ import {
   Receipt,
   Fuel,
   Wrench,
+  Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,8 +63,11 @@ import {
   Legend,
   LineChart,
   Line,
+  ComposedChart,
 } from "recharts";
 import { createClient } from "@/lib/supabase/client";
+
+// --- Interfaces ---
 
 interface OrderWithProfit {
   id: string;
@@ -82,6 +86,24 @@ interface OrderWithProfit {
   customers: {
     name: string;
   };
+}
+
+// Updated Purchase Interface to match API response
+interface Purchase {
+  id: string; // Corresponds to purchase_id (e.g., PO-001)
+  supplierId: string;
+  supplierName: string;
+  date: string; // Corresponds to purchase_date
+  items: number;
+  totalItems: number;
+  total: number; // Corresponds to total_amount
+  subtotal: number;
+  totalDiscount: number;
+  invoiceNumber: string;
+  paymentStatus: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface CustomerProfitSummary {
@@ -136,6 +158,15 @@ interface ExpenseSummary {
   topVendors: { vendor: string; total: number; count: number }[];
 }
 
+interface MonthlyReportItem {
+  monthKey: string; // YYYY-MM for sorting
+  monthLabel: string; // e.g., "January 2024"
+  billCount: number;
+  totalSales: number;
+  totalPurchases: number;
+  netValue: number;
+}
+
 export default function ReportsPage() {
   // Auth state
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -145,11 +176,15 @@ export default function ReportsPage() {
   // Data state
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<OrderWithProfit[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [customerSummary, setCustomerSummary] = useState<
     CustomerProfitSummary[]
   >([]);
   const [dueInvoices, setDueInvoices] = useState<DueInvoice[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [monthlyReport, setMonthlyReport] = useState<MonthlyReportItem[]>([]);
+
   const [expenseSummary, setExpenseSummary] = useState<ExpenseSummary>({
     totalExpenses: 0,
     fuelExpenses: 0,
@@ -169,7 +204,7 @@ export default function ReportsPage() {
     return date.toISOString().split("T")[0];
   });
   const [dateTo, setDateTo] = useState(
-    () => new Date().toISOString().split("T")[0]
+    () => new Date().toISOString().split("T")[0],
   );
   const [selectedPeriod, setSelectedPeriod] = useState("month");
 
@@ -230,7 +265,7 @@ export default function ReportsPage() {
     try {
       setLoading(true);
 
-      // Fetch orders
+      // 1. Fetch orders
       const ordersResponse = await fetch("/api/orders");
       const ordersData = await ordersResponse.json();
 
@@ -239,9 +274,17 @@ export default function ReportsPage() {
         return;
       }
 
+      // 2. Fetch payments
       const paymentsResponse = await fetch("/api/payments");
       const paymentsData = await paymentsResponse.json();
 
+      // 3. Fetch Purchases
+      const purchasesResponse = await fetch("/api/purchases");
+      const purchasesData = await purchasesResponse.json();
+      const loadedPurchases: Purchase[] = purchasesData.purchases || [];
+      setPurchases(loadedPurchases);
+
+      // Process Orders
       const ordersWithProfit: OrderWithProfit[] = ordersData.orders.map(
         (order: any) => {
           const subtotal =
@@ -277,11 +320,71 @@ export default function ReportsPage() {
             payment_status: order.payment_status,
             customers: order.customers,
           };
-        }
+        },
       );
 
       setOrders(ordersWithProfit);
 
+      // --- Calculate Monthly Report (Distribution & Purchasing) ---
+      const monthlyDataMap = new Map<string, MonthlyReportItem>();
+
+      // Process Sales for Monthly Report (Using 'order_date' and 'total_amount')
+      ordersWithProfit.forEach((order) => {
+        const date = new Date(order.order_date);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
+        if (!monthlyDataMap.has(monthKey)) {
+          monthlyDataMap.set(monthKey, {
+            monthKey,
+            monthLabel: date.toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "long",
+            }),
+            billCount: 0,
+            totalSales: 0,
+            totalPurchases: 0,
+            netValue: 0,
+          });
+        }
+
+        const entry = monthlyDataMap.get(monthKey)!;
+        entry.billCount += 1;
+        entry.totalSales += order.total_amount;
+        entry.netValue += order.total_amount; // Add sales to net
+      });
+
+      // Process Purchases for Monthly Report (Using 'date' and 'total')
+      loadedPurchases.forEach((purchase) => {
+        const date = new Date(purchase.date); // API returns 'date'
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
+        if (!monthlyDataMap.has(monthKey)) {
+          monthlyDataMap.set(monthKey, {
+            monthKey,
+            monthLabel: date.toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "long",
+            }),
+            billCount: 0,
+            totalSales: 0,
+            totalPurchases: 0,
+            netValue: 0,
+          });
+        }
+
+        const entry = monthlyDataMap.get(monthKey)!;
+        entry.totalPurchases += purchase.total; // API returns 'total'
+        entry.netValue -= purchase.total; // Subtract purchases from net
+      });
+
+      // Convert map to array and sort (Newest first)
+      const monthlyReportArray = Array.from(monthlyDataMap.values()).sort(
+        (a, b) => b.monthKey.localeCompare(a.monthKey),
+      );
+
+      setMonthlyReport(monthlyReportArray);
+
+      // --- Existing Customer & Invoice Calculations ---
       const customerMap = new Map<string, CustomerProfitSummary>();
 
       ordersWithProfit.forEach((order) => {
@@ -314,19 +417,19 @@ export default function ReportsPage() {
             : 0;
 
         const customerOrders = ordersWithProfit.filter(
-          (o) => o.customer_id === summary.customer_id
+          (o) => o.customer_id === summary.customer_id,
         );
 
         customerOrders.forEach((order) => {
           const orderPayments =
             paymentsData.payments?.filter(
               (p: any) =>
-                p.order_id === order.id && p.cheque_status !== "returned"
+                p.order_id === order.id && p.cheque_status !== "returned",
             ) || [];
 
           const totalPaid = orderPayments.reduce(
             (sum: number, p: any) => sum + p.amount,
-            0
+            0,
           );
           const balance = order.total_amount - totalPaid;
 
@@ -337,14 +440,14 @@ export default function ReportsPage() {
       });
 
       const customerArray = Array.from(customerMap.values()).sort(
-        (a, b) => b.total_profit - a.total_profit
+        (a, b) => b.total_profit - a.total_profit,
       );
       setCustomerSummary(customerArray);
 
       const unpaidOrders = ordersWithProfit.filter(
         (order) =>
           order.payment_status === "unpaid" ||
-          order.payment_status === "partial"
+          order.payment_status === "partial",
       );
 
       const overdueInvoices: DueInvoice[] = unpaidOrders
@@ -352,19 +455,19 @@ export default function ReportsPage() {
           const orderPayments =
             paymentsData.payments?.filter(
               (p: any) =>
-                p.order_id === order.id && p.cheque_status !== "returned"
+                p.order_id === order.id && p.cheque_status !== "returned",
             ) || [];
 
           const totalPaid = orderPayments.reduce(
             (sum: number, p: any) => sum + p.amount,
-            0
+            0,
           );
           const balance = order.total_amount - totalPaid;
 
           const orderDate = new Date(order.order_date);
           const today = new Date();
           const daysOverdue = Math.floor(
-            (today.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24)
+            (today.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24),
           );
 
           return {
@@ -503,7 +606,7 @@ export default function ReportsPage() {
 
   const filteredExpenseTotal = filteredExpenses.reduce(
     (sum, exp) => sum + exp.amount,
-    0
+    0,
   );
 
   const handleQuickPeriod = (period: string) => {
@@ -534,13 +637,13 @@ export default function ReportsPage() {
 
   const handleExportPDF = () => {
     alert(
-      "Exporting to PDF...\nThis would generate a PDF file with the current report."
+      "Exporting to PDF...\nThis would generate a PDF file with the current report.",
     );
   };
 
   const handleExportExcel = () => {
     alert(
-      "Exporting to Excel...\nThis would generate an Excel file with the current report data."
+      "Exporting to Excel...\nThis would generate an Excel file with the current report data.",
     );
   };
 
@@ -698,7 +801,7 @@ export default function ReportsPage() {
             <div className="space-y-2">
               <Label>Quick Select</Label>
               <Select value={selectedPeriod} onValueChange={handleQuickPeriod}>
-                    <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select period" />
                 </SelectTrigger>
                 <SelectContent>
@@ -783,7 +886,7 @@ export default function ReportsPage() {
           <CardContent>
             <div
               className={`text-2xl font-bold ${getProfitMarginColor(
-                overallProfitMargin
+                overallProfitMargin,
               )}`}
             >
               {overallProfitMargin.toFixed(2)}%
@@ -810,19 +913,24 @@ export default function ReportsPage() {
       </div>
 
       {/* Reports Tabs */}
-      <Tabs defaultValue="profit" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
+      <Tabs defaultValue="company" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-7">
+          {/* Added grid-cols-7 for new tab */}
+          <TabsTrigger value="company">
+            <Building2 className="w-4 h-4 mr-2" />
+            Company
+          </TabsTrigger>
           <TabsTrigger value="profit">
             <TrendingUp className="w-4 h-4 mr-2" />
-            Profit Analysis
+            Profit
           </TabsTrigger>
           <TabsTrigger value="orders">
             <ShoppingCart className="w-4 h-4 mr-2" />
-            Order by Order
+            Orders
           </TabsTrigger>
           <TabsTrigger value="customers">
             <Users className="w-4 h-4 mr-2" />
-            Customer Profit
+            Customers
           </TabsTrigger>
           <TabsTrigger value="expenses">
             <Receipt className="w-4 h-4 mr-2" />
@@ -830,13 +938,149 @@ export default function ReportsPage() {
           </TabsTrigger>
           <TabsTrigger value="due">
             <AlertTriangle className="w-4 h-4 mr-2" />
-            Due Payments
+            Due
           </TabsTrigger>
           <TabsTrigger value="summary">
             <Package className="w-4 h-4 mr-2" />
             Summary
           </TabsTrigger>
         </TabsList>
+
+        {/* --- NEW COMPANY REPORT TAB --- */}
+        <TabsContent value="company" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Company Overview (Month-wise)</CardTitle>
+              <CardDescription>
+                Comparison of Monthly Sales vs. Monthly Purchases
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={400}>
+                <ComposedChart data={[...monthlyReport].reverse()}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    className="stroke-muted"
+                  />
+                  <XAxis
+                    dataKey="monthLabel"
+                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                    angle={-45}
+                    textAnchor="end"
+                    height={80}
+                  />
+                  <YAxis
+                    yAxisId="left"
+                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fill: "hsl(var(--muted-foreground))" }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--popover))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number) => [
+                      `LKR ${value.toLocaleString()}`,
+                      "",
+                    ]}
+                  />
+                  <Legend />
+                  <Bar
+                    yAxisId="left"
+                    dataKey="totalSales"
+                    name="Sales"
+                    fill="#22c55e"
+                    radius={[4, 4, 0, 0]}
+                    barSize={20}
+                  />
+                  <Bar
+                    yAxisId="left"
+                    dataKey="totalPurchases"
+                    name="Purchases"
+                    fill="#ef4444"
+                    radius={[4, 4, 0, 0]}
+                    barSize={20}
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="billCount"
+                    name="Bill Count"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Month-wise Distribution Data</CardTitle>
+              <CardDescription>
+                Detailed breakdown of bills, sales, and purchases per month.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Month</TableHead>
+                    <TableHead className="text-center">No. of Bills</TableHead>
+                    <TableHead className="text-right">Total Sales</TableHead>
+                    <TableHead className="text-right">
+                      Total Purchases
+                    </TableHead>
+                    <TableHead className="text-right">Net Value</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {monthlyReport.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="text-center py-8 text-muted-foreground"
+                      >
+                        No transaction data available.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    monthlyReport.map((item) => (
+                      <TableRow key={item.monthKey}>
+                        <TableCell className="font-medium">
+                          {item.monthLabel}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {item.billCount}
+                        </TableCell>
+                        <TableCell className="text-right text-green-600 font-medium">
+                          LKR {item.totalSales.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right text-red-600 font-medium">
+                          LKR {item.totalPurchases.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span
+                            className={`font-bold ${item.netValue >= 0 ? "text-green-600" : "text-red-600"}`}
+                          >
+                            {item.netValue >= 0 ? "+" : ""} LKR{" "}
+                            {item.netValue.toLocaleString()}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Profit Analysis Tab */}
         <TabsContent value="profit" className="space-y-4">
@@ -888,7 +1132,7 @@ export default function ReportsPage() {
                       </span>
                       <span
                         className={`text-xl font-bold ${getProfitMarginColor(
-                          overallProfitMargin
+                          overallProfitMargin,
                         )}`}
                       >
                         {overallProfitMargin.toFixed(2)}%
@@ -956,7 +1200,7 @@ export default function ReportsPage() {
                   <p className="text-2xl font-bold text-blue-600">
                     {
                       filteredOrders.filter(
-                        (o) => o.profit_margin >= 20 && o.profit_margin < 30
+                        (o) => o.profit_margin >= 20 && o.profit_margin < 30,
                       ).length
                     }
                   </p>
@@ -966,7 +1210,7 @@ export default function ReportsPage() {
                   <p className="text-2xl font-bold text-yellow-600">
                     {
                       filteredOrders.filter(
-                        (o) => o.profit_margin >= 10 && o.profit_margin < 20
+                        (o) => o.profit_margin >= 10 && o.profit_margin < 20,
                       ).length
                     }
                   </p>
@@ -1051,7 +1295,7 @@ export default function ReportsPage() {
                           <TableCell className="text-right">
                             <span
                               className={`font-bold ${getProfitMarginColor(
-                                order.profit_margin
+                                order.profit_margin,
                               )}`}
                             >
                               {order.profit_margin.toFixed(2)}%
@@ -1060,16 +1304,16 @@ export default function ReportsPage() {
                           <TableCell>
                             <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getProfitMarginBadge(
-                                order.profit_margin
+                                order.profit_margin,
                               )}`}
                             >
                               {order.profit_margin >= 30
                                 ? "Excellent"
                                 : order.profit_margin >= 20
-                                ? "Good"
-                                : order.profit_margin >= 10
-                                ? "Fair"
-                                : "Low"}
+                                  ? "Good"
+                                  : order.profit_margin >= 10
+                                    ? "Fair"
+                                    : "Low"}
                             </span>
                           </TableCell>
                         </TableRow>
@@ -1168,7 +1412,7 @@ export default function ReportsPage() {
                         <TableCell className="text-right">
                           <span
                             className={`font-bold ${getProfitMarginColor(
-                              customer.avg_profit_margin
+                              customer.avg_profit_margin,
                             )}`}
                           >
                             {customer.avg_profit_margin.toFixed(2)}%
@@ -1194,7 +1438,7 @@ export default function ReportsPage() {
                       <TableCell className="text-right">
                         {customerSummary.reduce(
                           (sum, c) => sum + c.total_orders,
-                          0
+                          0,
                         )}
                       </TableCell>
                       <TableCell className="text-right">
@@ -1287,7 +1531,7 @@ export default function ReportsPage() {
           </Card>
         </TabsContent>
 
-        {/* Expenses Tab - NEW! */}
+        {/* Expenses Tab */}
         <TabsContent value="expenses" className="space-y-4">
           {/* Expense Summary Cards */}
           <div className="grid gap-4 md:grid-cols-4">
@@ -1440,7 +1684,7 @@ export default function ReportsPage() {
                           <p className="text-sm text-muted-foreground">
                             {
                               filteredExpenses.filter(
-                                (e) => e.payment_method === method
+                                (e) => e.payment_method === method,
                               ).length
                             }{" "}
                             transactions
@@ -1450,7 +1694,7 @@ export default function ReportsPage() {
                           LKR {amount.toLocaleString()}
                         </p>
                       </div>
-                    )
+                    ),
                   )}
                 </div>
               </CardContent>
@@ -1559,7 +1803,7 @@ export default function ReportsPage() {
                         <TableCell className="text-right text-muted-foreground">
                           LKR{" "}
                           {Math.round(
-                            vendor.total / vendor.count
+                            vendor.total / vendor.count,
                           ).toLocaleString()}
                         </TableCell>
                       </TableRow>
@@ -1569,7 +1813,7 @@ export default function ReportsPage() {
                       <TableCell className="text-right">
                         {expenseSummary.topVendors.reduce(
                           (sum, v) => sum + v.count,
-                          0
+                          0,
                         )}
                       </TableCell>
                       <TableCell className="text-right">
@@ -1623,7 +1867,7 @@ export default function ReportsPage() {
                       .sort(
                         (a, b) =>
                           new Date(b.expense_date).getTime() -
-                          new Date(a.expense_date).getTime()
+                          new Date(a.expense_date).getTime(),
                       )
                       .map((expense) => (
                         <TableRow key={expense.id}>
@@ -1632,7 +1876,7 @@ export default function ReportsPage() {
                           </TableCell>
                           <TableCell>
                             {new Date(
-                              expense.expense_date
+                              expense.expense_date,
                             ).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
@@ -1724,8 +1968,8 @@ export default function ReportsPage() {
                               invoice.daysOverdue > 90
                                 ? "text-red-600"
                                 : invoice.daysOverdue > 60
-                                ? "text-orange-600"
-                                : "text-yellow-600"
+                                  ? "text-orange-600"
+                                  : "text-yellow-600"
                             }`}
                           >
                             {invoice.daysOverdue} days
@@ -1740,15 +1984,15 @@ export default function ReportsPage() {
                               invoice.daysOverdue > 90
                                 ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
                                 : invoice.daysOverdue > 60
-                                ? "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
-                                : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                                  ? "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
+                                  : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
                             }`}
                           >
                             {invoice.daysOverdue > 90
                               ? "Critical"
                               : invoice.daysOverdue > 60
-                              ? "High"
-                              : "Medium"}
+                                ? "High"
+                                : "Medium"}
                           </span>
                         </TableCell>
                       </TableRow>
