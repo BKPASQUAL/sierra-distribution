@@ -55,11 +55,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
-// User type
+// User type definition
 interface SystemUser {
   id: string;
   name: string;
   email: string;
+  username?: string; // Added username field
   role: "Admin" | "Staff";
   status: "Active" | "Inactive";
   created_at?: string;
@@ -71,6 +72,7 @@ export default function SettingsPage() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userName, setUserName] = useState("");
+  const [currentUserEmail, setCurrentUserEmail] = useState("");
 
   // User management state
   const [users, setUsers] = useState<SystemUser[]>([]);
@@ -85,9 +87,11 @@ export default function SettingsPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showUserPassword, setShowUserPassword] = useState(false);
 
+  // Form state
   const [userForm, setUserForm] = useState({
     name: "",
     email: "",
+    username: "",
     role: "Staff" as "Admin" | "Staff",
     status: "Active" as "Active" | "Inactive",
     password: "",
@@ -142,6 +146,7 @@ export default function SettingsPage() {
       const userNameFromMeta = user.user_metadata?.name;
 
       setUserName(userNameFromMeta || user.email || "User");
+      setCurrentUserEmail(user.email || "");
       setIsAdmin(userRole === "Admin");
 
       if (!userRole) {
@@ -195,6 +200,7 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: user.name,
+          username: user.username,
           role: user.role,
           status: newStatus,
         }),
@@ -207,18 +213,18 @@ export default function SettingsPage() {
 
       // Update local state
       setUsers(
-        users.map((u) => (u.id === user.id ? { ...u, status: newStatus } : u))
+        users.map((u) => (u.id === user.id ? { ...u, status: newStatus } : u)),
       );
 
       toast.success(
         `User ${
           newStatus === "Active" ? "activated" : "deactivated"
-        } successfully`
+        } successfully`,
       );
     } catch (error) {
       console.error("Error toggling user status:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to update user status"
+        error instanceof Error ? error.message : "Failed to update user status",
       );
     } finally {
       setTogglingUserId(null);
@@ -237,14 +243,27 @@ export default function SettingsPage() {
     try {
       if (selectedUser) {
         // UPDATE existing user
+        const updateData: any = {
+          name: userForm.name,
+          username: userForm.username,
+          role: userForm.role,
+          status: userForm.status,
+        };
+
+        // Only include password if it was entered
+        if (userForm.password && userForm.password.length > 0) {
+          if (userForm.password.length < 6) {
+            toast.error("Password must be at least 6 characters");
+            setIsSubmitting(false);
+            return;
+          }
+          updateData.password = userForm.password;
+        }
+
         const response = await fetch(`/api/users/${selectedUser.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: userForm.name,
-            role: userForm.role,
-            status: userForm.status,
-          }),
+          body: JSON.stringify(updateData),
         });
 
         if (!response.ok) {
@@ -254,16 +273,15 @@ export default function SettingsPage() {
 
         const data = await response.json();
 
-        // Show warning if auth metadata update failed
         if (data.warning) {
           toast.warning(data.warning);
         } else {
           toast.success(
-            "User updated successfully! Changes will be reflected after user re-login."
+            "User updated successfully! " +
+              (userForm.password ? "Password was also changed." : ""),
           );
         }
 
-        // Refresh the users list
         await fetchUsers();
       } else {
         // CREATE new user
@@ -285,6 +303,7 @@ export default function SettingsPage() {
           body: JSON.stringify({
             name: userForm.name,
             email: userForm.email,
+            username: userForm.username,
             password: userForm.password,
             role: userForm.role,
             status: userForm.status,
@@ -297,8 +316,6 @@ export default function SettingsPage() {
         }
 
         toast.success("User created successfully!");
-
-        // Refresh the users list
         await fetchUsers();
       }
 
@@ -308,7 +325,7 @@ export default function SettingsPage() {
     } catch (error) {
       console.error("Error saving user:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to save user"
+        error instanceof Error ? error.message : "Failed to save user",
       );
     } finally {
       setIsSubmitting(false);
@@ -332,11 +349,7 @@ export default function SettingsPage() {
       }
 
       toast.success("User deleted successfully!");
-
-      // Refresh users list
       await fetchUsers();
-
-      // Close dialog and reset
       setIsDeleteDialogOpen(false);
       setSelectedUser(null);
     } catch (error: any) {
@@ -347,7 +360,8 @@ export default function SettingsPage() {
     }
   };
 
-  const handleChangePassword = () => {
+  // Change OWN password (Self-Service)
+  const handleChangePassword = async () => {
     if (
       !passwordForm.currentPassword ||
       !passwordForm.newPassword ||
@@ -367,12 +381,41 @@ export default function SettingsPage() {
       return;
     }
 
-    toast.success("Password changed successfully!");
-    setPasswordForm({
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-    });
+    setIsSubmitting(true);
+    try {
+      const supabase = createClient();
+
+      // 1. Verify current password by signing in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: currentUserEmail,
+        password: passwordForm.currentPassword,
+      });
+
+      if (signInError) {
+        throw new Error("Incorrect current password");
+      }
+
+      // 2. Update password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: passwordForm.newPassword,
+      });
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      toast.success("Password changed successfully!");
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+    } catch (error: any) {
+      console.error("Error changing password:", error);
+      toast.error(error.message || "Failed to change password");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSaveCompanyDetails = () => {
@@ -384,6 +427,7 @@ export default function SettingsPage() {
     setUserForm({
       name: "",
       email: "",
+      username: "",
       role: "Staff",
       status: "Active",
       password: "",
@@ -396,9 +440,10 @@ export default function SettingsPage() {
       setUserForm({
         name: user.name,
         email: user.email,
+        username: user.username || "",
         role: user.role,
         status: user.status,
-        password: "",
+        password: "", // Empty password for edit mode (unless changing)
       });
     } else {
       setSelectedUser(null);
@@ -409,7 +454,6 @@ export default function SettingsPage() {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "Never";
-
     try {
       const date = new Date(dateString);
       return date.toLocaleDateString("en-US", {
@@ -424,7 +468,7 @@ export default function SettingsPage() {
     }
   };
 
-  // Loading state while checking auth
+  // Loading state
   if (isCheckingAuth) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -438,7 +482,7 @@ export default function SettingsPage() {
     );
   }
 
-  // Access denied for non-admin users
+  // Access denied
   if (!isAdmin) {
     return (
       <div className="flex items-center justify-center min-h-[600px]">
@@ -454,13 +498,6 @@ export default function SettingsPage() {
                   Sorry, <strong>{userName}</strong>! Only administrators can
                   access the Settings page.
                 </p>
-              </div>
-              <div className="pt-4 space-y-2 text-sm text-muted-foreground">
-                <div className="flex items-center justify-center gap-2">
-                  <Lock className="w-4 h-4" />
-                  <span>This page contains sensitive system configuration</span>
-                </div>
-                <p>If you need access, please contact your administrator</p>
               </div>
               <div className="pt-4">
                 <Button
@@ -480,7 +517,6 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-1">
@@ -488,7 +524,6 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* Settings Tabs */}
       <Tabs defaultValue="users" className="space-y-4">
         <TabsList>
           <TabsTrigger value="users">
@@ -529,20 +564,13 @@ export default function SettingsPage() {
                 <div className="text-center py-8">
                   <User className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
                   <p className="text-muted-foreground">No users found</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                    onClick={() => openUserDialog()}
-                  >
-                    Add your first user
-                  </Button>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
+                      <TableHead>Username</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Status</TableHead>
@@ -556,13 +584,24 @@ export default function SettingsPage() {
                         <TableCell className="font-medium">
                           {user.name}
                         </TableCell>
+                        <TableCell>
+                          {user.username ? (
+                            <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded">
+                              {user.username}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs italic">
+                              -
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell>{user.email}</TableCell>
                         <TableCell>
                           <span
                             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                               user.role === "Admin"
-                                ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
-                                : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                                ? "bg-purple-100 text-purple-800"
+                                : "bg-blue-100 text-blue-800"
                             }`}
                           >
                             {user.role}
@@ -642,6 +681,7 @@ export default function SettingsPage() {
                           currentPassword: e.target.value,
                         })
                       }
+                      disabled={isSubmitting}
                     />
                     <Button
                       type="button"
@@ -674,6 +714,7 @@ export default function SettingsPage() {
                           newPassword: e.target.value,
                         })
                       }
+                      disabled={isSubmitting}
                     />
                     <Button
                       type="button"
@@ -709,6 +750,7 @@ export default function SettingsPage() {
                           confirmPassword: e.target.value,
                         })
                       }
+                      disabled={isSubmitting}
                     />
                     <Button
                       type="button"
@@ -727,8 +769,12 @@ export default function SettingsPage() {
                     </Button>
                   </div>
                 </div>
-                <Button onClick={handleChangePassword}>
-                  <Lock className="w-4 h-4 mr-2" />
+                <Button onClick={handleChangePassword} disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Lock className="w-4 h-4 mr-2" />
+                  )}
                   Change Password
                 </Button>
               </div>
@@ -920,6 +966,23 @@ export default function SettingsPage() {
                 className="w-full"
               />
             </div>
+            {/* Added Username Input */}
+            <div className="space-y-2">
+              <Label htmlFor="userUsername">Username (Optional)</Label>
+              <Input
+                id="userUsername"
+                placeholder="jdoe"
+                value={userForm.username}
+                onChange={(e) =>
+                  setUserForm({ ...userForm, username: e.target.value })
+                }
+                disabled={isSubmitting}
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                Can be used as an alternative login to email
+              </p>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="userEmail">Email *</Label>
               <Input
@@ -977,38 +1040,43 @@ export default function SettingsPage() {
                 </Select>
               </div>
             )}
-            {!selectedUser && (
-              <div className="space-y-2">
-                <Label htmlFor="userPassword">Password *</Label>
-                <div className="relative w-full">
-                  <Input
-                    id="userPassword"
-                    type={showUserPassword ? "text" : "password"}
-                    placeholder="Enter password (min 6 characters)"
-                    value={userForm.password}
-                    onChange={(e) =>
-                      setUserForm({ ...userForm, password: e.target.value })
-                    }
-                    disabled={isSubmitting}
-                    className="w-full pr-10"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="absolute right-2 top-1/2 -translate-y-1/2"
-                    onClick={() => setShowUserPassword(!showUserPassword)}
-                    disabled={isSubmitting}
-                  >
-                    {showUserPassword ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="userPassword">
+                {selectedUser ? "New Password (Optional)" : "Password *"}
+              </Label>
+              <div className="relative w-full">
+                <Input
+                  id="userPassword"
+                  type={showUserPassword ? "text" : "password"}
+                  placeholder={
+                    selectedUser
+                      ? "Leave empty to keep current"
+                      : "Enter password (min 6 chars)"
+                  }
+                  value={userForm.password}
+                  onChange={(e) =>
+                    setUserForm({ ...userForm, password: e.target.value })
+                  }
+                  disabled={isSubmitting}
+                  className="w-full pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="absolute right-2 top-1/2 -translate-y-1/2"
+                  onClick={() => setShowUserPassword(!showUserPassword)}
+                  disabled={isSubmitting}
+                >
+                  {showUserPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </Button>
               </div>
-            )}
+            </div>
           </div>
           <DialogFooter>
             <Button

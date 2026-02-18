@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 // GET single user by ID
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
     const supabase = await createClient();
@@ -26,33 +26,53 @@ export async function GET(
   } catch (error) {
     return NextResponse.json(
       { error: "Internal server error while fetching user" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
-// PUT - Update user (updates both users table AND Supabase Auth metadata)
+// PUT - Update user
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
-    const supabase = await createClient();
     const { id } = params;
     const body = await request.json();
+    const supabaseAdmin = createAdminClient(); // Use admin for all ops to ensure consistency
 
     console.log("🔄 Updating user:", id);
-    console.log("📦 Request body:", JSON.stringify(body, null, 2));
 
-    // Step 1: Update the users table
-    const { data: updatedUser, error: userError } = await supabase
+    // 1. Check uniqueness if username is being changed
+    if (body.username) {
+      const { data: existingUser } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("username", body.username)
+        .neq("id", id) // Exclude current user
+        .single();
+
+      if (existingUser) {
+        return NextResponse.json(
+          { error: "Username already taken by another user" },
+          { status: 400 },
+        );
+      }
+    }
+
+    // 2. Prepare database update object
+    const dbUpdateData: any = {
+      name: body.name,
+      role: body.role,
+      status: body.status,
+      username: body.username || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    // 3. Update the users table
+    const { data: updatedUser, error: userError } = await supabaseAdmin
       .from("users")
-      .update({
-        name: body.name,
-        role: body.role,
-        status: body.status,
-        updated_at: new Date().toISOString(),
-      })
+      .update(dbUpdateData)
       .eq("id", id)
       .select()
       .single();
@@ -62,37 +82,39 @@ export async function PUT(
       return NextResponse.json({ error: userError.message }, { status: 500 });
     }
 
-    console.log("✅ Users table updated successfully");
-
-    // Step 2: Update Supabase Auth user_metadata (requires service role)
+    // 4. Update Supabase Auth (Password & Metadata)
     try {
-      const supabaseAdmin = createAdminClient();
+      const authUpdateData: any = {
+        user_metadata: {
+          name: body.name,
+          role: body.role,
+        },
+      };
 
-      const { data: authUser, error: authError } =
-        await supabaseAdmin.auth.admin.updateUserById(id, {
-          user_metadata: {
-            name: body.name,
-            role: body.role,
-          },
-        });
+      // Add password to update if provided
+      if (body.password && body.password.trim() !== "") {
+        console.log("🔐 Updating password for user");
+        authUpdateData.password = body.password;
+      }
+
+      const { error: authError } =
+        await supabaseAdmin.auth.admin.updateUserById(id, authUpdateData);
 
       if (authError) {
-        console.error("⚠️ Warning: Could not update auth metadata:", authError);
-        // Don't fail the request - users table is updated
+        console.error("⚠️ Warning: Could not update auth:", authError);
         return NextResponse.json(
           {
             user: updatedUser,
             warning:
-              "User table updated but auth metadata update failed. User may need to re-login to see role changes.",
+              "User profile updated, but password/metadata update failed.",
           },
-          { status: 200 }
+          { status: 200 },
         );
       }
 
-      console.log("✅ Auth metadata updated successfully");
+      console.log("✅ Auth updated successfully");
     } catch (adminError) {
-      console.error("⚠️ Error creating admin client:", adminError);
-      // Continue - users table is updated
+      console.error("⚠️ Error in admin auth update:", adminError);
     }
 
     return NextResponse.json({ user: updatedUser }, { status: 200 });
@@ -100,7 +122,7 @@ export async function PUT(
     console.error("Error updating user:", error);
     return NextResponse.json(
       { error: "Internal server error while updating user" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -108,14 +130,14 @@ export async function PUT(
 // DELETE user
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
-    const supabase = await createClient();
     const { id } = params;
+    const supabaseAdmin = createAdminClient();
 
     // Delete from users table
-    const { error: userError } = await supabase
+    const { error: userError } = await supabaseAdmin
       .from("users")
       .delete()
       .eq("id", id);
@@ -124,23 +146,21 @@ export async function DELETE(
       return NextResponse.json({ error: userError.message }, { status: 500 });
     }
 
-    // Optionally delete from Supabase Auth (requires service role)
+    // Delete from Supabase Auth
     try {
-      const supabaseAdmin = createAdminClient();
       await supabaseAdmin.auth.admin.deleteUser(id);
     } catch (adminError) {
       console.error("Warning: Could not delete from auth:", adminError);
-      // Continue - users table is deleted
     }
 
     return NextResponse.json(
       { message: "User deleted successfully" },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     return NextResponse.json(
       { error: "Internal server error while deleting user" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

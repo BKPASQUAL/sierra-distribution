@@ -18,7 +18,7 @@ import { toast } from "sonner";
 
 // Separate component that uses useSearchParams
 function LoginForm() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState(""); // Changed from email to identifier
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -33,7 +33,7 @@ function LoginForm() {
         "Your account has been deactivated. Please contact an administrator.",
         {
           duration: 3000,
-        }
+        },
       );
     } else if (message) {
       toast.info(decodeURIComponent(message), {
@@ -51,7 +51,7 @@ function LoginForm() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ identifier, password }), // Sending identifier instead of email
       });
 
       // Try to parse JSON response
@@ -59,20 +59,18 @@ function LoginForm() {
       try {
         data = await response.json();
       } catch (parseError) {
-        // If JSON parsing fails, the API is returning HTML or invalid data
         console.error("Failed to parse API response:", parseError);
         toast.error(
-          "Server error. The login API is not configured correctly. Please check your API routes.",
+          "Server error. The login API is not configured correctly.",
           {
             duration: 5000,
-          }
+          },
         );
         setIsLoading(false);
         return;
       }
 
       if (!response.ok) {
-        // Show error toast with specific message
         toast.error(data.error || "Login failed. Please try again.", {
           duration: 3000,
         });
@@ -82,7 +80,7 @@ function LoginForm() {
 
       // Success! Show success toast
       toast.success("Login successful! Welcome back.", {
-        description: `Signed in as ${data.user.name || email}`,
+        description: `Signed in as ${data.user.name || identifier}`,
         duration: 3000,
       });
 
@@ -126,17 +124,18 @@ function LoginForm() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Email Input */}
+              {/* Identifier Input */}
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="identifier">Email or Username</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="admin@sierra.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="identifier"
+                  type="text"
+                  placeholder="admin@sierra.com or username"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   required
                   disabled={isLoading}
+                  autoComplete="username"
                 />
               </div>
 
@@ -163,6 +162,7 @@ function LoginForm() {
                     required
                     disabled={isLoading}
                     className="pr-10"
+                    autoComplete="current-password"
                   />
                   <Button
                     type="button"
@@ -263,7 +263,6 @@ function LoginForm() {
   );
 }
 
-// Main component with Suspense boundary
 export default function LoginPage() {
   return (
     <Suspense
