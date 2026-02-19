@@ -16,6 +16,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Sierra Distribution",
   description: "Efficient distribution management system",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Sierra Distribution",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {
