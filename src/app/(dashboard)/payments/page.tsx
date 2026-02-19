@@ -635,6 +635,80 @@ export default function PaymentsPage() {
           </div>
         </CardHeader>
         <CardContent>
+          
+          {/* Mobile/Tablet Card View */}
+          <div className="lg:hidden space-y-4">
+            {paginatedPayments.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                No payments found
+              </div>
+            ) : (
+              paginatedPayments.map((payment) => (
+                <div key={payment.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-semibold text-sm">{payment.payment_number}</h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(payment.payment_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <span className="font-bold text-sm">
+                      {formatCurrency(payment.amount)}
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                    <div className="text-muted-foreground">Customer</div>
+                    <div className="text-right font-medium">{payment.customers?.name || "N/A"}</div>
+                    
+                    <div className="text-muted-foreground">Method</div>
+                    <div className="text-right capitalize">{payment.payment_method}</div>
+                    
+                    <div className="text-muted-foreground">Bill No</div>
+                    <div className="text-right font-mono text-xs">{payment.orders?.order_number || "N/A"}</div>
+                  </div>
+
+                  {(payment.payment_method === "cheque" || payment.payment_method === "bank") && (
+                    <div className="bg-muted/50 rounded p-2 text-xs space-y-1 mt-2">
+                       {payment.payment_method === "cheque" && (
+                          <>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Cheque No:</span>
+                              <span className="font-mono">{payment.cheque_number}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Status:</span>
+                              <span>{getChequeStatusBadge(payment.cheque_status, payment.cheque_date)}</span>
+                            </div>
+                          </>
+                       )}
+                       {payment.banks && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Bank:</span>
+                            <span>{payment.banks.bank_code}</span>
+                          </div>
+                       )}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenEdit(payment)}
+                      className="h-8"
+                    >
+                      <Pencil className="h-3.5 w-3.5 mr-2" />
+                      Edit
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -749,6 +823,7 @@ export default function PaymentsPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
 
         <CardFooter className="flex items-center justify-between py-4">

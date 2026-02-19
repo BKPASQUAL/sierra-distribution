@@ -484,40 +484,70 @@ export default function AdminDashboard() {
                 <p className="text-muted-foreground">No pending cheques</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="h-12">
-                      <TableHead>Payment Date</TableHead>
-                      <TableHead>Customer</TableHead>
-                      <TableHead>Cheque No</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pendingCheques.slice(0, 5).map((cheque) => (
-                      <TableRow key={cheque.id} className="h-16">
-                        <TableCell className="whitespace-nowrap">
-                          {new Date(cheque.payment_date).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {cheque.customer_name}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs whitespace-nowrap">
-                          {cheque.cheque_number}
-                        </TableCell>
-                        <TableCell className="text-right font-medium whitespace-nowrap">
-                          LKR {cheque.amount.toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          {getChequeStatusBadge(cheque.cheque_date)}
-                        </TableCell>
+              <>
+                {/* Mobile View - Cards */}
+                <div className="block lg:hidden space-y-4">
+                  {pendingCheques.slice(0, 5).map((cheque) => (
+                    <div key={cheque.id} className="bg-card border rounded-lg p-4 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium text-sm">{cheque.customer_name}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                             {new Date(cheque.payment_date).toLocaleDateString()}
+                          </p>
+                        </div>
+                        {getChequeStatusBadge(cheque.cheque_date)}
+                      </div>
+                      
+                      <div className="flex justify-between items-center text-sm border-t pt-3 mt-2">
+                        <span className="text-muted-foreground">Cheque No</span>
+                        <span className="font-mono">{cheque.cheque_number}</span>
+                      </div>
+                      
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground">Amount</span>
+                        <span className="font-medium">LKR {cheque.amount.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop View - Table */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="h-12">
+                        <TableHead>Payment Date</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Cheque No</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingCheques.slice(0, 5).map((cheque) => (
+                        <TableRow key={cheque.id} className="h-16">
+                          <TableCell className="whitespace-nowrap">
+                            {new Date(cheque.payment_date).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {cheque.customer_name}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs whitespace-nowrap">
+                            {cheque.cheque_number}
+                          </TableCell>
+                          <TableCell className="text-right font-medium whitespace-nowrap">
+                            LKR {cheque.amount.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            {getChequeStatusBadge(cheque.cheque_date)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

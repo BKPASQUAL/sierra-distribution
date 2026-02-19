@@ -565,6 +565,79 @@ export default function PurchasesPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Mobile/Tablet Card View */}
+          <div className="lg:hidden space-y-4">
+            {currentPurchases.length === 0 ? (
+               <div className="text-center py-10 text-muted-foreground">
+                 No purchases found
+               </div>
+            ) : (
+               currentPurchases.map((purchase) => (
+                 <div key={purchase.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                   <div className="flex justify-between items-start">
+                     <div>
+                       <h3 className="font-semibold text-sm">{purchase.id}</h3>
+                       <p className="text-xs text-muted-foreground mt-1">
+                         {new Date(purchase.date).toLocaleDateString()}
+                       </p>
+                     </div>
+                     <button
+                        onClick={() => openPaymentDialog(purchase)}
+                        className="hover:opacity-80 transition-opacity"
+                      >
+                        {getPaymentBadge(purchase.paymentStatus)}
+                      </button>
+                   </div>
+                   
+                   <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                     <div className="text-muted-foreground">Invoice #</div>
+                     <div className="text-right truncate">{purchase.invoiceNumber || "-"}</div>
+
+                     <div className="text-muted-foreground">Items</div>
+                     <div className="text-right text-xs">
+                       {purchase.items} items ({purchase.totalItems} units)
+                     </div>
+
+                     <div className="text-muted-foreground">Total</div>
+                     <div className="text-right font-medium">LKR {purchase.total.toLocaleString()}</div>
+                   </div>
+
+                   <div className="flex justify-end gap-2 pt-2 border-t mt-2">
+                     {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(purchase.id)}
+                          title="Edit Purchase (Admin Only)"
+                        >
+                          <Edit className="w-4 h-4 text-blue-600 mr-1" /> Edit
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          (window.location.href = `/purchases/${purchase.id}`)
+                        }
+                      >
+                        <Eye className="w-4 h-4 mr-1" /> View
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(purchase.id)}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" /> Delete
+                      </Button>
+                   </div>
+                 </div>
+               ))
+            )}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-x-auto border rounded-md">
           <Table>
             <TableHeader>
               <TableRow>
@@ -661,6 +734,7 @@ export default function PurchasesPage() {
               )}
             </TableBody>
           </Table>
+          </div>
 
           {/* Pagination Controls */}
           {filteredPurchases.length > 0 && (

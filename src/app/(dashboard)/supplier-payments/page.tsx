@@ -26,6 +26,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -476,6 +477,56 @@ export default function SupplierPaymentsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Mobile/Tablet Card View - Unpaid */}
+              <div className="lg:hidden space-y-4">
+                 {loading ? (
+                    <div className="text-center py-10">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                    </div>
+                 ) : filteredPurchases.length === 0 ? (
+                    <div className="text-center py-10 text-muted-foreground">
+                      No unpaid purchases found.
+                    </div>
+                 ) : (
+                    filteredPurchases.map((p) => (
+                      <div key={p.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-semibold text-sm">{p.purchase_id}</h3>
+                            <p className="text-xs text-muted-foreground mt-1">
+                               {new Date(p.purchase_date).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="text-destructive border-destructive/20 bg-destructive/5">
+                             Due: {formatCurrency(p.balance_due)}
+                          </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                           <div className="text-muted-foreground">Supplier</div>
+                           <div className="text-right font-medium">{p.suppliers.name}</div>
+                           
+                           <div className="text-muted-foreground">Total Amount</div>
+                           <div className="text-right">{formatCurrency(p.total_amount)}</div>
+                           
+                           <div className="text-muted-foreground">Amount Paid</div>
+                           <div className="text-right text-green-600">{formatCurrency(p.amount_paid)}</div>
+                        </div>
+
+                        <Button
+                          className="w-full mt-2"
+                          size="sm"
+                          onClick={() => openPaymentDialog(p)}
+                        >
+                          Record Payment
+                        </Button>
+                      </div>
+                    ))
+                 )}
+              </div>
+
+              {/* Desktop Table View - Unpaid */}
+              <div className="hidden lg:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -533,6 +584,7 @@ export default function SupplierPaymentsPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -547,6 +599,67 @@ export default function SupplierPaymentsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Mobile/Tablet Card View - Pending Cheques */}
+              <div className="lg:hidden space-y-4">
+                  {loading ? (
+                    <div className="text-center py-10">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                    </div>
+                  ) : pendingCheques.length === 0 ? (
+                    <div className="text-center py-10 text-muted-foreground">
+                      No pending cheques found.
+                    </div>
+                  ) : (
+                    pendingCheques.map((p) => (
+                      <div key={p.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                         <div className="flex justify-between items-start">
+                           <div>
+                             <h3 className="font-semibold text-sm">{p.cheque_number}</h3>
+                             <p className="text-xs text-muted-foreground mt-1">
+                               {new Date(p.cheque_date!).toLocaleDateString()}
+                             </p>
+                           </div>
+                           <div className="font-bold text-sm">
+                             {formatCurrency(p.amount)}
+                           </div>
+                         </div>
+                         
+                         <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                            <div className="text-muted-foreground">Supplier</div>
+                            <div className="text-right truncate">{p.purchases?.suppliers?.name}</div>
+
+                            <div className="text-muted-foreground">Purchase ID</div>
+                            <div className="text-right">{p.purchases?.purchase_id}</div>
+
+                            <div className="text-muted-foreground">Paid From</div>
+                            <div className="text-right truncate">{p.company_accounts?.account_name}</div>
+                         </div>
+
+                         <div className="flex gap-2 pt-2">
+                           <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50"
+                              onClick={() => openActionDialog(p, "passed")}
+                            >
+                              Pass
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => openActionDialog(p, "returned")}
+                            >
+                              Return
+                            </Button>
+                         </div>
+                      </div>
+                    ))
+                  )}
+              </div>
+
+              {/* Desktop Table View - Pending Cheques */}
+              <div className="hidden lg:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -612,6 +725,7 @@ export default function SupplierPaymentsPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -626,6 +740,67 @@ export default function SupplierPaymentsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Mobile/Tablet Card View - History */}
+              <div className="lg:hidden space-y-4">
+                 {loading ? (
+                    <div className="text-center py-10">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                    </div>
+                 ) : filteredHistory.length === 0 ? (
+                    <div className="text-center py-10 text-muted-foreground">
+                      No payments recorded yet.
+                    </div>
+                 ) : (
+                    filteredHistory.map((p) => (
+                      <div key={p.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-semibold text-sm">{formatCurrency(p.amount)}</h3>
+                            <p className="text-xs text-muted-foreground mt-1">
+                               {new Date(p.payment_date).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div>
+                            {p.payment_method === "cheque" ? (
+                              <span
+                                className={cn(
+                                  "text-xs font-medium px-2 py-1 rounded-full",
+                                  p.cheque_status === "passed"
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-red-100 text-red-700"
+                                )}
+                              >
+                                {p.cheque_status}
+                              </span>
+                            ) : (
+                              <span className="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">Cleared</span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                           <div className="text-muted-foreground">Supplier</div>
+                           <div className="text-right truncate">{p.purchases?.suppliers?.name}</div>
+
+                           <div className="text-muted-foreground">Purchase ID</div>
+                           <div className="text-right">{p.purchases?.purchase_id}</div>
+
+                           <div className="text-muted-foreground">Method</div>
+                           <div className="text-right capitalize">{p.payment_method}</div>
+
+                           <div className="text-muted-foreground">Cheque/Ref</div>
+                           <div className="text-right">{p.cheque_number || "N/A"}</div>
+                           
+                           <div className="text-muted-foreground">Account</div>
+                           <div className="text-right truncate">{p.company_accounts?.account_name}</div>
+                        </div>
+                      </div>
+                    ))
+                 )}
+              </div>
+
+              {/* Desktop Table View - History */}
+              <div className="hidden lg:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -691,6 +866,7 @@ export default function SupplierPaymentsPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

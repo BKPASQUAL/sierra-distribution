@@ -413,6 +413,53 @@ export default function ChequeManagementPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Mobile/Tablet Card View - Pending */}
+              <div className="lg:hidden space-y-4">
+                {paginatedPending.items.length === 0 ? (
+                  <div className="text-center py-10 text-muted-foreground">No pending cheques found.</div>
+                ) : (
+                  paginatedPending.items.map((cheque) => {
+                    const status = getDaysStatus(cheque.cheque_date);
+                    return (
+                      <div key={cheque.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-semibold text-sm">{cheque.customers?.name}</h3>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Check Date: {new Date(cheque.cheque_date!).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <span className={`${status.color} text-xs font-medium`}>
+                            {status.text}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                          <div className="text-muted-foreground">Cheque No</div>
+                          <div className="text-right font-mono text-xs">{cheque.cheque_number}</div>
+                          
+                          <div className="text-muted-foreground">Bank</div>
+                          <div className="text-right truncate">{cheque.banks?.bank_name}</div>
+                          
+                          <div className="text-muted-foreground">Amount</div>
+                          <div className="text-right font-medium">LKR {cheque.amount.toLocaleString()}</div>
+                        </div>
+
+                        <Button
+                          size="sm"
+                          className="w-full mt-2"
+                          onClick={() => openDepositDialog(cheque)}
+                        >
+                          Deposit
+                        </Button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Desktop Table View - Pending */}
+              <div className="hidden lg:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -463,6 +510,7 @@ export default function ChequeManagementPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
             {/* --- PENDING PAGINATION --- */}
             <CardFooter className="flex items-center justify-between py-4">
@@ -515,6 +563,58 @@ export default function ChequeManagementPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Mobile/Tablet Card View - Deposited */}
+              <div className="lg:hidden space-y-4">
+                {paginatedDeposited.items.length === 0 ? (
+                  <div className="text-center py-10 text-muted-foreground">No deposited cheques found.</div>
+                ) : (
+                  paginatedDeposited.items.map((cheque) => (
+                    <div key={cheque.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                       <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-semibold text-sm">{cheque.customers?.name}</h3>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Check Date: {new Date(cheque.cheque_date!).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <span className="font-medium text-sm">
+                            LKR {cheque.amount.toLocaleString()}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                           <div className="text-muted-foreground">Cheque No</div>
+                           <div className="text-right font-mono text-xs">{cheque.cheque_number}</div>
+
+                           <div className="text-muted-foreground">Deposit Account</div>
+                           <div className="text-right truncate">{cheque.company_accounts?.account_name}</div>
+                        </div>
+
+                        <div className="flex gap-2 mt-2">
+                           <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-green-600 hover:text-green-700"
+                              onClick={() => openActionDialog(cheque, "passed")}
+                            >
+                              Pass
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-red-600 hover:text-red-700"
+                              onClick={() => openActionDialog(cheque, "returned")}
+                            >
+                              Return
+                            </Button>
+                        </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop Table View - Deposited */}
+              <div className="hidden lg:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -570,6 +670,7 @@ export default function ChequeManagementPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
             {/* --- DEPOSITED PAGINATION --- */}
             <CardFooter className="flex items-center justify-between py-4">

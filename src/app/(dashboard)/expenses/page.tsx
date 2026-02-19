@@ -12,6 +12,7 @@ import {
   Wrench,
   MoreHorizontal,
   Truck,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -417,8 +418,73 @@ export default function ExpensesPage() {
             </Select>
           </div>
 
+          {/* Mobile/Tablet Card View */}
+          <div className="lg:hidden space-y-4">
+            {loading ? (
+              <div className="text-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+              </div>
+            ) : filteredExpenses.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                No expenses found
+              </div>
+            ) : (
+               filteredExpenses.map((expense) => (
+                <div key={expense.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-semibold text-sm">{expense.expense_number}</h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(expense.expense_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div>{getCategoryBadge(expense.category)}</div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                    <div className="text-muted-foreground">Description</div>
+                    <div className="text-right truncate">{expense.description || "-"}</div>
+                    
+                    <div className="text-muted-foreground">Vendor</div>
+                    <div className="text-right truncate">{expense.vendor_name || "-"}</div>
+                    
+                    <div className="text-muted-foreground">Amount</div>
+                    <div className="text-right font-medium">
+                       {formatCurrency(expense.amount)}
+                    </div>
+
+                    <div className="text-muted-foreground">Payment</div>
+                    <div className="text-right capitalize">{expense.payment_method.replace("_", " ")}</div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                     <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => openEditDialog(expense)}
+                      >
+                       <Wrench className="h-3.5 w-3.5 mr-1" /> Edit
+                     </Button>
+                     <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => {
+                          setSelectedExpense(expense);
+                          setIsDeleteDialogOpen(true);
+                        }}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                       <Receipt className="h-3.5 w-3.5 mr-1" /> Delete
+                     </Button>
+                  </div>
+                </div>
+               ))
+            )}
+          </div>
+
           {/* Table */}
-          <div className="rounded-md border">
+          <div className="hidden lg:block rounded-md border text-sm"> {/* Added text-sm to potentially shrink table slightly */}
+          <div className="overflow-x-auto"> {/* Ensure separate scroll if needed */}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -499,6 +565,7 @@ export default function ExpensesPage() {
                 )}
               </TableBody>
             </Table>
+          </div>
           </div>
         </CardContent>
       </Card>

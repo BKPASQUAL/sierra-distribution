@@ -1015,8 +1015,75 @@ export default function BillsPage() {
             )}
           </div>
 
-          {/* Desktop View - Table */}
-          <div className="hidden md:block">
+          {/* Mobile/Tablet Card View */}
+          <div className="lg:hidden space-y-4">
+            {loading ? (
+              <div className="text-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+              </div>
+            ) : paginatedOrders.length === 0 ? (
+               <div className="text-center py-10 text-muted-foreground">
+                 No bills found matching your filters.
+               </div>
+            ) : (
+               paginatedOrders.map((order) => (
+                 <div key={order.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                   <div className="flex justify-between items-start">
+                     <div>
+                       <h3 className="font-semibold text-sm">{order.order_number}</h3>
+                       <p className="text-xs text-muted-foreground mt-1">
+                         {new Date(order.order_date).toLocaleDateString()}
+                       </p>
+                     </div>
+                     <Badge
+                        className={getPaymentStatusColor(order.payment_status)}
+                        variant="outline"
+                      >
+                        {order.payment_status.charAt(0).toUpperCase() + order.payment_status.slice(1)}
+                      </Badge>
+                   </div>
+
+                   <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                     <div className="text-muted-foreground">Customer</div>
+                     <div className="text-right truncate">{order.customers.name}</div>
+
+                     <div className="text-muted-foreground">Total Amount</div>
+                     <div className="text-right font-medium">{order.total_amount.toLocaleString("en-LK", { style: "currency", currency: "LKR" })}</div>
+
+                     <div className="text-muted-foreground">Paid Amount</div>
+                     <div className="text-right text-green-600">{(order.paid_amount || 0).toLocaleString("en-LK", { style: "currency", currency: "LKR" })}</div>
+
+                     <div className="text-muted-foreground">Due Amount</div>
+                     <div className="text-right text-red-600">{(order.due_amount || 0).toLocaleString("en-LK", { style: "currency", currency: "LKR" })}</div>
+                   </div>
+                    
+                    <div className="flex justify-end gap-2 pt-2 border-t mt-2">
+                       <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                             <Button variant="ghost" size="sm" className="w-full">
+                               Actions <ArrowDown className="ml-2 h-3 w-3" />
+                             </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                             <DropdownMenuItem onClick={() => router.push(`/bills/${order.id}`)}>
+                                <Eye className="mr-2 h-4 w-4" /> View Details
+                             </DropdownMenuItem>
+                             {/* Only allow editing if payment status is NOT 'paid' and NOT 'partial' (fully unpaid) */}
+                             {order.payment_status === "unpaid" && (
+                                <DropdownMenuItem onClick={() => router.push(`/bills/${order.id}/edit`)}>
+                                   <Pencil className="mr-2 h-4 w-4" /> Edit Bill
+                                </DropdownMenuItem>
+                             )}
+                          </DropdownMenuContent>
+                       </DropdownMenu>
+                    </div>
+                 </div>
+               ))
+            )}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-x-auto border rounded-md">
             <Table>
             <TableHeader>
               <TableRow>

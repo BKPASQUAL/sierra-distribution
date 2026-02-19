@@ -408,6 +408,78 @@ export default function AccountsPage() {
           <CardTitle>Account List</CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Mobile/Tablet Card View */}
+          <div className="lg:hidden space-y-4">
+            {loading ? (
+               <div className="text-center py-10">
+                 <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+               </div>
+            ) : accounts.length === 0 ? (
+               <div className="text-center py-10 text-muted-foreground">
+                 No accounts found. Add one to get started.
+               </div>
+            ) : (
+              accounts.map((account) => (
+                <div key={account.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                       {account.account_type === "cash" ? (
+                           <Wallet className="w-4 h-4 text-muted-foreground" />
+                        ) : (
+                           <Landmark className="w-4 h-4 text-muted-foreground" />
+                        )}
+                        <div>
+                           <h3 className="font-semibold text-sm">{account.account_name}</h3>
+                           <p className="text-xs text-muted-foreground capitalize">
+                             {account.account_type.replace("_", " ")}
+                           </p>
+                        </div>
+                    </div>
+                    <span className="font-bold text-sm">
+                       {formatCurrency(account.current_balance)}
+                    </span>
+                  </div>
+
+                  {account.account_type !== "cash" && (
+                    <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2 bg-muted/30 p-2 rounded">
+                       <div className="text-muted-foreground">Bank</div>
+                       <div className="text-right truncate">
+                          {account.banks?.bank_name}
+                          {account.banks?.bank_code && <span className="text-xs ml-1">({account.banks.bank_code})</span>}
+                       </div>
+                       
+                       <div className="text-muted-foreground">Account No</div>
+                       <div className="text-right font-mono text-xs">{account.account_number}</div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-2 pt-2">
+                     <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleOpenAccountDialog(account)}
+                     >
+                        <Edit className="w-3.5 h-3.5 mr-1" /> Edit
+                     </Button>
+                     <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedAccount(account);
+                          setIsDeleteDialogOpen(true);
+                        }}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                     >
+                        <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
+                     </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Table View */}
+          <div className="hidden lg:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -490,6 +562,7 @@ export default function AccountsPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 

@@ -385,7 +385,48 @@ export default function SuppliersPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          
+          {/* Mobile/Tablet Card View */}
+          <div className="lg:hidden space-y-4">
+            {purchaseHistory.map((purchase) => (
+              <div key={purchase.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-semibold text-sm">{purchase.id}</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {new Date(purchase.date).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </p>
+                  </div>
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      purchase.status === "Received"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-yellow-100 text-yellow-700"
+                    }`}
+                  >
+                    {purchase.status}
+                  </span>
+                </div>
+                
+                <div className="flex justify-between items-center text-sm border-t pt-3 mt-2">
+                  <span className="text-muted-foreground">Items</span>
+                  <span>{purchase.items} items</span>
+                </div>
+                
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">Total Amount</span>
+                  <span className="font-medium">LKR {purchase.total.toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

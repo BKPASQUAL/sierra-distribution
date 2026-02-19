@@ -1020,7 +1020,7 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
 
-          <Card>
+            <Card>
             <CardHeader>
               <CardTitle>Month-wise Distribution Data</CardTitle>
               <CardDescription>
@@ -1028,6 +1028,43 @@ export default function ReportsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Mobile/Tablet Card View */}
+              <div className="lg:hidden space-y-4">
+                {monthlyReport.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                        No transaction data available.
+                    </div>
+                ) : (
+                    monthlyReport.map((item) => (
+                        <div key={item.monthKey} className="border rounded-lg p-4 space-y-3 bg-card">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h3 className="font-semibold text-sm">{item.monthLabel}</h3>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {item.billCount} Bills
+                                    </p>
+                                </div>
+                                <span
+                                    className={`font-bold ${item.netValue >= 0 ? "text-green-600" : "text-red-600"}`}
+                                >
+                                    {item.netValue >= 0 ? "+" : ""} LKR{" "}
+                                    {item.netValue.toLocaleString()}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                                <div className="text-muted-foreground">Total Sales</div>
+                                <div className="text-right text-green-600 font-medium">LKR {item.totalSales.toLocaleString()}</div>
+                                
+                                <div className="text-muted-foreground">Total Purchases</div>
+                                <div className="text-right text-red-600 font-medium">LKR {item.totalPurchases.toLocaleString()}</div>
+                            </div>
+                        </div>
+                    ))
+                )}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden lg:block overflow-x-auto border rounded-md">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1078,6 +1115,7 @@ export default function ReportsPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1238,6 +1276,52 @@ export default function ReportsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Mobile/Tablet Card View */}
+              <div className="lg:hidden space-y-4">
+                {filteredOrders.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                        No orders found for the selected period
+                    </div>
+                ) : (
+                    filteredOrders
+                    .sort((a, b) => b.net_profit - a.net_profit)
+                    .map((order) => (
+                        <div key={order.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h3 className="font-semibold text-sm">{order.order_number}</h3>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {new Date(order.order_date).toLocaleDateString()}
+                                    </p>
+                                </div>
+                                <div className="text-right">
+                                    <span
+                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getProfitMarginBadge(
+                                            order.profit_margin,
+                                        )}`}
+                                    >
+                                        {order.profit_margin.toFixed(1)}%
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                                <div className="text-muted-foreground">Customer</div>
+                                <div className="text-right truncate">{order.customers.name}</div>
+                                <div className="text-muted-foreground">Final Amount</div>
+                                <div className="text-right font-medium">LKR {order.total_amount.toLocaleString()}</div>
+                                <div className="text-muted-foreground">Cost</div>
+                                <div className="text-right text-red-600">LKR {order.total_cost.toLocaleString()}</div>
+                                <div className="text-muted-foreground">Net Profit</div>
+                                <div className="text-right text-green-600 font-bold">LKR {order.net_profit.toLocaleString()}</div>
+                            </div>
+                        </div>
+                    ))
+                )}
+              </div>
+
+               {/* Desktop Table View */}
+              <div className="hidden lg:block overflow-x-auto border rounded-md">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1355,13 +1439,14 @@ export default function ReportsPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Customer Profit Tab */}
         <TabsContent value="customers" className="space-y-4">
-          <Card>
+            <Card>
             <CardHeader>
               <CardTitle>Customer-wise Profit Summary</CardTitle>
               <CardDescription>
@@ -1369,6 +1454,53 @@ export default function ReportsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Mobile/Tablet Card View */}
+              <div className="lg:hidden space-y-4">
+                 {customerSummary.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                        No customer data available
+                    </div>
+                 ) : (
+                    customerSummary.map((customer) => (
+                        <div key={customer.customer_id} className="border rounded-lg p-4 space-y-3 bg-card">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h3 className="font-semibold text-sm">{customer.customer_name}</h3>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {customer.total_orders} Orders
+                                    </p>
+                                </div>
+                                <span
+                                    className={`font-bold ${getProfitMarginColor(
+                                        customer.avg_profit_margin,
+                                    )}`}
+                                >
+                                    {customer.avg_profit_margin.toFixed(1)}%
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                                <div className="text-muted-foreground">Total Sales</div>
+                                <div className="text-right font-medium">LKR {customer.total_sales.toLocaleString()}</div>
+                                
+                                <div className="text-muted-foreground">Total Cost</div>
+                                <div className="text-right text-red-600">LKR {customer.total_cost.toLocaleString()}</div>
+                                
+                                <div className="text-muted-foreground">Total Profit</div>
+                                <div className="text-right text-green-600 font-medium">LKR {customer.total_profit.toLocaleString()}</div>
+                                
+                                <div className="text-muted-foreground">Outstanding</div>
+                                <div className={`text-right ${customer.outstanding > 0 ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                                    LKR {customer.outstanding.toLocaleString()}
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                 )}
+              </div>
+
+               {/* Desktop Table View */}
+              <div className="hidden lg:block overflow-x-auto border rounded-md">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1470,6 +1602,7 @@ export default function ReportsPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
 
@@ -1770,7 +1903,7 @@ export default function ReportsPage() {
           </Card>
 
           {/* Top Vendors */}
-          {expenseSummary.topVendors.length > 0 && (
+            {expenseSummary.topVendors.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Top Vendors</CardTitle>
@@ -1779,6 +1912,31 @@ export default function ReportsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                {/* Mobile/Tablet Card View */}
+                <div className="lg:hidden space-y-4">
+                    {expenseSummary.topVendors.map((vendor, index) => (
+                        <div key={index} className="border rounded-lg p-4 space-y-3 bg-card">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h3 className="font-semibold text-sm">{vendor.vendor}</h3>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {vendor.count} Transactions
+                                    </p>
+                                </div>
+                                <div className="text-right font-medium">
+                                    LKR {vendor.total.toLocaleString()}
+                                </div>
+                            </div>
+                            <div className="text-sm text-muted-foreground border-t pt-2 mt-2 flex justify-between">
+                                <span>Average Amount</span>
+                                <span>LKR {Math.round(vendor.total / vendor.count).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Desktop Table View */}
+                <div className="hidden lg:block overflow-x-auto border rounded-md">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1826,6 +1984,7 @@ export default function ReportsPage() {
                     </TableRow>
                   </TableBody>
                 </Table>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -1839,6 +1998,63 @@ export default function ReportsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+            {/* Desktop Table View */}
+              <div className="lg:hidden space-y-4">
+                {filteredExpenses.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                        No expenses found for the selected period
+                    </div>
+                ) : (
+                    filteredExpenses
+                    .sort(
+                        (a, b) =>
+                        new Date(b.expense_date).getTime() -
+                        new Date(a.expense_date).getTime(),
+                    )
+                    .map((expense) => (
+                        <div key={expense.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h3 className="font-semibold text-sm">{expense.expense_number}</h3>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {new Date(expense.expense_date).toLocaleDateString()}
+                                    </p>
+                                </div>
+                                <div className="text-right font-medium text-red-600">
+                                    LKR {expense.amount.toLocaleString()}
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                                <div className="text-muted-foreground">Category</div>
+                                <div className="flex items-center gap-1 justify-end">
+                                    {getCategoryIcon(expense.category)}
+                                    <span className="capitalize">{expense.category}</span>
+                                </div>
+                                
+                                <div className="text-muted-foreground">Vendor</div>
+                                <div className="text-right">{expense.vendor_name || "-"}</div>
+                                
+                                <div className="text-muted-foreground">Method</div>
+                                <div className="text-right capitalize">{expense.payment_method.replace("_", " ")}</div>
+                                
+                                <div className="text-muted-foreground">Created By</div>
+                                <div className="text-right truncate">{expense.users?.name || "Unknown"}</div>
+                                
+                                {expense.description && (
+                                    <>
+                                        <div className="text-muted-foreground">Description</div>
+                                        <div className="text-right col-span-2 text-xs italic mt-1">{expense.description}</div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    ))
+                )}
+              </div>
+
+               {/* Desktop Table View */}
+              <div className="hidden lg:block overflow-x-auto border rounded-md">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1912,13 +2128,14 @@ export default function ReportsPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Due Payments Tab */}
         <TabsContent value="due" className="space-y-4">
-          <Card>
+            <Card>
             <CardHeader>
               <CardTitle>Due Payment Report (45+ Days)</CardTitle>
               <CardDescription>
@@ -1926,6 +2143,68 @@ export default function ReportsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Mobile/Tablet Card View */}
+              <div className="lg:hidden space-y-4">
+                {dueInvoices.length === 0 ? (
+                    <div className="text-center py-8">
+                       <div className="flex flex-col items-center gap-2">
+                           <CheckCircle className="w-12 h-12 text-green-500" />
+                           <p className="text-lg font-medium">
+                               No Overdue Invoices!
+                           </p>
+                           <p className="text-sm text-muted-foreground">
+                               All payments are up to date
+                           </p>
+                       </div>
+                    </div>
+                ) : (
+                    dueInvoices.map((invoice, index) => (
+                        <div key={index} className="border rounded-lg p-4 space-y-3 bg-card">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h3 className="font-semibold text-sm">{invoice.order_number}</h3>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {new Date(invoice.order_date).toLocaleDateString()}
+                                    </p>
+                                </div>
+                                <span
+                                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                        invoice.daysOverdue > 90
+                                            ? "bg-red-100 text-red-800"
+                                            : invoice.daysOverdue > 60
+                                            ? "bg-orange-100 text-orange-800"
+                                            : "bg-yellow-100 text-yellow-800"
+                                    }`}
+                                >
+                                    Overdue
+                                </span>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                                <div className="text-muted-foreground">Customer</div>
+                                <div className="text-right truncate">{invoice.customers.name}</div>
+                                
+                                <div className="text-muted-foreground">Days Overdue</div>
+                                <div className={`text-right font-medium ${
+                                    invoice.daysOverdue > 90
+                                        ? "text-red-600"
+                                        : invoice.daysOverdue > 60
+                                        ? "text-orange-600"
+                                        : "text-yellow-600"
+                                }`}>
+                                    {invoice.daysOverdue} days
+                                </div>
+                                
+                                <div className="text-muted-foreground">Balance</div>
+                                <div className="text-right font-medium text-destructive">LKR {invoice.balance.toLocaleString()}</div>
+                            </div>
+                        </div>
+                    ))
+                )}
+              </div>
+
+               {/* Desktop Table View */}
+              <div className="hidden lg:block overflow-x-auto border rounded-md">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -2012,6 +2291,7 @@ export default function ReportsPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

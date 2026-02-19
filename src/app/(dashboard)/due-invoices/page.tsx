@@ -457,6 +457,93 @@ export default function DueInvoicesPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Mobile/Tablet Card View */}
+          <div className="lg:hidden space-y-4">
+            {filteredInvoices.length === 0 ? (
+               <div className="text-center py-8">
+                  <CheckCircle className="w-12 h-12 mx-auto mb-2 text-green-500" />
+                  <p className="text-lg font-medium">No Overdue Invoices!</p>
+                  <p className="text-sm text-muted-foreground">
+                    All payments are up to date (45+ days)
+                  </p>
+                </div>
+            ) : (
+               filteredInvoices.map((invoice) => (
+                 <div key={invoice.id} className="border rounded-lg p-4 space-y-3 bg-card hover:bg-destructive/5 transition-colors">
+                   <div className="flex justify-between items-start">
+                     <div>
+                       <h3 className="font-semibold text-sm">{invoice.order_number}</h3>
+                       <p className="text-xs text-muted-foreground mt-1">
+                         {new Date(invoice.order_date).toLocaleDateString()}
+                       </p>
+                     </div>
+                     <span
+                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getDaysOverdueBadge(
+                          invoice.daysOverdue
+                        )}`}
+                      >
+                        <AlertTriangle className="w-3 h-3 mr-1" />
+                        {invoice.daysOverdue} days
+                      </span>
+                   </div>
+
+                   <div className="grid grid-cols-2 gap-2 text-sm border-t pt-3 mt-2">
+                     <div className="text-muted-foreground">Customer</div>
+                     <div className="text-right">
+                       <p className="font-medium">{invoice.customers.name}</p>
+                       {invoice.customers.phone && (
+                          <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                             <Phone className="w-3 h-3" /> {invoice.customers.phone}
+                          </div>
+                       )}
+                     </div>
+
+                     <div className="text-muted-foreground">Total</div>
+                     <div className="text-right">LKR {invoice.total_amount.toLocaleString()}</div>
+
+                     <div className="text-muted-foreground">Paid</div>
+                     <div className="text-right text-green-600">LKR {invoice.paid.toLocaleString()}</div>
+
+                     <div className="text-muted-foreground">Balance</div>
+                     <div className={`text-right font-bold ${getDaysOverdueColor(invoice.daysOverdue)}`}>
+                        LKR {invoice.balance.toLocaleString()}
+                     </div>
+                   </div>
+
+                   <div className="flex justify-end gap-2 pt-2 border-t mt-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          (window.location.href = `/bills/${invoice.id}`)
+                        }
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openReminderDialog(invoice)}
+                      >
+                        <Send className="w-4 h-4 mr-1" />
+                        Remind
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => openRecordPaymentDialog(invoice)}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        Pay
+                      </Button>
+                   </div>
+                 </div>
+               ))
+            )}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-x-auto border rounded-md">
           <Table>
             <TableHeader>
               <TableRow>
@@ -563,6 +650,7 @@ export default function DueInvoicesPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 

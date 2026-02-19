@@ -388,7 +388,7 @@ export default function CustomersPage() {
           ) : (
             <React.Fragment>
               {/* Mobile Card View */}
-              <div className="md:hidden space-y-3">
+              <div className="lg:hidden space-y-3">
                 {paginatedCustomers.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">No customers found</div>
                 ) : (
@@ -431,7 +431,7 @@ export default function CustomersPage() {
               </div>
 
               {/* Desktop Table View */}
-              <div className="hidden md:block overflow-x-auto">
+              <div className="hidden lg:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>

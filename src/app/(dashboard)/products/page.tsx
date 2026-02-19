@@ -812,87 +812,100 @@ export default function ProductsPage() {
           ) : (
             <React.Fragment>
               {/* Mobile Card View */}
-              <div className="md:hidden space-y-3">
+              {/* Mobile Card View */}
+              {/* Mobile Card View */}
+              <div className="lg:hidden space-y-3">
                 {currentPageProducts.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">No products found</div>
                 ) : (
                   currentPageProducts.map((product) => (
                     <div
                       key={product.id}
-                      className="border rounded-lg p-4 space-y-3 bg-card"
+                      className="border rounded-lg p-3 space-y-2 bg-card shadow-sm"
                     >
-                      {/* Product name + badges */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm leading-snug">{product.name}</h3>
-                          <div className="flex flex-wrap gap-1.5 mt-1">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                              {product.type}
-                            </span>
-                            {product.stock === 0 ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                                <AlertTriangle className="w-3 h-3 mr-1" /> Out of Stock
-                              </span>
-                            ) : product.stock < product.minStock ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive">
-                                <AlertTriangle className="w-3 h-3 mr-1" /> Low Stock
-                              </span>
-                            ) : null}
-                          </div>
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex-1">
+                           <h3 className="font-semibold text-sm leading-snug line-clamp-2">{product.name}</h3>
+                           <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-secondary text-secondary-foreground">
+                                {product.type}
+                                </span>
+                                {product.stock === 0 ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700">
+                                    <AlertTriangle className="w-3 h-3 mr-1" /> Out
+                                </span>
+                                ) : product.stock < product.minStock ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-destructive/10 text-destructive">
+                                    <AlertTriangle className="w-3 h-3 mr-1" /> Low
+                                </span>
+                                ) : null}
+                            </div>
                         </div>
-                        {/* Actions */}
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          <Button
+                         <div className="text-right shrink-0">
+                             <div className="font-bold text-sm text-green-600">LKR {product.sellingPrice.toLocaleString()}</div>
+                             {product.mrp > product.sellingPrice && (
+                                <div className="text-[10px] text-muted-foreground line-through">LKR {product.mrp.toLocaleString()}</div>
+                             )}
+                         </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs border-t pt-2">
+                         <div className="text-muted-foreground">Size</div>
+                         <div className="text-right font-medium">{product.size}</div>
+
+                         <div className="text-muted-foreground">Length</div>
+                         <div className="text-right font-medium">{product.rollLength}m</div>
+
+                         <div className="text-muted-foreground">Stock</div>
+                         <div className={`text-right font-medium ${
+                            product.stock === 0 ? 'text-red-600' : product.stock < product.minStock ? 'text-destructive' : ''
+                         }`}>
+                             {product.stock} <span className="text-[10px] text-muted-foreground font-normal">rolls</span>
+                         </div>
+                         
+                         <div className="text-muted-foreground">Cost</div>
+                         <div className="text-right font-medium text-blue-600">LKR {product.costPrice.toLocaleString()}</div>
+
+                         <div className="text-muted-foreground">Total Cost</div>
+                         <div className="text-right font-medium">LKR {product.totalCost.toLocaleString()}</div>
+                      </div>
+
+                       <div className="flex justify-end gap-2 pt-2 border-t">
+                           <Button
                             variant="ghost"
                             size="sm"
+                            className="h-7 px-2 text-xs"
                             onClick={() => (window.location.href = `/products/${product.id}`)}
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye className="w-3.5 h-3.5 mr-1" /> View
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
+                            className="h-7 px-2 text-xs"
                             onClick={() => openEditDialog(product)}
                           >
-                            <Edit className="w-4 h-4" />
+                            <Edit className="w-3.5 h-3.5 mr-1" /> Edit
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
+                            className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
                             onClick={() => {
                               setSelectedProduct(product);
                               setIsDeleteDialogOpen(true);
                             }}
                           >
-                            <Trash2 className="w-4 h-4 text-destructive" />
+                            <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
                           </Button>
-                        </div>
-                      </div>
-
-                      {/* Details grid */}
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs bg-muted/40 rounded-md p-3">
-                        <div className="text-muted-foreground">Size</div>
-                        <div className="font-medium text-right">{product.size}</div>
-                        <div className="text-muted-foreground">Roll Length</div>
-                        <div className="font-medium text-right">{product.rollLength}m</div>
-                        <div className="text-muted-foreground">Stock</div>
-                        <div className={`font-medium text-right ${
-                          product.stock === 0 ? 'text-red-600' : product.stock < product.minStock ? 'text-destructive' : ''
-                        }`}>{product.stock} rolls</div>
-                        <div className="text-muted-foreground">Cost Price</div>
-                        <div className="font-medium text-right text-blue-600">LKR {product.costPrice.toLocaleString()}</div>
-                        <div className="text-muted-foreground">Selling Price</div>
-                        <div className="font-medium text-right text-green-600">LKR {product.sellingPrice.toLocaleString()}</div>
-                        <div className="text-muted-foreground">MRP</div>
-                        <div className="font-medium text-right">LKR {product.mrp.toLocaleString()}</div>
-                      </div>
+                       </div>
                     </div>
                   ))
                 )}
               </div>
 
               {/* Desktop Table View */}
-              <div className="hidden md:block overflow-x-auto">
+              <div className="hidden lg:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
