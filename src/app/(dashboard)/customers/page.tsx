@@ -303,7 +303,7 @@ export default function CustomersPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
@@ -362,9 +362,9 @@ export default function CustomersPage() {
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full md:w-auto">
               <Select value={cityFilter} onValueChange={setCityFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full md:w-[180px]">
                   <SelectValue placeholder="Filter by city" />
                 </SelectTrigger>
                 <SelectContent>
@@ -383,95 +383,113 @@ export default function CustomersPage() {
           {loading ? (
             <div className="flex justify-center items-center py-12">
               <Loader2 className="h-6 w-6 animate-spin mr-2" />
-              <span className="text-muted-foreground">
-                Loading customers...
-              </span>
+              <span className="text-muted-foreground">Loading customers...</span>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Customer Name</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>City</TableHead>
-                  <TableHead className="text-right">Balance</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredCustomers.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={5}
-                      className="text-center py-8 text-muted-foreground"
-                    >
-                      No customers found
-                    </TableCell>
-                  </TableRow>
+            <React.Fragment>
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3">
+                {paginatedCustomers.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">No customers found</div>
                 ) : (
                   paginatedCustomers.map((customer) => (
-                    <TableRow key={customer.id}>
-                      <TableCell className="font-medium">
-                        {customer.name}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Phone className="w-3 h-3 text-muted-foreground" />
-                          {customer.phone}
+                    <div key={customer.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-sm leading-snug">{customer.name}</h3>
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full mt-1 inline-block ${
+                            customer.status === 'active' ? 'bg-green-100 text-green-700' :
+                            customer.status === 'suspended' ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>{customer.status}</span>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-sm">
-                          <MapPin className="w-3 h-3 text-muted-foreground" />
-                          {customer.city}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span
-                          className={
-                            customer.outstanding_balance > 0
-                              ? "text-destructive font-medium"
-                              : "text-muted-foreground"
-                          }
-                        >
-                          LKR {customer.outstanding_balance.toLocaleString()}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() =>
-                              (window.location.href = `/customers/${customer.id}`)
-                            }
-                          >
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <Button variant="ghost" size="sm" onClick={() => (window.location.href = `/customers/${customer.id}`)}>
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => openEditDialog(customer)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => openEditDialog(customer)}>
                             <Edit className="w-4 h-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => {
-                              setSelectedCustomer(customer);
-                              setIsDeleteDialogOpen(true);
-                            }}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => { setSelectedCustomer(customer); setIsDeleteDialogOpen(true); }}>
                             <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs bg-muted/40 rounded-md p-3">
+                        <div className="text-muted-foreground">Phone</div>
+                        <div className="font-medium text-right">{customer.phone || 'N/A'}</div>
+                        <div className="text-muted-foreground">City</div>
+                        <div className="font-medium text-right">{customer.city || 'N/A'}</div>
+                        <div className="text-muted-foreground">Balance</div>
+                        <div className={`font-medium text-right ${customer.outstanding_balance > 0 ? 'text-destructive' : ''}` }>
+                          LKR {customer.outstanding_balance.toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
                   ))
                 )}
-              </TableBody>
-            </Table>
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Customer Name</TableHead>
+                      <TableHead>Contact</TableHead>
+                      <TableHead>City</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredCustomers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          No customers found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paginatedCustomers.map((customer) => (
+                        <TableRow key={customer.id}>
+                          <TableCell className="font-medium">{customer.name}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2 text-sm">
+                              <Phone className="w-3 h-3 text-muted-foreground" />
+                              {customer.phone}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2 text-sm">
+                              <MapPin className="w-3 h-3 text-muted-foreground" />
+                              {customer.city}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className={customer.outstanding_balance > 0 ? "text-destructive font-medium" : "text-muted-foreground"}>
+                              LKR {customer.outstanding_balance.toLocaleString()}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button variant="ghost" size="sm" onClick={() => (window.location.href = `/customers/${customer.id}`)}>  
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => openEditDialog(customer)}>
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => { setSelectedCustomer(customer); setIsDeleteDialogOpen(true); }}>
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </React.Fragment>
           )}
         </CardContent>
         {/* Pagination Footer */}

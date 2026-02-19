@@ -16,9 +16,9 @@ import { SierraLogo } from "@/components/ui/logo";
 
 export function Header() {
   return (
-    <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-card px-4 md:px-6 w-full">
+    <header className="sticky top-0 z-10 flex h-16 items-center gap-2 border-b bg-card px-3 md:px-6 w-full">
       {/* Mobile Hamburger Menu */}
-      <div className="lg:hidden">
+      <div className="lg:hidden flex-shrink-0">
         <Sheet>
           <SheetTrigger asChild>
             <Button variant="outline" size="icon">
@@ -34,19 +34,19 @@ export function Header() {
       </div>
 
       {/* Mobile Logo */}
-      <div className="flex items-center gap-2 lg:hidden mr-auto">
+      <div className="flex items-center gap-1.5 lg:hidden flex-shrink-0">
         <SierraLogo className="h-5 w-5 text-primary" />
-        <span className="font-semibold text-lg">Sierra</span>
+        <span className="font-semibold text-base">Sierra</span>
       </div>
 
-      {/* Search Bar */}
-      {/* UPDATED: Removed 'flex-1' and added 'md:w-1/3' to control size */}
-      <div className="relative w-full md:w-1/5">
-        {/* UPDATED: Fixed typo 'w-' to 'w-4' */}
+      {/* Spacer - pushes search to the right on mobile */}
+      <div className="flex-1 lg:flex-none"></div>
+
+      {/* Search Bar - hidden on xs (phone), visible from sm+ */}
+      <div className="relative hidden sm:block sm:w-48 md:w-64 lg:w-72">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search..."
-          // UPDATED: Removed typo 'W-1/2' and added 'w-full' to fill the container
           className="pl-9 bg-background focus:bg-card w-full"
         />
       </div>

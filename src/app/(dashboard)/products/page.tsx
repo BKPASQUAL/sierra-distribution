@@ -715,7 +715,7 @@ export default function ProductsPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
@@ -776,9 +776,9 @@ export default function ProductsPage() {
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="grid grid-cols-2 gap-2 w-full md:flex md:items-center md:w-auto">
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full md:w-[160px]">
                   <SelectValue placeholder="Filter by type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -790,7 +790,7 @@ export default function ProductsPage() {
                 </SelectContent>
               </Select>
               <Select value={stockFilter} onValueChange={setStockFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full md:w-[150px]">
                   <SelectValue placeholder="Filter by stock" />
                 </SelectTrigger>
                 <SelectContent>
@@ -810,7 +810,89 @@ export default function ProductsPage() {
               <span className="text-muted-foreground">Loading products...</span>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <React.Fragment>
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-3">
+                {currentPageProducts.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">No products found</div>
+                ) : (
+                  currentPageProducts.map((product) => (
+                    <div
+                      key={product.id}
+                      className="border rounded-lg p-4 space-y-3 bg-card"
+                    >
+                      {/* Product name + badges */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-sm leading-snug">{product.name}</h3>
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                              {product.type}
+                            </span>
+                            {product.stock === 0 ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                <AlertTriangle className="w-3 h-3 mr-1" /> Out of Stock
+                              </span>
+                            ) : product.stock < product.minStock ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-destructive/10 text-destructive">
+                                <AlertTriangle className="w-3 h-3 mr-1" /> Low Stock
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        {/* Actions */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => (window.location.href = `/products/${product.id}`)}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditDialog(product)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedProduct(product);
+                              setIsDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Details grid */}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs bg-muted/40 rounded-md p-3">
+                        <div className="text-muted-foreground">Size</div>
+                        <div className="font-medium text-right">{product.size}</div>
+                        <div className="text-muted-foreground">Roll Length</div>
+                        <div className="font-medium text-right">{product.rollLength}m</div>
+                        <div className="text-muted-foreground">Stock</div>
+                        <div className={`font-medium text-right ${
+                          product.stock === 0 ? 'text-red-600' : product.stock < product.minStock ? 'text-destructive' : ''
+                        }`}>{product.stock} rolls</div>
+                        <div className="text-muted-foreground">Cost Price</div>
+                        <div className="font-medium text-right text-blue-600">LKR {product.costPrice.toLocaleString()}</div>
+                        <div className="text-muted-foreground">Selling Price</div>
+                        <div className="font-medium text-right text-green-600">LKR {product.sellingPrice.toLocaleString()}</div>
+                        <div className="text-muted-foreground">MRP</div>
+                        <div className="font-medium text-right">LKR {product.mrp.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -944,7 +1026,7 @@ export default function ProductsPage() {
                           <div className="flex items-center justify-end gap-2">
                             <Button
                               variant="ghost"
-                              size="icon-sm"
+                              size="sm"
                               onClick={() =>
                                 (window.location.href = `/products/${product.id}`)
                               }
@@ -953,14 +1035,14 @@ export default function ProductsPage() {
                             </Button>
                             <Button
                               variant="ghost"
-                              size="icon-sm"
+                              size="sm"
                               onClick={() => openEditDialog(product)}
                             >
                               <Edit className="w-4 h-4" />
                             </Button>
                             <Button
                               variant="ghost"
-                              size="icon-sm"
+                              size="sm"
                               onClick={() => {
                                 setSelectedProduct(product);
                                 setIsDeleteDialogOpen(true);
@@ -976,6 +1058,7 @@ export default function ProductsPage() {
                 </TableBody>
               </Table>
             </div>
+            </React.Fragment>
           )}
 
           {/* Pagination Controls */}
@@ -1075,7 +1158,7 @@ export default function ProductsPage() {
 
       {/* Add/Edit Product Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {selectedProduct ? "Edit Product" : "Add New Product"}
@@ -1086,7 +1169,7 @@ export default function ProductsPage() {
                 : "Enter the details of the new wire product"}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
             <div className="col-span-2 space-y-2">
               <Label htmlFor="name">Product Name *</Label>
               <Input
