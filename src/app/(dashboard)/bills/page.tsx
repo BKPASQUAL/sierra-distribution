@@ -2,10 +2,12 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation"; // Added for navigation
 import {
   Plus,
   Search,
   Eye,
+  Pencil, // Added Edit Icon
   Calendar,
   Loader2,
   Download,
@@ -87,6 +89,7 @@ interface Payment {
 }
 
 export default function BillsPage() {
+  const router = useRouter(); // Initialize router
   const [orders, setOrders] = useState<Order[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>(
@@ -537,7 +540,6 @@ export default function BillsPage() {
     setTimeout(() => setShowSuccessAlert(false), 3000);
   };
 
-  // --- MODIFIED FUNCTION START ---
   const generateOutstandingReport = () => {
     // 1. Filter for UNPAID or PARTIAL only
     const outstandingOrders = orders.filter(
@@ -708,7 +710,6 @@ export default function BillsPage() {
     setShowSuccessAlert(true);
     setTimeout(() => setShowSuccessAlert(false), 3000);
   };
-  // --- MODIFIED FUNCTION END ---
 
   if (loading) {
     return (
@@ -772,7 +773,7 @@ export default function BillsPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button onClick={() => (window.location.href = "/bills/new")}>
+          <Button onClick={() => router.push("/bills/new")}>
             <Plus className="w-4 h-4 mr-2" />
             Create New Bill
           </Button>
@@ -1034,15 +1035,26 @@ export default function BillsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() =>
-                          (window.location.href = `/bills/${order.id}`)
-                        }
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        {/* Edit Button */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => router.push(`/bills/${order.id}/edit`)}
+                          title="Edit Bill"
+                        >
+                          <Pencil className="w-4 h-4 text-blue-500" />
+                        </Button>
+                        {/* View Button */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => router.push(`/bills/${order.id}`)}
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4 text-gray-500" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
