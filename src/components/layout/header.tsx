@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Sidebar } from "@/components/layout/sidebar";
+import { SierraLogo } from "@/components/ui/logo";
 
 export function Header() {
   return (
@@ -30,6 +31,12 @@ export function Header() {
             <Sidebar />
           </SheetContent>
         </Sheet>
+      </div>
+
+      {/* Mobile Logo */}
+      <div className="flex items-center gap-2 lg:hidden mr-auto">
+        <SierraLogo className="h-5 w-5 text-primary" />
+        <span className="font-semibold text-lg">Sierra</span>
       </div>
 
       {/* Search Bar */}

@@ -20,6 +20,7 @@ import {
   Landmark,
   TrendingDown,
 } from "lucide-react";
+import { SierraLogo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
@@ -215,7 +216,7 @@ export function Sidebar() {
     <div className="flex h-screen w-full md:w-64 flex-col border-r bg-card">
       {/* Logo (Fixed Top) */}
       <div className="flex h-14 md:h-16 items-center border-b px-4 md:px-6 flex-shrink-0">
-        <Package className="h-5 w-5 md:h-6 md:w-6 text-primary flex-shrink-0" />
+        <SierraLogo className="h-5 w-5 md:h-6 md:w-6 text-primary flex-shrink-0" />
         <span className="ml-2 text-base md:text-lg font-semibold truncate">
           Sierra Distribution
         </span>
