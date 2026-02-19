@@ -31,7 +31,7 @@ export async function middleware(request: NextRequest) {
   );
 
   // Define public routes that don't require authentication
-  const publicRoutes = ["/login"];
+  const publicRoutes = ["/login", "/manifest.webmanifest", "/sw.js", "/icon"];
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   );
@@ -94,6 +94,6 @@ export const config = {
      * - api (API routes) ⭐ CRITICAL: API routes must be excluded!
      * - public files (images, svg, png, jpg, etc.)
      */
-    "/((?!_next/static|_next/image|favicon.ico|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|workbox-.*|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
