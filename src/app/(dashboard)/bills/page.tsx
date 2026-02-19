@@ -54,6 +54,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 // Import export libraries
 import * as XLSX from "xlsx";
@@ -781,13 +782,13 @@ export default function BillsPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Bills</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalBills}</div>
+            <div className="text-lg sm:text-xl md:text-2xl font-bold">{totalBills}</div>
             <p className="text-xs text-muted-foreground mt-1">All invoices</p>
           </CardContent>
         </Card>
@@ -796,7 +797,7 @@ export default function BillsPage() {
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-lg sm:text-xl md:text-2xl font-bold break-all">
               LKR {totalRevenue.toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Billed amount</p>
@@ -809,7 +810,7 @@ export default function BillsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">
+            <div className="text-lg sm:text-xl md:text-2xl font-bold text-destructive break-all">
               LKR {totalBalance.toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Amount due</p>
@@ -822,7 +823,7 @@ export default function BillsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
+            <div className="text-lg sm:text-xl md:text-2xl font-bold text-yellow-600">
               {pendingBills}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -847,7 +848,7 @@ export default function BillsPage() {
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="grid grid-cols-2 gap-2 w-full md:flex md:items-center md:w-auto">
               {/* Rows per page Selector */}
               <Select
                 value={itemsPerPage.toString()}
@@ -856,7 +857,7 @@ export default function BillsPage() {
                   setCurrentPage(1);
                 }}
               >
-                <SelectTrigger className="w-[80px]">
+                <SelectTrigger className="w-full md:w-[80px]">
                   <SelectValue placeholder="10" />
                 </SelectTrigger>
                 <SelectContent>
@@ -868,7 +869,7 @@ export default function BillsPage() {
               </Select>
 
               <Select value={customerFilter} onValueChange={setCustomerFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full md:w-[180px]">
                   <SelectValue placeholder="Filter by customer" />
                 </SelectTrigger>
                 <SelectContent>
@@ -884,7 +885,7 @@ export default function BillsPage() {
                 value={paymentStatusFilter}
                 onValueChange={setPaymentStatusFilter}
               >
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="w-full md:w-[140px]">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -898,7 +899,7 @@ export default function BillsPage() {
                 value={paymentMethodFilter}
                 onValueChange={setPaymentMethodFilter}
               >
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="w-full md:w-[140px]">
                   <SelectValue placeholder="Method" />
                 </SelectTrigger>
                 <SelectContent>
@@ -910,7 +911,7 @@ export default function BillsPage() {
                 </SelectContent>
               </Select>
               <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="col-span-2 md:col-span-1 w-full md:w-[140px]">
                   <SelectValue placeholder="Date" />
                 </SelectTrigger>
                 <SelectContent>
@@ -924,7 +925,99 @@ export default function BillsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          {/* Mobile View - Cards */}
+          <div className="grid gap-4 md:hidden">
+            {paginatedOrders.map((order) => (
+              <Card key={order.id} className="p-4 border shadow-sm">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <h3 className="font-semibold text-lg">
+                      {order.customers.name}
+                    </h3>
+                    <div className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                      <FileText className="w-3 h-3" />
+                      {order.order_number}
+                    </div>
+                  </div>
+                  <Badge
+                    variant={
+                      order.payment_status === "paid"
+                        ? "default"
+                        : order.payment_status === "partial"
+                          ? "secondary"
+                          : "destructive"
+                    }
+                    className={`capitalize ${
+                        order.payment_status === "paid" 
+                            ? "bg-green-100 text-green-800 hover:bg-green-200" 
+                            : order.payment_status === "partial" 
+                                ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200" 
+                                : "bg-red-100 text-red-800 hover:bg-red-200"
+                    }`}
+                  >
+                    {order.payment_status}
+                  </Badge>
+                </div>
+
+                <div className="space-y-2 text-sm my-4 bg-muted/30 p-3 rounded-md">
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground flex items-center gap-2 text-xs">
+                      <Calendar className="w-3 h-3" /> Date
+                    </span>
+                    <span className="font-medium text-xs">
+                      {new Date(order.order_date).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground text-xs">Total Amount</span>
+                    <span className="font-bold text-sm">
+                      LKR {order.total_amount.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground text-xs">Paid Amount</span>
+                    <span className="text-green-600 font-medium text-sm">
+                      LKR {(order.paid_amount || 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center border-t pt-2 mt-2">
+                    <span className="text-muted-foreground font-medium text-xs">Due Balance</span>
+                    <span className="text-destructive font-bold text-sm">
+                      LKR {(order.due_amount || 0).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => router.push(`/bills/${order.id}`)}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => router.push(`/bills/${order.id}/edit`)}
+                  >
+                    <Pencil className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                </div>
+              </Card>
+            ))}
+            {paginatedOrders.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                    No bills found
+                </div>
+            )}
+          </div>
+
+          {/* Desktop View - Table */}
+          <div className="hidden md:block">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead
@@ -937,7 +1030,7 @@ export default function BillsPage() {
                 </TableHead>
                 <TableHead
                   onClick={() => handleSort("customers.name")}
-                  className="cursor-pointer"
+                  className="cursor-pointer w-[200px]"
                 >
                   <div className="flex items-center">
                     Customer {getSortIcon("customers.name")}
@@ -945,7 +1038,7 @@ export default function BillsPage() {
                 </TableHead>
                 <TableHead
                   onClick={() => handleSort("order_number")}
-                  className="cursor-pointer"
+                  className="cursor-pointer whitespace-nowrap"
                 >
                   <div className="flex items-center">
                     Invoice No {getSortIcon("order_number")}
@@ -1005,10 +1098,10 @@ export default function BillsPage() {
                         {new Date(order.order_date).toLocaleDateString()}
                       </div>
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium max-w-[150px] truncate" title={order.customers.name}>
                       {order.customers.name}
                     </TableCell>
-                    <TableCell>{order.order_number}</TableCell>
+                    <TableCell className="whitespace-nowrap">{order.order_number}</TableCell>
                     <TableCell className="text-right font-medium">
                       LKR {order.total_amount.toLocaleString()}
                     </TableCell>
@@ -1060,7 +1153,8 @@ export default function BillsPage() {
                 ))
               )}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </CardContent>
         {/* Pagination Footer */}
         {sortedOrders.length > 0 && (

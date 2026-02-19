@@ -231,30 +231,31 @@ export default function BillDetailsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => router.push("/bills")}
+            className="shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">{bill.billNo}</h1>
-            <p className="text-muted-foreground mt-1">
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight break-all">{bill.billNo}</h1>
+            <p className="text-muted-foreground mt-1 text-sm md:text-base">
               Invoice details and payment tracking
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handlePrint}>
+        <div className="flex items-center gap-2 self-start md:self-auto ml-12 md:ml-0">
+          <Button variant="outline" onClick={handlePrint} size="sm" className="h-9">
             <Printer className="w-4 h-4 mr-2" />
             Print
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" size="sm" className="h-9">
             <Download className="w-4 h-4 mr-2" />
-            Download PDF
+            PDF
           </Button>
         </div>
       </div>
@@ -335,34 +336,52 @@ export default function BillDetailsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Product</TableHead>
-                <TableHead className="text-right">Quantity</TableHead>
-                <TableHead className="text-right">Unit Price</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {bill.items.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">
-                    {item.productName}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {item.quantity} {item.unit}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    LKR {item.unitPrice.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    LKR {item.total.toLocaleString()}
-                  </TableCell>
+          {/* Mobile Items View */}
+          <div className="md:hidden space-y-4 mb-4">
+            {bill.items.map((item) => (
+              <div key={item.id} className="border-b pb-3 last:border-0 last:pb-0">
+                <div className="font-medium">{item.productName}</div>
+                <div className="flex justify-between text-sm mt-1">
+                  <span className="text-muted-foreground">
+                    {item.quantity} {item.unit} x LKR {item.unitPrice.toLocaleString()}
+                  </span>
+                  <span className="font-medium">LKR {item.total.toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Items Table */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Product</TableHead>
+                  <TableHead className="text-right">Quantity</TableHead>
+                  <TableHead className="text-right">Unit Price</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {bill.items.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">
+                      {item.productName}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {item.quantity} {item.unit}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      LKR {item.unitPrice.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      LKR {item.total.toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
 
           <div className="mt-6 border-t pt-6">
             <div className="flex justify-end">
