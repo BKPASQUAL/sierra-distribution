@@ -20,6 +20,7 @@ import {
   Landmark,
   TrendingDown,
   ClipboardCheck,
+  FileBarChart,
 } from "lucide-react";
 import { SierraLogo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
@@ -76,6 +77,7 @@ const navigation: NavGroup[] = [
     items: [
       { name: "Expenses", href: "/expenses", icon: Receipt },
       { name: "Cheque Management", href: "/cheques", icon: Landmark },
+      { name: "Cheque Report", href: "/cheques/report", icon: FileBarChart },
       { name: "Accounts", href: "/accounts", icon: Landmark, adminOnly: true },
     ],
   },
@@ -122,11 +124,17 @@ function SidebarNav({
               </h3>
             )}
             {filteredItems.map((item) => {
-              // Check if the item is active
+              // Active = exact match, OR the longest-matching prefix in this
+              // group. This prevents /cheques from being highlighted when the
+              // current path is /cheques/report (which is a more specific match).
               const isDashboard = item.href === "/dashboard";
+              const longestMatch = filteredItems
+                .map((i) => i.href)
+                .filter((h) => pathname === h || pathname.startsWith(h + "/"))
+                .sort((a, b) => b.length - a.length)[0];
               const isActive = isDashboard
                 ? pathname === item.href
-                : pathname.startsWith(item.href);
+                : item.href === longestMatch;
 
               return (
                 <Link

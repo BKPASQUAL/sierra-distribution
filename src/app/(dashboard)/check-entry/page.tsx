@@ -136,6 +136,7 @@ export default function PaymentEntryPage() {
   const [chequeNumber, setChequeNumber] = useState("");
   const [chequeDate, setChequeDate] = useState("");
   const [selectedBankId, setSelectedBankId] = useState("");
+  const [branchCode, setBranchCode] = useState("");
 
   // Cash / Bank-only field
   const [selectedAccountId, setSelectedAccountId] = useState("");
@@ -314,6 +315,7 @@ export default function PaymentEntryPage() {
     setChequeNumber("");
     setChequeDate("");
     setSelectedBankId("");
+    setBranchCode("");
     setSelectedAccountId("");
     setPendingInvoices([]);
     setSettlements({});
@@ -341,6 +343,10 @@ export default function PaymentEntryPage() {
       }
       if (!selectedBankId) {
         toast.error("Please select a bank");
+        return false;
+      }
+      if (!branchCode.trim()) {
+        toast.error("Please enter the branch code");
         return false;
       }
     }
@@ -405,7 +411,7 @@ export default function PaymentEntryPage() {
             paymentMethod === "cash" || paymentMethod === "bank"
               ? selectedAccountId
               : null,
-          reference_number: null,
+          reference_number: paymentMethod === "cheque" ? branchCode || null : null,
         };
 
         const res = await fetch("/api/payments", {
@@ -673,6 +679,17 @@ export default function PaymentEntryPage() {
                       </Command>
                     </PopoverContent>
                   </Popover>
+                </div>
+
+                {/* Branch Code - appears after bank is selected */}
+                <div className="space-y-2">
+                  <Label htmlFor="branchCode">Branch Code *</Label>
+                  <Input
+                    id="branchCode"
+                    placeholder="e.g. 001, KOTTE, 7539"
+                    value={branchCode}
+                    onChange={(e) => setBranchCode(e.target.value)}
+                  />
                 </div>
               </>
             )}
