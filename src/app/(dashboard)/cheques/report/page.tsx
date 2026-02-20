@@ -406,24 +406,30 @@ export default function ChequeReportPage() {
                 )}
               </div>
 
-              {/* ── DESKTOP TABLE (>= md) ── */}
               <div className="hidden md:block overflow-x-auto rounded-lg border">
-                <table className="w-full text-sm table-fixed">
+                <table className="w-full min-w-[640px] text-sm">
                   <thead>
                     <tr className="bg-muted/60 border-b">
-                      <th className="w-10 px-3 py-3">
+                      {/* checkbox ~5% */}
+                      <th style={{width:"5%"}} className="px-3 py-3">
                         <Checkbox
                           checked={allSelected}
                           onCheckedChange={toggleAll}
                           aria-label="Select all"
                         />
                       </th>
-                      <th className="w-10 px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">#</th>
-                      <th className="w-36 px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Cheque No</th>
-                      <th className="w-32 px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Cheque Date</th>
-                      <th className="w-28 px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bank Code</th>
-                      <th className="w-28 px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Branch Code</th>
-                      <th className="px-3 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide">Amount</th>
+                      {/* # ~5% */}
+                      <th style={{width:"5%"}} className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">#</th>
+                      {/* Cheque No ~20% */}
+                      <th style={{width:"20%"}} className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Cheque No</th>
+                      {/* Cheque Date ~18% */}
+                      <th style={{width:"18%"}} className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Cheque Date</th>
+                      {/* Bank Code ~17% */}
+                      <th style={{width:"17%"}} className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bank Code</th>
+                      {/* Branch Code ~17% */}
+                      <th style={{width:"17%"}} className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Branch Code</th>
+                      {/* Amount ~18% */}
+                      <th style={{width:"18%"}} className="px-3 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide">Amount</th>
                     </tr>
                   </thead>
                   <tbody>
