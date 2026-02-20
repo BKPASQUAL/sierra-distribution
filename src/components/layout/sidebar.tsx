@@ -19,6 +19,7 @@ import {
   Receipt,
   Landmark,
   TrendingDown,
+  ClipboardCheck,
 } from "lucide-react";
 import { SierraLogo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,7 @@ const navigation: NavGroup[] = [
       { name: "Customers", href: "/customers", icon: Users },
       { name: "Customers Bills", href: "/bills", icon: FileText },
       { name: "Customers Payments", href: "/payments", icon: DollarSign },
+      { name: "Check Entry", href: "/check-entry", icon: ClipboardCheck },
       { name: "Due Invoices", href: "/due-invoices", icon: AlertCircle },
     ],
   },
