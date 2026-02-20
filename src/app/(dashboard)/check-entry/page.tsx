@@ -18,8 +18,8 @@ import {
   Card,
   CardContent,
   CardHeader,
-  CardTitle,
   CardDescription,
+  CardTitle,
 } from "@/components/ui/card";
 import {
   Table,
@@ -42,6 +42,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -59,6 +66,13 @@ interface Bank {
   bank_name: string;
 }
 
+interface CompanyAccount {
+  id: string;
+  account_name: string;
+  account_type: "saving" | "current" | "cash";
+  account_number: string | null;
+}
+
 interface PendingInvoice {
   id: string;
   order_number: string;
@@ -73,6 +87,8 @@ interface InvoiceSettlement {
   selected: boolean;
   settleAmount: number;
 }
+
+type PaymentMethod = "cash" | "bank" | "cheque" | "credit";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -89,15 +105,17 @@ function StepBadge({ step, label }: { step: number; label: string }) {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function CheckEntryPage() {
+export default function PaymentEntryPage() {
   // Master data
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
+  const [companyAccounts, setCompanyAccounts] = useState<CompanyAccount[]>([]);
   const [pendingInvoices, setPendingInvoices] = useState<PendingInvoice[]>([]);
 
   // Loading / submitting
   const [loadingCustomers, setLoadingCustomers] = useState(true);
   const [loadingBanks, setLoadingBanks] = useState(true);
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -107,16 +125,22 @@ export default function CheckEntryPage() {
 
   // Form – header
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [paymentDate, setPaymentDate] = useState(
     new Date().toISOString().split("T")[0]
   );
+  const [totalAmount, setTotalAmount] = useState<number>(0);
+  const [notes, setNotes] = useState("");
+
+  // Cheque-only fields
   const [chequeNumber, setChequeNumber] = useState("");
   const [chequeDate, setChequeDate] = useState("");
   const [selectedBankId, setSelectedBankId] = useState("");
-  const [chequeAmount, setChequeAmount] = useState<number>(0);
-  const [notes, setNotes] = useState("");
 
-  // Invoice settlement map: invoiceId -> {selected, settleAmount}
+  // Cash / Bank-only field
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+
+  // Invoice settlement map
   const [settlements, setSettlements] = useState<
     Record<string, InvoiceSettlement>
   >({});
@@ -124,7 +148,7 @@ export default function CheckEntryPage() {
   // ── Data fetching ──────────────────────────────────────────────────────────
 
   useEffect(() => {
-    // Derive customer list ONLY from customers who have pending invoices
+    // Only customers with pending invoices
     const fetchCustomersWithDebt = async () => {
       try {
         const res = await fetch("/api/orders/unpaid");
@@ -132,7 +156,6 @@ export default function CheckEntryPage() {
         if (res.ok) {
           const orders: Array<{ customer_id: string; customer_name: string }> =
             data.orders ?? [];
-          // Deduplicate by customer_id
           const seen = new Set<string>();
           const unique: Customer[] = [];
           for (const o of orders) {
@@ -141,7 +164,6 @@ export default function CheckEntryPage() {
               unique.push({ id: o.customer_id, name: o.customer_name });
             }
           }
-          // Sort alphabetically
           unique.sort((a, b) => a.name.localeCompare(b.name));
           setCustomers(unique);
         }
@@ -164,9 +186,30 @@ export default function CheckEntryPage() {
       }
     };
 
+    const fetchAccounts = async () => {
+      try {
+        const res = await fetch("/api/accounts");
+        const data = await res.json();
+        if (res.ok) setCompanyAccounts(data.accounts ?? []);
+      } catch {
+        toast.error("Failed to load accounts");
+      } finally {
+        setLoadingAccounts(false);
+      }
+    };
+
     fetchCustomersWithDebt();
     fetchBanks();
+    fetchAccounts();
   }, []);
+
+  // Filter accounts by method
+  const availableAccounts = companyAccounts.filter((acc) => {
+    if (paymentMethod === "cash") return acc.account_type === "cash";
+    if (paymentMethod === "bank")
+      return acc.account_type === "saving" || acc.account_type === "current";
+    return false;
+  });
 
   const fetchPendingInvoices = useCallback(async (customerId: string) => {
     if (!customerId) return;
@@ -181,14 +224,9 @@ export default function CheckEntryPage() {
       if (res.ok) {
         const invoices: PendingInvoice[] = data.orders ?? [];
         setPendingInvoices(invoices);
-        // Initialise settlement map
         const map: Record<string, InvoiceSettlement> = {};
         invoices.forEach((inv) => {
-          map[inv.id] = {
-            invoiceId: inv.id,
-            selected: false,
-            settleAmount: 0,
-          };
+          map[inv.id] = { invoiceId: inv.id, selected: false, settleAmount: 0 };
         });
         setSettlements(map);
       }
@@ -199,7 +237,6 @@ export default function CheckEntryPage() {
     }
   }, []);
 
-  // Reload invoices whenever customer changes
   useEffect(() => {
     if (selectedCustomerId) {
       fetchPendingInvoices(selectedCustomerId);
@@ -209,35 +246,40 @@ export default function CheckEntryPage() {
     }
   }, [selectedCustomerId, fetchPendingInvoices]);
 
+  // Reset account when method changes
+  useEffect(() => {
+    setSelectedAccountId("");
+  }, [paymentMethod]);
+
   // ── Computed values ────────────────────────────────────────────────────────
 
   const totalAllocated = Object.values(settlements)
     .filter((s) => s.selected)
     .reduce((sum, s) => sum + (s.settleAmount || 0), 0);
 
-  const remaining = chequeAmount - totalAllocated;
+  const remaining = totalAmount - totalAllocated;
 
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
   const selectedBank = banks.find((b) => b.id === selectedBankId);
+  const selectedAccount = companyAccounts.find(
+    (a) => a.id === selectedAccountId
+  );
 
-  // ── Invoice selection logic ────────────────────────────────────────────────
+  // ── Invoice selection ─────────────────────────────────────────────────────
 
   const toggleInvoice = (invoiceId: string, invoice: PendingInvoice) => {
     setSettlements((prev) => {
       const current = prev[invoiceId];
       const nowSelected = !current.selected;
-
-      // Auto-fill settle amount when selecting (capped by remaining & balance)
       let autoAmount = 0;
       if (nowSelected) {
         const currentRemaining =
-          chequeAmount -
+          totalAmount -
           Object.values(prev)
             .filter((s) => s.selected && s.invoiceId !== invoiceId)
             .reduce((sum, s) => sum + s.settleAmount, 0);
         autoAmount = Math.min(invoice.balance, Math.max(0, currentRemaining));
       }
-
       return {
         ...prev,
         [invoiceId]: {
@@ -249,7 +291,11 @@ export default function CheckEntryPage() {
     });
   };
 
-  const updateSettleAmount = (invoiceId: string, value: number, maxBalance: number) => {
+  const updateSettleAmount = (
+    invoiceId: string,
+    value: number,
+    maxBalance: number
+  ) => {
     const capped = Math.min(Math.max(0, value), maxBalance);
     setSettlements((prev) => ({
       ...prev,
@@ -257,60 +303,78 @@ export default function CheckEntryPage() {
     }));
   };
 
-  // ── Reset ──────────────────────────────────────────────────────────────────
+  // ── Reset ─────────────────────────────────────────────────────────────────
 
   const resetForm = () => {
     setSelectedCustomerId("");
+    setPaymentMethod("cash");
     setPaymentDate(new Date().toISOString().split("T")[0]);
+    setTotalAmount(0);
+    setNotes("");
     setChequeNumber("");
     setChequeDate("");
     setSelectedBankId("");
-    setChequeAmount(0);
-    setNotes("");
+    setSelectedAccountId("");
     setPendingInvoices([]);
     setSettlements({});
   };
 
-  // ── Submission ─────────────────────────────────────────────────────────────
+  // ── Validation ────────────────────────────────────────────────────────────
 
-  const handleSubmit = async () => {
-    // Validation
+  const validate = (): boolean => {
     if (!selectedCustomerId) {
       toast.error("Please select a customer");
-      return;
+      return false;
     }
-    if (!chequeNumber.trim()) {
-      toast.error("Please enter a cheque number");
-      return;
+    if (totalAmount <= 0) {
+      toast.error("Please enter a valid payment amount");
+      return false;
     }
-    if (!chequeDate) {
-      toast.error("Please enter the cheque date");
-      return;
+    if (paymentMethod === "cheque") {
+      if (!chequeNumber.trim()) {
+        toast.error("Please enter a cheque number");
+        return false;
+      }
+      if (!chequeDate) {
+        toast.error("Please enter the cheque date");
+        return false;
+      }
+      if (!selectedBankId) {
+        toast.error("Please select a bank");
+        return false;
+      }
     }
-    if (!selectedBankId) {
-      toast.error("Please select a bank");
-      return;
+    if (
+      (paymentMethod === "cash" || paymentMethod === "bank") &&
+      !selectedAccountId
+    ) {
+      toast.error(
+        `Please select a ${paymentMethod === "cash" ? "cash" : "bank"} account`
+      );
+      return false;
     }
-    if (chequeAmount <= 0) {
-      toast.error("Please enter a valid cheque amount");
-      return;
+    const selected = Object.values(settlements).filter(
+      (s) => s.selected && s.settleAmount > 0
+    );
+    if (selected.length === 0) {
+      toast.error("Please select at least one invoice to settle");
+      return false;
     }
+    if (totalAllocated > totalAmount) {
+      toast.error("Allocated amount exceeds payment amount");
+      return false;
+    }
+    return true;
+  };
+
+  // ── Submission ────────────────────────────────────────────────────────────
+
+  const handleSubmit = async () => {
+    if (!validate()) return;
 
     const selectedSettlements = Object.values(settlements).filter(
       (s) => s.selected && s.settleAmount > 0
     );
-
-    if (selectedSettlements.length === 0) {
-      toast.error(
-        "Please select at least one invoice and enter an amount to settle"
-      );
-      return;
-    }
-
-    if (totalAllocated > chequeAmount) {
-      toast.error("Allocated amount exceeds cheque amount");
-      return;
-    }
 
     setIsSubmitting(true);
     let successCount = 0;
@@ -318,25 +382,30 @@ export default function CheckEntryPage() {
 
     try {
       for (const s of selectedSettlements) {
-        const paymentNumber = `CHQ-${Date.now()}-${Math.random()
+        const paymentNumber = `PAY-${Date.now()}-${Math.random()
           .toString(36)
           .substring(2, 6)
           .toUpperCase()}`;
 
-        const paymentData = {
+        const paymentData: Record<string, unknown> = {
           payment_number: paymentNumber,
           order_id: s.invoiceId,
           customer_id: selectedCustomerId,
           payment_date: paymentDate,
           amount: s.settleAmount,
-          payment_method: "cheque",
-          deposit_account_id: null,
-          reference_number: null,
+          payment_method: paymentMethod,
           notes: notes || null,
-          cheque_number: chequeNumber,
-          cheque_date: chequeDate,
-          cheque_status: "pending",
-          bank_account_id: selectedBankId,
+          // Cheque-specific
+          cheque_number: paymentMethod === "cheque" ? chequeNumber : null,
+          cheque_date: paymentMethod === "cheque" ? chequeDate : null,
+          cheque_status: paymentMethod === "cheque" ? "pending" : null,
+          bank_account_id: paymentMethod === "cheque" ? selectedBankId : null,
+          // Cash/Bank deposit account
+          deposit_account_id:
+            paymentMethod === "cash" || paymentMethod === "bank"
+              ? selectedAccountId
+              : null,
+          reference_number: null,
         };
 
         const res = await fetch("/api/payments", {
@@ -371,9 +440,16 @@ export default function CheckEntryPage() {
     }
   };
 
-  // ───────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   //  Render
-  // ───────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const methodLabel: Record<PaymentMethod, string> = {
+    cash: "Cash",
+    bank: "Bank Transfer",
+    cheque: "Cheque",
+    credit: "Credit",
+  };
 
   return (
     <div className="space-y-6">
@@ -383,25 +459,24 @@ export default function CheckEntryPage() {
           <ClipboardCheck className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Check Entry</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Payment Entry</h1>
           <p className="text-muted-foreground text-sm">
-            Record a cheque payment and settle customer invoices
+            Record a customer payment and settle pending invoices
           </p>
         </div>
       </div>
 
-      {/* ── SECTION 1: Check Header ─────────────────────────────────────── */}
+      {/* ── SECTION 1: Payment Details ──────────────────────────────────── */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <StepBadge step={1} label="Cheque Details" />
-          </div>
+          <StepBadge step={1} label="Payment Details" />
           <CardDescription>
-            Select the customer and enter cheque information
+            Select customer, payment method, and enter payment information
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
             {/* Customer */}
             <div className="space-y-2 sm:col-span-2 lg:col-span-1">
               <Label>Customer *</Label>
@@ -465,6 +540,25 @@ export default function CheckEntryPage() {
               </Popover>
             </div>
 
+            {/* Payment Method */}
+            <div className="space-y-2">
+              <Label>Payment Method *</Label>
+              <Select
+                value={paymentMethod}
+                onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bank">Bank Transfer</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
+                  <SelectItem value="credit">Credit</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Payment Date */}
             <div className="space-y-2">
               <Label htmlFor="paymentDate">Payment Date *</Label>
@@ -476,113 +570,151 @@ export default function CheckEntryPage() {
               />
             </div>
 
-            {/* Cheque Amount */}
+            {/* Total Amount */}
             <div className="space-y-2">
-              <Label htmlFor="chequeAmount">Cheque Amount *</Label>
+              <Label htmlFor="totalAmount">
+                {paymentMethod === "cheque" ? "Cheque" : methodLabel[paymentMethod]} Amount *
+              </Label>
               <Input
-                id="chequeAmount"
+                id="totalAmount"
                 type="number"
                 min="0"
                 step="0.01"
                 placeholder="0.00"
-                value={chequeAmount || ""}
-                onChange={(e) =>
-                  setChequeAmount(parseFloat(e.target.value) || 0)
-                }
+                value={totalAmount || ""}
+                onChange={(e) => setTotalAmount(parseFloat(e.target.value) || 0)}
               />
             </div>
 
-            {/* Cheque Number */}
-            <div className="space-y-2">
-              <Label htmlFor="chequeNumber">Cheque Number *</Label>
-              <Input
-                id="chequeNumber"
-                placeholder="e.g. 000123"
-                value={chequeNumber}
-                onChange={(e) => setChequeNumber(e.target.value)}
-              />
-            </div>
+            {/* ── CHEQUE FIELDS ── */}
+            {paymentMethod === "cheque" && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="chequeNumber">Cheque Number *</Label>
+                  <Input
+                    id="chequeNumber"
+                    placeholder="e.g. 000123"
+                    value={chequeNumber}
+                    onChange={(e) => setChequeNumber(e.target.value)}
+                  />
+                </div>
 
-            {/* Cheque Date */}
-            <div className="space-y-2">
-              <Label htmlFor="chequeDate">Cheque Date *</Label>
-              <Input
-                id="chequeDate"
-                type="date"
-                value={chequeDate}
-                onChange={(e) => setChequeDate(e.target.value)}
-              />
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="chequeDate">Cheque Date *</Label>
+                  <Input
+                    id="chequeDate"
+                    type="date"
+                    value={chequeDate}
+                    onChange={(e) => setChequeDate(e.target.value)}
+                  />
+                </div>
 
-            {/* Bank */}
-            <div className="space-y-2">
-              <Label>Bank *</Label>
-              <Popover open={bankOpen} onOpenChange={setBankOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={bankOpen}
-                    className="w-full justify-between font-normal"
-                    disabled={loadingBanks}
-                  >
-                    {loadingBanks ? (
+                <div className="space-y-2">
+                  <Label>Bank *</Label>
+                  <Popover open={bankOpen} onOpenChange={setBankOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between font-normal"
+                        disabled={loadingBanks}
+                      >
+                        {loadingBanks ? (
+                          <span className="flex items-center gap-2 text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Loading…
+                          </span>
+                        ) : selectedBank ? (
+                          <span className="truncate">
+                            {selectedBank.bank_code} – {selectedBank.bank_name}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Select bank…</span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="p-0"
+                      style={{ width: "var(--radix-popover-trigger-width)" }}
+                    >
+                      <Command>
+                        <CommandInput placeholder="Search banks…" />
+                        <CommandList>
+                          <CommandEmpty>No banks found.</CommandEmpty>
+                          <CommandGroup>
+                            {banks.map((b) => (
+                              <CommandItem
+                                key={b.id}
+                                value={`${b.bank_code} ${b.bank_name}`}
+                                onSelect={() => {
+                                  setSelectedBankId(b.id);
+                                  setBankOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    selectedBankId === b.id
+                                      ? "opacity-100"
+                                      : "opacity-0"
+                                  )}
+                                />
+                                <div>
+                                  <div className="font-medium">{b.bank_code}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {b.bank_name}
+                                  </div>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </>
+            )}
+
+            {/* ── CASH / BANK TRANSFER ACCOUNT ── */}
+            {(paymentMethod === "cash" || paymentMethod === "bank") && (
+              <div className="space-y-2">
+                <Label>
+                  {paymentMethod === "cash" ? "Cash Account" : "Bank Account"} *
+                </Label>
+                <Select
+                  value={selectedAccountId}
+                  onValueChange={setSelectedAccountId}
+                  disabled={loadingAccounts}
+                >
+                  <SelectTrigger className="w-full">
+                    {loadingAccounts ? (
                       <span className="flex items-center gap-2 text-muted-foreground">
                         <Loader2 className="h-3 w-3 animate-spin" />
                         Loading…
                       </span>
-                    ) : selectedBank ? (
-                      <span className="truncate">
-                        {selectedBank.bank_code} – {selectedBank.bank_name}
-                      </span>
                     ) : (
-                      <span className="text-muted-foreground">
-                        Select bank…
-                      </span>
+                      <SelectValue placeholder="Select account…" />
                     )}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent
-                  className="p-0"
-                  style={{ width: "var(--radix-popover-trigger-width)" }}
-                >
-                  <Command>
-                    <CommandInput placeholder="Search banks…" />
-                    <CommandList>
-                      <CommandEmpty>No banks found.</CommandEmpty>
-                      <CommandGroup>
-                        {banks.map((b) => (
-                          <CommandItem
-                            key={b.id}
-                            value={`${b.bank_code} ${b.bank_name}`}
-                            onSelect={() => {
-                              setSelectedBankId(b.id);
-                              setBankOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                selectedBankId === b.id
-                                  ? "opacity-100"
-                                  : "opacity-0"
-                              )}
-                            />
-                            <div>
-                              <div className="font-medium">{b.bank_code}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {b.bank_name}
-                              </div>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableAccounts.length === 0 ? (
+                      <SelectItem value="none" disabled>
+                        No accounts available
+                      </SelectItem>
+                    ) : (
+                      availableAccounts.map((acc) => (
+                        <SelectItem key={acc.id} value={acc.id}>
+                          {acc.account_name}
+                          {acc.account_number ? ` — ${acc.account_number}` : ""}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Notes */}
             <div className="space-y-2 sm:col-span-2 lg:col-span-3">
@@ -601,12 +733,10 @@ export default function CheckEntryPage() {
       {/* ── SECTION 2: Pending Invoices ─────────────────────────────────── */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <StepBadge step={2} label="Pending Invoices" />
-          </div>
+          <StepBadge step={2} label="Pending Invoices" />
           <CardDescription>
             {selectedCustomerId
-              ? "Select the invoices you want to settle with this cheque"
+              ? "Select invoices to settle with this payment"
               : "Select a customer above to load their pending invoices"}
           </CardDescription>
         </CardHeader>
@@ -639,9 +769,7 @@ export default function CheckEntryPage() {
                       <TableHead className="text-right">Total</TableHead>
                       <TableHead className="text-right">Paid</TableHead>
                       <TableHead className="text-right">Balance</TableHead>
-                      <TableHead className="text-right w-40">
-                        Settle Amount
-                      </TableHead>
+                      <TableHead className="text-right w-40">Settle Amount</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -651,17 +779,12 @@ export default function CheckEntryPage() {
                       return (
                         <TableRow
                           key={inv.id}
-                          className={cn(
-                            isSelected && "bg-primary/5"
-                          )}
+                          className={cn(isSelected && "bg-primary/5")}
                         >
                           <TableCell>
                             <Checkbox
-                              id={`chk-${inv.id}`}
                               checked={isSelected}
-                              onCheckedChange={() =>
-                                toggleInvoice(inv.id, inv)
-                              }
+                              onCheckedChange={() => toggleInvoice(inv.id, inv)}
                             />
                           </TableCell>
                           <TableCell className="font-medium font-mono text-sm">
@@ -721,7 +844,6 @@ export default function CheckEntryPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <Checkbox
-                            id={`mob-chk-${inv.id}`}
                             checked={isSelected}
                             onCheckedChange={() => toggleInvoice(inv.id, inv)}
                           />
@@ -738,18 +860,12 @@ export default function CheckEntryPage() {
                           {formatCurrency(inv.balance)}
                         </span>
                       </div>
-
                       <div className="grid grid-cols-2 gap-1 text-xs border-t pt-2">
                         <span className="text-muted-foreground">Total:</span>
-                        <span className="text-right">
-                          {formatCurrency(inv.total_amount)}
-                        </span>
+                        <span className="text-right">{formatCurrency(inv.total_amount)}</span>
                         <span className="text-muted-foreground">Paid:</span>
-                        <span className="text-right">
-                          {formatCurrency(inv.paid_amount)}
-                        </span>
+                        <span className="text-right">{formatCurrency(inv.paid_amount)}</span>
                       </div>
-
                       {isSelected && (
                         <div className="space-y-1">
                           <Label className="text-xs">Settle Amount</Label>
@@ -781,7 +897,7 @@ export default function CheckEntryPage() {
       </Card>
 
       {/* ── SECTION 3: Summary & Submit ─────────────────────────────────── */}
-      {selectedCustomerId && chequeAmount > 0 && (
+      {selectedCustomerId && totalAmount > 0 && (
         <Card
           className={cn(
             "border-2",
@@ -793,21 +909,16 @@ export default function CheckEntryPage() {
           )}
         >
           <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <StepBadge step={3} label="Summary & Submit" />
-            </div>
+            <StepBadge step={3} label="Summary & Submit" />
           </CardHeader>
           <CardContent>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              {/* Allocation summary */}
               <div className="flex flex-wrap gap-6">
                 <div className="space-y-0.5">
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                    Cheque Amount
+                    {methodLabel[paymentMethod]} Amount
                   </p>
-                  <p className="text-xl font-bold">
-                    {formatCurrency(chequeAmount)}
-                  </p>
+                  <p className="text-xl font-bold">{formatCurrency(totalAmount)}</p>
                 </div>
                 <div className="space-y-0.5">
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">
@@ -836,7 +947,6 @@ export default function CheckEntryPage() {
                 </div>
               </div>
 
-              {/* Action buttons */}
               <div className="flex gap-2 w-full sm:w-auto">
                 <Button
                   variant="outline"
@@ -875,8 +985,7 @@ export default function CheckEntryPage() {
             {remaining < 0 && (
               <p className="mt-3 text-sm text-destructive flex items-center gap-1">
                 <AlertCircle className="h-4 w-4" />
-                Allocated amount exceeds cheque amount. Please adjust settlement
-                amounts.
+                Allocated amount exceeds payment amount. Please adjust.
               </p>
             )}
           </CardContent>
