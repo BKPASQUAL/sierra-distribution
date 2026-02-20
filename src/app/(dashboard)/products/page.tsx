@@ -674,20 +674,20 @@ export default function ProductsPage() {
       )}
 
       {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Products</h1>
-          <p className="text-muted-foreground mt-1">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Products</h1>
+          <p className="text-muted-foreground mt-1 text-sm hidden sm:block">
             Manage wire products and inventory
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {/* Report Generation Button */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <Download className="w-4 h-4 mr-2" />
-                Generate Report
+              <Button variant="outline" className="w-9 h-9 p-0 sm:w-auto sm:h-10 sm:px-4 sm:py-2">
+                <Download className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Generate Report</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -702,14 +702,15 @@ export default function ProductsPage() {
             </DropdownMenuContent>
           </DropdownMenu>
           <Button
+            className="w-9 h-9 p-0 sm:w-auto sm:h-10 sm:px-4 sm:py-2"
             onClick={() => {
               setSelectedProduct(null);
               resetForm();
               setIsAddDialogOpen(true);
             }}
           >
-            <Plus className="w-4 h-4 mr-2" />
-            Add New Product
+            <Plus className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Add Product</span>
           </Button>
         </div>
       </div>
@@ -870,33 +871,36 @@ export default function ProductsPage() {
                          <div className="text-right font-medium">LKR {product.totalCost.toLocaleString()}</div>
                       </div>
 
-                       <div className="flex justify-end gap-2 pt-2 border-t">
+                       <div className="flex justify-end gap-1.5 pt-2 border-t">
                            <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-2 text-xs"
+                            className="h-8 px-2"
                             onClick={() => (window.location.href = `/products/${product.id}`)}
                           >
-                            <Eye className="w-3.5 h-3.5 mr-1" /> View
+                            <Eye className="w-3.5 h-3.5" />
+                            <span className="ml-1 text-xs hidden xs:inline sm:inline">View</span>
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-2 text-xs"
+                            className="h-8 px-2"
                             onClick={() => openEditDialog(product)}
                           >
-                            <Edit className="w-3.5 h-3.5 mr-1" /> Edit
+                            <Edit className="w-3.5 h-3.5" />
+                            <span className="ml-1 text-xs hidden xs:inline sm:inline">Edit</span>
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                            className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
                             onClick={() => {
                               setSelectedProduct(product);
                               setIsDeleteDialogOpen(true);
                             }}
                           >
-                            <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span className="ml-1 text-xs hidden xs:inline sm:inline">Delete</span>
                           </Button>
                        </div>
                     </div>
@@ -1076,24 +1080,24 @@ export default function ProductsPage() {
 
           {/* Pagination Controls */}
           {!loading && sortedProducts.length > 0 && (
-            <div className="flex items-center justify-between px-2 py-4 border-t">
-              <div className="text-sm text-muted-foreground">
-                Showing {startIndex + 1} to{" "}
-                {Math.min(endIndex, sortedProducts.length)} of{" "}
-                {sortedProducts.length} products
+            <div className="flex items-center justify-between gap-2 px-2 py-4 border-t">
+              <div className="text-xs sm:text-sm text-muted-foreground shrink-0">
+                <span className="hidden sm:inline">Showing {startIndex + 1}–{Math.min(endIndex, sortedProducts.length)} of </span>
+                <span className="sm:hidden">{currentPage}/{totalPages} · </span>
+                {sortedProducts.length} <span className="hidden sm:inline">products</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={goToPreviousPage}
                   disabled={currentPage === 1}
                 >
-                  <ChevronLeft className="h-4 w-4 mr-1" />
-                  Previous
+                  <ChevronLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline ml-1">Previous</span>
                 </Button>
 
-                <div className="flex items-center gap-1">
+                <div className="hidden sm:flex items-center gap-1">
                   {/* First page */}
                   {currentPage > 3 && (
                     <>
@@ -1160,8 +1164,8 @@ export default function ProductsPage() {
                   onClick={goToNextPage}
                   disabled={currentPage === totalPages}
                 >
-                  Next
-                  <ChevronRight className="h-4 w-4 ml-1" />
+                  <span className="hidden sm:inline mr-1">Next</span>
+                  <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
