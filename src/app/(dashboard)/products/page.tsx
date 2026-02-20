@@ -1175,8 +1175,10 @@ export default function ProductsPage() {
 
       {/* Add/Edit Product Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="w-full max-w-[95vw] sm:max-w-2xl p-0 gap-0 flex flex-col max-h-[92vh] sm:max-h-[88vh] sm:p-6 sm:gap-4 sm:block">
+
+          {/* Header — sticky on mobile, normal on desktop */}
+          <DialogHeader className="px-4 pt-5 pb-3 sm:p-0 border-b sm:border-0 shrink-0">
             <DialogTitle>
               {selectedProduct ? "Edit Product" : "Add New Product"}
             </DialogTitle>
@@ -1186,151 +1188,143 @@ export default function ProductsPage() {
                 : "Enter the details of the new wire product"}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
-            <div className="col-span-2 space-y-2">
+
+          {/* Body — scrollable on mobile, normal on desktop */}
+          <div className="flex-1 overflow-y-auto sm:overflow-visible px-4 sm:px-0 py-4 sm:py-0 sm:mt-4">
+
+            {/* Mobile-only: Product Info section label */}
+            <p className="sm:hidden text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Product Info</p>
+
+            {/* Product Name — full width */}
+            <div className="space-y-2 mb-4">
               <Label htmlFor="name">Product Name *</Label>
               <Input
                 id="name"
                 placeholder="e.g., 2.5mm Single Core Wire"
                 value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                className="w-full"
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full h-11 sm:h-10"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="type">Wire Type *</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, type: value })
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Single Core">Single Core</SelectItem>
-                  <SelectItem value="Twin">Twin</SelectItem>
-                  <SelectItem value="Multi-strand">Multi-strand</SelectItem>
-                  <SelectItem value="Flexible">Flexible</SelectItem>
-                  <SelectItem value="Armoured">Armoured</SelectItem>
-                  <SelectItem value="Twin & Earth">Twin & Earth</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="size">Wire Size *</Label>
-              <Input
-                id="size"
-                placeholder="e.g., 2.5mm"
-                value={formData.size}
-                onChange={(e) =>
-                  setFormData({ ...formData, size: e.target.value })
-                }
-                className="w-full"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="rollLength">Roll Length (meters) *</Label>
-              <Select
-                value={formData.rollLength.toString()}
-                onValueChange={(value) => {
-                  if (value === "custom") {
-                    setFormData({ ...formData, rollLength: 0 });
-                  } else {
-                    setFormData({
-                      ...formData,
-                      rollLength: parseFloat(value),
-                      customRollLength: 0,
-                    });
-                  }
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select roll length" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="50">50 meters</SelectItem>
-                  <SelectItem value="100">100 meters</SelectItem>
-                  <SelectItem value="500">500 meters</SelectItem>
-                  <SelectItem value="custom">Custom</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {formData.rollLength === 0 && (
+
+            {/* Type + Size */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4">
               <div className="space-y-2">
-                <Label htmlFor="customRollLength">
-                  Custom Roll Length (meters) *
-                </Label>
+                <Label htmlFor="type">Wire Type *</Label>
+                <Select
+                  value={formData.type}
+                  onValueChange={(value) => setFormData({ ...formData, type: value })}
+                >
+                  <SelectTrigger className="w-full h-11 sm:h-10">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Single Core">Single Core</SelectItem>
+                    <SelectItem value="Twin">Twin</SelectItem>
+                    <SelectItem value="Multi-strand">Multi-strand</SelectItem>
+                    <SelectItem value="Flexible">Flexible</SelectItem>
+                    <SelectItem value="Armoured">Armoured</SelectItem>
+                    <SelectItem value="Twin & Earth">Twin & Earth</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="size">Wire Size *</Label>
                 <Input
-                  id="customRollLength"
-                  type="number"
-                  min="0"
-                  placeholder="Enter custom length"
-                  value={formData.customRollLength}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      customRollLength: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  className="w-full"
+                  id="size"
+                  placeholder="e.g., 2.5mm"
+                  value={formData.size}
+                  onChange={(e) => setFormData({ ...formData, size: e.target.value })}
+                  className="h-11 sm:h-10"
                 />
               </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="costPrice">Cost Price per Roll (LKR)</Label>
-              <Input
-                id="costPrice"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0"
-                value={formData.costPrice}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    costPrice: parseFloat(e.target.value) || 0,
-                  })
-                }
-                className="w-full"
-              />
-              <p className="text-xs text-muted-foreground">
-                What you paid to supplier
-              </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="mrp">MRP per Roll (LKR) *</Label>
-              <Input
-                id="mrp"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0"
-                value={formData.mrp}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    mrp: parseFloat(e.target.value) || 0,
-                  })
-                }
-                className="w-full"
-              />
-              <p className="text-xs text-muted-foreground">
-                Maximum Retail Price
-              </p>
+
+            {/* Mobile-only: Dimensions section label */}
+            <p className="sm:hidden text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 border-t pt-4">Dimensions</p>
+
+            {/* Roll Length */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4">
+              <div className="space-y-2">
+                <Label htmlFor="rollLength">Roll Length (meters) *</Label>
+                <Select
+                  value={formData.rollLength.toString()}
+                  onValueChange={(value) => {
+                    if (value === "custom") {
+                      setFormData({ ...formData, rollLength: 0 });
+                    } else {
+                      setFormData({ ...formData, rollLength: parseFloat(value), customRollLength: 0 });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full h-11 sm:h-10">
+                    <SelectValue placeholder="Select roll length" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="50">50 meters</SelectItem>
+                    <SelectItem value="100">100 meters</SelectItem>
+                    <SelectItem value="500">500 meters</SelectItem>
+                    <SelectItem value="custom">Custom</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {formData.rollLength === 0 && (
+                <div className="space-y-2">
+                  <Label htmlFor="customRollLength">Custom Length (m) *</Label>
+                  <Input
+                    id="customRollLength"
+                    type="number"
+                    min="0"
+                    placeholder="Enter custom length"
+                    value={formData.customRollLength || ""}
+                    onChange={(e) => setFormData({ ...formData, customRollLength: parseFloat(e.target.value) || 0 })}
+                    className="h-11 sm:h-10"
+                  />
+                </div>
+              )}
             </div>
-            <div className="col-span-2 space-y-2 border-t pt-4">
+
+            {/* Mobile-only: Pricing section label */}
+            <p className="sm:hidden text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 border-t pt-4">Pricing (LKR per roll)</p>
+
+            {/* Cost Price + MRP */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4">
+              <div className="space-y-2">
+                <Label htmlFor="costPrice">Cost Price per Roll (LKR)</Label>
+                <Input
+                  id="costPrice"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                  value={formData.costPrice || ""}
+                  onChange={(e) => setFormData({ ...formData, costPrice: parseFloat(e.target.value) || 0 })}
+                  className="h-11 sm:h-10"
+                />
+                <p className="text-xs text-muted-foreground">What you paid to supplier</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mrp">MRP per Roll (LKR) *</Label>
+                <Input
+                  id="mrp"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                  value={formData.mrp || ""}
+                  onChange={(e) => setFormData({ ...formData, mrp: parseFloat(e.target.value) || 0 })}
+                  className="h-11 sm:h-10"
+                />
+                <p className="text-xs text-muted-foreground">Maximum Retail Price</p>
+              </div>
+            </div>
+
+            {/* Selling Price — full width */}
+            <div className="space-y-2 mb-4 border-t pt-4">
               <div className="flex items-center justify-between">
-                <Label htmlFor="sellingPrice">
-                  Default Selling Price (LKR)
-                </Label>
-                <span className="text-xs text-muted-foreground italic">
-                  Optional
-                </span>
+                <Label htmlFor="sellingPrice">Default Selling Price (LKR)</Label>
+                <span className="text-xs text-muted-foreground italic">Optional</span>
               </div>
               <Input
                 id="sellingPrice"
@@ -1339,69 +1333,64 @@ export default function ProductsPage() {
                 step="0.01"
                 placeholder="Leave empty to use MRP"
                 value={formData.sellingPrice || ""}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    sellingPrice: parseFloat(e.target.value) || 0,
-                  })
-                }
-                className="w-full"
+                onChange={(e) => setFormData({ ...formData, sellingPrice: parseFloat(e.target.value) || 0 })}
+                className="h-11 sm:h-10"
               />
               <p className="text-xs text-muted-foreground">
-                💡 If you want a different default price than MRP, enter it
-                here. Leave empty to use MRP as selling price.
+                💡 If you want a different default price than MRP, enter it here. Leave empty to use MRP as selling price.
               </p>
               {formData.sellingPrice > 0 && formData.mrp > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded p-2 mt-2">
+                <div className="bg-blue-50 border border-blue-200 rounded p-2 mt-1">
                   <p className="text-xs text-blue-700">
                     <strong>Discount:</strong>{" "}
-                    {(
-                      ((formData.mrp - formData.sellingPrice) / formData.mrp) *
-                      100
-                    ).toFixed(1)}
-                    % off MRP
+                    {(((formData.mrp - formData.sellingPrice) / formData.mrp) * 100).toFixed(1)}% off MRP
                   </p>
                 </div>
               )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="stock">Current Stock (rolls) *</Label>
-              <Input
-                id="stock"
-                type="number"
-                min="0"
-                placeholder="0"
-                value={formData.stock}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    stock: parseInt(e.target.value) || 0,
-                  })
-                }
-                className="w-full"
-              />
+
+            {/* Mobile-only: Inventory section label */}
+            <p className="sm:hidden text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 border-t pt-4">Inventory</p>
+
+            {/* Stock + Min Stock */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="stock">Current Stock (rolls) *</Label>
+                <Input
+                  id="stock"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={formData.stock || ""}
+                  onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) || 0 })}
+                  className="h-11 sm:h-10"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="minStock">Minimum Stock Level (rolls) *</Label>
+                <Input
+                  id="minStock"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={formData.minStock || ""}
+                  onChange={(e) => setFormData({ ...formData, minStock: parseInt(e.target.value) || 0 })}
+                  className="h-11 sm:h-10"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="minStock">Minimum Stock Level (rolls) *</Label>
-              <Input
-                id="minStock"
-                type="number"
-                min="0"
-                placeholder="0"
-                value={formData.minStock}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    minStock: parseInt(e.target.value) || 0,
-                  })
-                }
-                className="w-full"
-              />
-            </div>
+
+            {/* Mobile bottom padding */}
+            <div className="h-2 sm:hidden" />
           </div>
-          <DialogFooter>
+
+          {/* Footer:
+              Mobile  → sticky, full-width buttons (flex-1), border-t
+              Desktop → right-aligned normal buttons (flex-none), no border, mt-6 */}
+          <div className="border-t sm:border-0 px-4 py-3 sm:px-0 sm:py-0 sm:mt-6 flex gap-3 sm:justify-end shrink-0 bg-background sm:bg-transparent">
             <Button
               variant="outline"
+              className="flex-1 sm:flex-none h-11 sm:h-10"
               onClick={() => {
                 setIsAddDialogOpen(false);
                 setSelectedProduct(null);
@@ -1410,13 +1399,15 @@ export default function ProductsPage() {
             >
               Cancel
             </Button>
-            <Button onClick={handleAddProduct}>
+            <Button
+              className="flex-1 sm:flex-none h-11 sm:h-10"
+              onClick={handleAddProduct}
+            >
               {selectedProduct ? "Update Product" : "Add Product"}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
-
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
