@@ -119,6 +119,9 @@ export default function PaymentEntryPage() {
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Customer credit balance (overpayments stored as order_id=null payments)
+  const [creditBalance, setCreditBalance] = useState(0);
+
   // Popover control
   const [customerOpen, setCustomerOpen] = useState(false);
   const [bankOpen, setBankOpen] = useState(false);
@@ -217,19 +220,27 @@ export default function PaymentEntryPage() {
     setLoadingInvoices(true);
     setPendingInvoices([]);
     setSettlements({});
+    setCreditBalance(0);
     try {
-      const res = await fetch(
-        `/api/orders/unpaid/by-customer?customer_id=${customerId}`
-      );
-      const data = await res.json();
-      if (res.ok) {
-        const invoices: PendingInvoice[] = data.orders ?? [];
+      // Fetch pending invoices and credit balance in parallel
+      const [invoicesRes, creditRes] = await Promise.all([
+        fetch(`/api/orders/unpaid/by-customer?customer_id=${customerId}`),
+        fetch(`/api/customers/${customerId}/credit`),
+      ]);
+      const invoicesData = await invoicesRes.json();
+      const creditData = await creditRes.json();
+
+      if (invoicesRes.ok) {
+        const invoices: PendingInvoice[] = invoicesData.orders ?? [];
         setPendingInvoices(invoices);
         const map: Record<string, InvoiceSettlement> = {};
         invoices.forEach((inv) => {
           map[inv.id] = { invoiceId: inv.id, selected: false, settleAmount: 0 };
         });
         setSettlements(map);
+      }
+      if (creditRes.ok) {
+        setCreditBalance(creditData.credit_balance ?? 0);
       }
     } catch {
       toast.error("Failed to load pending invoices");
@@ -319,6 +330,7 @@ export default function PaymentEntryPage() {
     setSelectedAccountId("");
     setPendingInvoices([]);
     setSettlements({});
+    setCreditBalance(0);
   };
 
   // ── Validation ────────────────────────────────────────────────────────────
@@ -401,12 +413,10 @@ export default function PaymentEntryPage() {
           amount: s.settleAmount,
           payment_method: paymentMethod,
           notes: notes || null,
-          // Cheque-specific
           cheque_number: paymentMethod === "cheque" ? chequeNumber : null,
           cheque_date: paymentMethod === "cheque" ? chequeDate : null,
           cheque_status: paymentMethod === "cheque" ? "pending" : null,
           bank_account_id: paymentMethod === "cheque" ? selectedBankId : null,
-          // Cash/Bank deposit account
           deposit_account_id:
             paymentMethod === "cash" || paymentMethod === "bank"
               ? selectedAccountId
@@ -427,6 +437,26 @@ export default function PaymentEntryPage() {
           console.error("Payment error:", err);
           failCount++;
         }
+      }
+
+      // ── Auto-save overpayment as customer credit ─────────────────────────
+      const overpayment = parseFloat(remaining.toFixed(2));
+      if (overpayment > 0 && successCount > 0) {
+        const creditPaymentNumber = `CREDIT-${Date.now()}`;
+        await fetch("/api/payments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            payment_number: creditPaymentNumber,
+            order_id: null,
+            customer_id: selectedCustomerId,
+            payment_date: paymentDate,
+            amount: overpayment,
+            payment_method: "credit_balance",
+            notes: `Overpayment credit — ${paymentDate}`,
+          }),
+        });
+        toast.info(`LKR ${overpayment.toLocaleString()} saved as customer credit`);
       }
 
       if (successCount > 0) {
@@ -545,6 +575,23 @@ export default function PaymentEntryPage() {
                 </PopoverContent>
               </Popover>
             </div>
+
+            {/* Credit balance badge */}
+            {creditBalance > 0 && (
+              <div className="sm:col-span-2 lg:col-span-3">
+                <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30 px-4 py-2.5">
+                  <span className="text-green-700 dark:text-green-400 text-sm font-medium">
+                    💳 Available Credit:
+                  </span>
+                  <span className="text-green-800 dark:text-green-300 font-bold">
+                    {formatCurrency(creditBalance)}
+                  </span>
+                  <span className="text-xs text-green-600 dark:text-green-500 ml-1">
+                    — will be applied automatically when you settle invoices
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Payment Method */}
             <div className="space-y-2">
@@ -1004,6 +1051,14 @@ export default function PaymentEntryPage() {
                 <AlertCircle className="h-4 w-4" />
                 Allocated amount exceeds payment amount. Please adjust.
               </p>
+            )}
+            {remaining > 0 && totalAllocated > 0 && (
+              <div className="mt-3 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 px-4 py-2.5">
+                <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  <span className="font-semibold">{formatCurrency(remaining)}</span> will be saved as a credit balance for this customer and can be used to settle future bills.
+                </p>
+              </div>
             )}
           </CardContent>
         </Card>
