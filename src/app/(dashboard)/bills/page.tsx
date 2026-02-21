@@ -2,12 +2,12 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation"; // Added for navigation
+import { useRouter } from "next/navigation";
 import {
   Plus,
   Search,
   Eye,
-  Pencil, // Added Edit Icon
+  Pencil,
   Calendar,
   Loader2,
   Download,
@@ -21,7 +21,10 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  RotateCcw,
+  XCircle,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -53,6 +56,23 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 
@@ -75,7 +95,7 @@ interface Order {
   subtotal: number;
   discount_amount: number;
   total_amount: number;
-  payment_status: "unpaid" | "partial" | "paid";
+  payment_status: "unpaid" | "partial" | "paid" | "cancelled";
   payment_method: string | null;
   customers: Customer;
   paid_amount?: number;
@@ -89,14 +109,30 @@ interface Payment {
   cheque_status: "pending" | "passed" | "returned" | null;
 }
 
+interface OrderItem {
+  id: string;
+  product_id: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+  products?: { name: string; unit_of_measure?: string };
+  return_qty?: number; // UI state only
+}
+
 export default function BillsPage() {
-  const router = useRouter(); // Initialize router
+  const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [customers, setCustomers] = useState<{ id: string; name: string }[]>(
-    [],
-  );
+  const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // ── Return / Cancel dialog state ─────────────────────────────────────────
+  const [returnDialogOrder, setReturnDialogOrder] = useState<Order | null>(null);
+  const [returnItems, setReturnItems] = useState<OrderItem[]>([]);
+  const [returnItemsLoading, setReturnItemsLoading] = useState(false);
+  const [returnSubmitting, setReturnSubmitting] = useState(false);
+  const [cancelDialogOrder, setCancelDialogOrder] = useState<Order | null>(null);
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState("");
@@ -167,6 +203,89 @@ export default function BillsPage() {
 
     fetchData();
   }, []);
+
+  // ── Fetch items for return dialog ─────────────────────────────────────────
+  const openReturnDialog = async (order: Order) => {
+    setReturnDialogOrder(order);
+    setReturnItemsLoading(true);
+    try {
+      const res = await fetch(`/api/orders/${order.id}`);
+      const data = await res.json();
+      if (res.ok && data.order?.items) {
+        setReturnItems(
+          data.order.items.map((i: any) => ({ ...i, return_qty: 0 }))
+        );
+      } else {
+        toast.error("Failed to load order items");
+        setReturnDialogOrder(null);
+      }
+    } catch {
+      toast.error("Network error");
+      setReturnDialogOrder(null);
+    } finally {
+      setReturnItemsLoading(false);
+    }
+  };
+
+  const handlePartialReturn = async () => {
+    if (!returnDialogOrder) return;
+    const itemsToReturn = returnItems
+      .filter((i) => (i.return_qty ?? 0) > 0)
+      .map((i) => ({ order_item_id: i.id, return_qty: i.return_qty! }));
+    if (itemsToReturn.length === 0) {
+      toast.error("Please enter a return quantity for at least one item");
+      return;
+    }
+    setReturnSubmitting(true);
+    try {
+      const res = await fetch(`/api/orders/${returnDialogOrder.id}/return`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "partial_return", items: itemsToReturn }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Items returned and stock restored");
+        setReturnDialogOrder(null);
+        // Refresh orders
+        const r = await fetch("/api/orders");
+        const d = await r.json();
+        if (d.orders) setOrders(d.orders);
+      } else {
+        toast.error(data.error || "Return failed");
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setReturnSubmitting(false);
+    }
+  };
+
+  const handleCancelBill = async () => {
+    if (!cancelDialogOrder) return;
+    setCancelSubmitting(true);
+    try {
+      const res = await fetch(`/api/orders/${cancelDialogOrder.id}/return`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Bill cancelled and all stock restored");
+        setCancelDialogOrder(null);
+        const r = await fetch("/api/orders");
+        const d = await r.json();
+        if (d.orders) setOrders(d.orders);
+      } else {
+        toast.error(data.error || "Cancellation failed");
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setCancelSubmitting(false);
+    }
+  };
 
   // Fetch customers for filter
   useEffect(() => {
@@ -1195,25 +1314,25 @@ export default function BillsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {/* Edit Button */}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => router.push(`/bills/${order.id}/edit`)}
-                          title="Edit Bill"
-                        >
-                          <Pencil className="w-4 h-4 text-blue-500" />
-                        </Button>
-                        {/* View Button */}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => router.push(`/bills/${order.id}`)}
-                          title="View Details"
-                        >
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => router.push(`/bills/${order.id}`)} title="View Details">
                           <Eye className="w-4 h-4 text-gray-500" />
                         </Button>
+                        {order.payment_status === "unpaid" && (
+                          <Button variant="ghost" size="icon" onClick={() => router.push(`/bills/${order.id}/edit`)} title="Edit Bill">
+                            <Pencil className="w-4 h-4 text-blue-500" />
+                          </Button>
+                        )}
+                        {order.payment_status !== "cancelled" && (
+                          <Button variant="ghost" size="icon" onClick={() => openReturnDialog(order)} title="Return Items" className="text-orange-500 hover:text-orange-600">
+                            <RotateCcw className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {order.payment_status !== "paid" && order.payment_status !== "cancelled" && (
+                          <Button variant="ghost" size="icon" onClick={() => setCancelDialogOrder(order)} title="Cancel Bill" className="text-red-500 hover:text-red-600">
+                            <XCircle className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1253,6 +1372,104 @@ export default function BillsPage() {
           </CardFooter>
         )}
       </Card>
+
+      {/* ── RETURN ITEMS DIALOG ───────────────────────────────────── */}
+      <Dialog open={!!returnDialogOrder} onOpenChange={(o) => !o && setReturnDialogOrder(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-orange-500" />
+              Return Items — {returnDialogOrder?.order_number}
+            </DialogTitle>
+          </DialogHeader>
+
+          {returnItemsLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Enter how many units to return for each item. Leave at 0 to skip.
+              </p>
+              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                {returnItems.map((item, idx) => (
+                  <div key={item.id} className="flex items-center gap-3 border rounded-lg p-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{(item as any).productName ?? "Unknown"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Sold: {item.quantity} {(item as any).unit ?? "unit"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <label className="text-xs text-muted-foreground">Return qty</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={item.quantity}
+                        value={item.return_qty ?? 0}
+                        onChange={(e) => {
+                          const v = Math.min(Number(e.target.value), item.quantity);
+                          setReturnItems((prev) =>
+                            prev.map((ri, i) => i === idx ? { ...ri, return_qty: v } : ri)
+                          );
+                        }}
+                        className="w-20 text-center"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setReturnDialogOrder(null)} disabled={returnSubmitting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handlePartialReturn}
+              disabled={returnSubmitting || returnItemsLoading}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              {returnSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+              Confirm Return
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── CANCEL BILL DIALOG ───────────────────────────────────── */}
+      <AlertDialog open={!!cancelDialogOrder} onOpenChange={(o) => !o && setCancelDialogOrder(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <XCircle className="h-5 w-5" />
+              Cancel Bill — {cancelDialogOrder?.order_number}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span>This will:</span>
+              <ul className="list-disc ml-4 space-y-1 text-sm">
+                <li>Restore <strong>all</strong> items back to stock</li>
+                <li>Mark the order as <strong>Cancelled</strong></li>
+                <li>Reduce the customer&apos;s outstanding balance by the unpaid portion</li>
+              </ul>
+              <span className="font-medium text-red-600">This action cannot be undone.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelSubmitting}>Keep Bill</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCancelBill}
+              disabled={cancelSubmitting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {cancelSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Yes, Cancel Bill
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
