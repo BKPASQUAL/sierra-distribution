@@ -1193,6 +1193,19 @@ export default function BillsPage() {
                                    <Pencil className="mr-2 h-4 w-4" /> Edit Bill
                                 </DropdownMenuItem>
                              )}
+                              {order.payment_status !== "cancelled" && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={() => openReturnDialog(order)} className="text-orange-600">
+                                    <RotateCcw className="mr-2 h-4 w-4" /> Return Items
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              {order.payment_status !== "paid" && order.payment_status !== "cancelled" && (
+                                <DropdownMenuItem onClick={() => setCancelDialogOrder(order)} className="text-red-600">
+                                  <XCircle className="mr-2 h-4 w-4" /> Cancel Bill
+                                </DropdownMenuItem>
+                              )}
                           </DropdownMenuContent>
                        </DropdownMenu>
                     </div>
