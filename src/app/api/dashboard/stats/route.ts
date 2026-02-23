@@ -120,12 +120,13 @@ export async function GET() {
     // 6. TOTAL STOCK VALUE
     const { data: products } = await supabase
       .from('products')
-      .select('stock_quantity, mrp, cost_price');
+      .select('id, name, stock_quantity, mrp, cost_price');
 
     let totalStockValue = 0;
     let totalStockCost = 0;
     let totalItems = 0;
-
+    
+    // Process products for total stock value
     if (products) {
       products.forEach((product) => {
         const stock = product.stock_quantity || 0;
@@ -137,6 +138,18 @@ export async function GET() {
         totalItems += stock;
       });
     }
+
+    // 7. TOP PRODUCTS BY STOCK (For second bar chart)
+    const { data: topProductsData } = await supabase
+      .from('products')
+      .select('name, stock_quantity')
+      .order('stock_quantity', { ascending: false })
+      .limit(5);
+
+    const topProductsChart = topProductsData?.map(product => ({
+      name: product.name.length > 15 ? product.name.substring(0, 15) + '...' : product.name,
+      stock: product.stock_quantity || 0
+    })) || [];
 
     return NextResponse.json({
       salesToday: {
@@ -158,6 +171,7 @@ export async function GET() {
         invoices: overdueInvoices,
       },
       salesChart: salesByDay,
+      topProductsChart: topProductsChart,
       stockValue: {
         total: totalStockValue,
         cost: totalStockCost,

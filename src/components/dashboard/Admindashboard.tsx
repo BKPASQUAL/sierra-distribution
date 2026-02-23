@@ -25,8 +25,6 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -68,6 +66,10 @@ interface DashboardStats {
     name: string;
     sales: number;
     date: string;
+  }>;
+  topProductsChart: Array<{
+    name: string;
+    stock: number;
   }>;
   stockValue: {
     total: number;
@@ -209,7 +211,7 @@ export default function AdminDashboard() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground mt-1">
-            Welcome back! Here's your business overview.
+            Welcome back! Here&apos;s your business overview.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -225,21 +227,21 @@ export default function AdminDashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-2">
         <Card
           className="bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
           onClick={() => router.push("/bills/new")}
         >
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold mb-1">Create Bill</h3>
-                <p className="text-sm opacity-90">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-lg font-semibold mb-1 truncate">Create Bill</h3>
+                <p className="text-xs sm:text-sm opacity-90 line-clamp-2">
                   Generate a new customer invoice
                 </p>
               </div>
-              <Button size="icon" variant="secondary" className="rounded-full">
-                <Plus className="w-5 h-5" />
+              <Button size="icon" variant="secondary" className="rounded-full h-8 w-8 sm:h-10 sm:w-10 shrink-0">
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
               </Button>
             </div>
           </CardContent>
@@ -248,16 +250,16 @@ export default function AdminDashboard() {
           className="bg-secondary hover:bg-secondary/80 transition-colors cursor-pointer"
           onClick={() => router.push("/products")}
         >
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold mb-1">Add Product</h3>
-                <p className="text-sm text-muted-foreground">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-lg font-semibold mb-1 truncate">Add Product</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
                   Add new wire to inventory
                 </p>
               </div>
-              <Button size="icon" variant="outline" className="rounded-full">
-                <Plus className="w-5 h-5" />
+              <Button size="icon" variant="outline" className="rounded-full h-8 w-8 sm:h-10 sm:w-10 shrink-0">
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
               </Button>
             </div>
           </CardContent>
@@ -265,7 +267,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {/* Total Sales Today */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -275,10 +277,10 @@ export default function AdminDashboard() {
             <DollarSign className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-xl sm:text-2xl font-bold truncate">
               LKR {stats?.salesToday.amount.toLocaleString() || 0}
             </div>
-            <p className="text-xs text-muted-foreground flex items-center mt-1">
+            <p className="text-xs text-muted-foreground flex flex-wrap items-center mt-1">
               {stats && stats.salesToday.change >= 0 ? (
                 <>
                   <ArrowUpRight className="w-3 h-3 text-green-500 mr-1" />
@@ -308,10 +310,10 @@ export default function AdminDashboard() {
             <TrendingUp className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-xl sm:text-2xl font-bold truncate">
               LKR {stats?.salesThisMonth.amount.toLocaleString() || 0}
             </div>
-            <p className="text-xs text-muted-foreground flex items-center mt-1">
+            <p className="text-xs text-muted-foreground flex flex-wrap items-center mt-1">
               {stats && stats.salesThisMonth.change >= 0 ? (
                 <>
                   <ArrowUpRight className="w-3 h-3 text-green-500 mr-1" />
@@ -341,10 +343,10 @@ export default function AdminDashboard() {
             <Users className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-xl sm:text-2xl font-bold truncate">
               {stats?.totalCustomers.count.toLocaleString() || 0}
             </div>
-            <p className="text-xs text-muted-foreground flex items-center mt-1">
+            <p className="text-xs text-muted-foreground flex flex-wrap items-center mt-1">
               <ArrowUpRight className="w-3 h-3 text-green-500 mr-1" />
               <span className="text-green-500">
                 +{stats?.totalCustomers.newThisMonth || 0}
@@ -363,10 +365,10 @@ export default function AdminDashboard() {
             <AlertTriangle className="w-4 h-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">
+            <div className="text-xl sm:text-2xl font-bold text-destructive truncate">
               LKR {stats?.totalDue.amount.toLocaleString() || 0}
             </div>
-            <p className="text-xs text-muted-foreground flex items-center mt-1">
+            <p className="text-xs text-muted-foreground flex flex-wrap items-center mt-1">
               <ArrowDownRight className="w-3 h-3 text-red-500 mr-1" />
               <span className="text-red-500">
                 {stats?.totalDue.invoices || 0} overdue
@@ -378,78 +380,108 @@ export default function AdminDashboard() {
       </div>
 
       {/* Charts and Stock Value Section */}
-      <div className="grid gap-4 md:grid-cols-7">
+      <div className="grid gap-4 md:grid-cols-2">
         {/* Sales Chart */}
-        <Card className="md:col-span-4">
+        <Card className="flex flex-col">
           <CardHeader>
             <CardTitle>Sales Overview</CardTitle>
             <CardDescription>
               Your sales performance for the past 7 days
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-1">
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={stats?.salesChart || []}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <BarChart data={stats?.salesChart || []}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
                 <XAxis
                   dataKey="name"
                   className="text-xs"
                   tick={{ fill: "hsl(var(--muted-foreground))" }}
+                  axisLine={false}
+                  tickLine={false}
                 />
                 <YAxis
                   className="text-xs"
                   tick={{ fill: "hsl(var(--muted-foreground))" }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(value) => `LKR ${value.toLocaleString()}`}
                 />
                 <Tooltip
+                  cursor={false}
                   contentStyle={{
                     backgroundColor: "hsl(var(--popover))",
                     border: "1px solid hsl(var(--border))",
                     borderRadius: "8px",
+                    color: "hsl(var(--popover-foreground))",
                   }}
+                  itemStyle={{
+                    color: "hsl(var(--popover-foreground))",
+                  }}
+                  formatter={(value: number) => [`LKR ${value.toLocaleString()}`, "Sales"]}
                 />
-                <Line
-                  type="monotone"
+                <Bar
                   dataKey="sales"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  dot={{ fill: "hsl(var(--primary))", strokeWidth: 2 }}
+                  fill="hsl(var(--primary))"
+                  radius={[4, 4, 0, 0]}
+                  barSize={40}
                 />
-              </LineChart>
+              </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Stock Value Card */}
-        <Card className="md:col-span-3">
+        {/* Top Products Chart */}
+        <Card className="flex flex-col">
           <CardHeader>
-            <CardTitle>Total Stock Value</CardTitle>
-            <CardDescription>Current inventory worth</CardDescription>
+            <CardTitle className="flex items-center justify-between">
+              <span>Top Stocked Products</span>
+              <div className="flex flex-col items-end">
+                <span className="text-sm font-normal text-muted-foreground line-clamp-1">
+                  Total Value: LKR {stats?.stockValue.total.toLocaleString() || 0}
+                </span>
+              </div>
+            </CardTitle>
+            <CardDescription>Highest volume items currently in inventory</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-center h-32">
-                <div className="text-center">
-                  <Package className="w-12 h-12 text-primary mx-auto mb-2" />
-                  <div className="text-3xl font-bold">
-                    LKR {stats?.stockValue.total.toLocaleString() || 0}
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Across {stats?.stockValue.items.toLocaleString() || 0} items
-                  </p>
-                </div>
-              </div>
-              <div className="border-t pt-4">
-                <ResponsiveContainer width="100%" height={120}>
-                  <BarChart data={stats?.salesChart.slice(-5) || []}>
-                    <Bar
-                      dataKey="sales"
-                      fill="hsl(var(--primary))"
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+          <CardContent className="flex-1">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={stats?.topProductsChart || []}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                <XAxis
+                  dataKey="name"
+                  className="text-xs"
+                  tick={{ fill: "hsl(var(--muted-foreground))" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  className="text-xs"
+                  tick={{ fill: "hsl(var(--muted-foreground))" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  cursor={false}
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--popover))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "8px",
+                    color: "hsl(var(--popover-foreground))",
+                  }}
+                  itemStyle={{
+                    color: "hsl(var(--popover-foreground))",
+                  }}
+                  formatter={(value: number) => [`${value} units`, "Stock"]}
+                />
+                <Bar
+                  dataKey="stock"
+                  fill="hsl(var(--chart-2, 210, 100%, 50%))"
+                  radius={[4, 4, 0, 0]}
+                  barSize={40}
+                />
+              </BarChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
@@ -584,9 +616,9 @@ export default function AdminDashboard() {
                 {lowStockItems.slice(0, 5).map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors h-20"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors gap-4"
                   >
-                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="flex items-center gap-4 w-full sm:w-auto flex-1 min-w-0">
                       <div className="flex items-center justify-center w-10 h-10 rounded-full bg-destructive/10 flex-shrink-0">
                         <AlertTriangle className="w-5 h-5 text-destructive" />
                       </div>
@@ -599,8 +631,8 @@ export default function AdminDashboard() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                      <div className="text-right">
+                    <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-3 sm:ml-2">
+                      <div className="text-left sm:text-right">
                         <div className="text-xs font-medium text-destructive">
                           {Math.round(
                             (item.stock_quantity / item.reorder_level) * 100
@@ -615,6 +647,7 @@ export default function AdminDashboard() {
                         size="sm"
                         variant="outline"
                         onClick={() => router.push("/purchases")}
+                        className="flex-shrink-0"
                       >
                         Reorder
                       </Button>
