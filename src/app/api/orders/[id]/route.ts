@@ -163,26 +163,17 @@ export async function PUT(
           .update({ stock_quantity: product.stock_quantity - item.quantity })
           .eq("id", item.product_id);
 
-        // --- PRICE CALCULATION FIX ---
-        // Frontend sends: unit_price (Net/Final) and discount_percent.
-        // Database calculates: line_total = unit_price * quantity * (1 - discount/100)
-        // To make the math work, we must store the GROSS price as 'unit_price' in the DB.
-
-        let dbUnitPrice = item.unit_price;
-        const discount = item.discount_percent || 0;
-
-        if (discount > 0 && discount < 100) {
-          // Reverse calculate Gross Price: Net / (1 - Disc%)
-          dbUnitPrice = item.unit_price / (1 - discount / 100);
-        }
+        // Frontend now correctly sends unit_price as the Gross Price (MRP)
+        // and discount_percent as the accurately calculated overall discount.
+        // We can just insert these directly.
 
         newItemsData.push({
           order_id: id,
           product_id: item.product_id,
           quantity: item.quantity,
-          unit_price: dbUnitPrice, // Save Gross Price
+          unit_price: item.unit_price, // Save Gross Price
           cost_price: product.cost_price || 0,
-          discount_percent: discount,
+          discount_percent: item.discount_percent || 0,
           // REMOVED line_total to let DB generate it
         });
 

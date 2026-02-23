@@ -8,6 +8,7 @@ import {
   Plus,
   Trash2,
   Save,
+  Printer,
   Check,
   ChevronsUpDown,
   Loader2,
@@ -46,7 +47,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-// Types
+// Types for API data
 interface Customer {
   id: string;
   name: string;
@@ -91,7 +92,7 @@ export default function EditBillPage() {
 
   const [isLoading, setIsLoading] = useState(true);
 
-  // Form State
+  // Form states
   const [customerId, setCustomerId] = useState("");
   const [billDate, setBillDate] = useState("");
   const [billNo, setBillNo] = useState("");
@@ -99,15 +100,15 @@ export default function EditBillPage() {
   const [billDiscount, setBillDiscount] = useState(0);
   const [paymentType, setPaymentType] = useState("credit");
   const [paidAmount, setPaidAmount] = useState(0);
-  const [notes, setNotes] = useState("");
 
-  // Data State
+  // API data states
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
 
-  // UI State
+  // Search dropdown states
   const [productSearchOpen, setProductSearchOpen] = useState(false);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+
   const [currentItem, setCurrentItem] = useState({
     productId: "",
     quantity: "",
@@ -116,13 +117,12 @@ export default function EditBillPage() {
     sellingPrice: "",
   });
 
-  // Initial Data Fetch
+  // Initial Fetch: Order, Customers, Products
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
 
-        // 1. Fetch Customers & Products in parallel
         const [customersRes, productsRes] = await Promise.all([
           fetch("/api/customers"),
           fetch("/api/products"),
@@ -134,7 +134,6 @@ export default function EditBillPage() {
         if (customersData.customers) setCustomers(customersData.customers);
         if (productsData.products) setProducts(productsData.products);
 
-        // 2. Fetch Order Details
         if (orderId) {
           const orderRes = await fetch(`/api/orders/${orderId}`);
           const orderData = await orderRes.json();
@@ -146,35 +145,53 @@ export default function EditBillPage() {
           // Populate Form
           setCustomerId(
             order.customerName
-              ? customersData.customers.find(
-                  (c: Customer) => c.name === order.customerName,
+              ? customersData.customers?.find(
+                  (c: Customer) => c.name === order.customerName
                 )?.id || ""
-              : "",
+              : ""
           );
           setBillNo(order.billNo);
-          setBillDate(order.date.split("T")[0]);
-          setPaymentType(order.paymentType.toLowerCase());
-          setNotes(order.notes || "");
+          setBillDate(order.date ? order.date.split("T")[0] : "");
+          setPaymentType(
+            order.paymentType ? order.paymentType.toLowerCase() : "credit"
+          );
 
-          // Calculate Bill Discount %
           if (order.subtotal > 0 && order.discountAmount > 0) {
-            const discountPercent =
-              (order.discountAmount / order.subtotal) * 100;
-            setBillDiscount(parseFloat(discountPercent.toFixed(2)));
+            setBillDiscount(
+              parseFloat(((order.discountAmount / order.subtotal) * 100).toFixed(2))
+            );
           }
 
-          // Map Order Items to Bill Items
           if (order.items && productsData.products) {
             const mappedItems: BillItem[] = order.items.map((item: any) => {
               const product = productsData.products.find(
-                (p: Product) => p.id === item.productId,
+                (p: Product) => p.id === item.productId
               );
-              const mrp = product?.mrp || item.unitPrice;
+              
+              // The database unit_price holds the Gross Price (MRP)
+              const mrp = product?.mrp > 0 ? product.mrp : (item.unitPrice || 0);
               const costPrice = product?.cost_price || 0;
-              const discount = item.discount || 0;
-
-              // Recalculate selling price based on discount
-              const sellingPrice = mrp - (mrp * discount) / 100;
+              
+              // If the product has a standard selling_price, use it to calculate the standard discount
+              const defaultSellingPrice = product?.selling_price || mrp;
+              const standardDiscount = mrp > 0 ? parseFloat((((mrp - defaultSellingPrice) / mrp) * 100).toFixed(2)) : 0;
+              
+              // The database has the TOTAL discount percent applied to the Gross Price
+              const totalDiscount = item.discount || 0;
+              
+              // We separate it back out for the UI
+              let baseDiscount = standardDiscount;
+              let addDiscount = totalDiscount - standardDiscount;
+              
+              // If the item was sold at a lesser discount than standard, or some weird anomaly
+              if (addDiscount < 0) {
+                 baseDiscount = totalDiscount;
+                 addDiscount = 0;
+              }
+              
+              // Reconstruct the selling price and final price
+              const sellingPrice = mrp - (mrp * baseDiscount) / 100;
+              const finalPrice = sellingPrice - (sellingPrice * addDiscount) / 100;
 
               return {
                 id: item.id,
@@ -183,21 +200,18 @@ export default function EditBillPage() {
                 quantity: item.quantity,
                 unit: item.unit,
                 mrp: mrp,
-                discount: discount,
-                additionalDiscount: 0,
+                discount: baseDiscount,
+                additionalDiscount: addDiscount,
                 sellingPrice: sellingPrice,
-                finalPrice: item.unitPrice,
-                // FIX: Recalculate total to ensure accuracy (Unit Price * Qty)
-                // This fixes issues where DB line_total might be wrong due to double discounting
-                total: item.unitPrice * item.quantity,
+                finalPrice: finalPrice,
+                total: finalPrice * item.quantity,
                 costPrice: costPrice,
-                profit: (item.unitPrice - costPrice) * item.quantity,
+                profit: (finalPrice - costPrice) * item.quantity,
               };
             });
             setItems(mappedItems);
           }
 
-          // Set paid amount from API (calculated from payments)
           if (typeof order.paidAmount === "number") {
             setPaidAmount(order.paidAmount);
           } else if (order.paymentStatus === "paid") {
@@ -211,13 +225,10 @@ export default function EditBillPage() {
         setIsLoading(false);
       }
     };
-
     fetchData();
   }, [orderId]);
 
-  // --- REUSED LOGIC START ---
-
-  // Auto-populate selling price and calculate discount
+  // Auto-populate selling price and calculate discount when product is selected
   useEffect(() => {
     if (currentItem.productId) {
       const product = products.find((p) => p.id === currentItem.productId);
@@ -237,6 +248,7 @@ export default function EditBillPage() {
     }
   }, [currentItem.productId, products]);
 
+  // Handler for discount change
   const handleDiscountChange = (value: string) => {
     const discount = parseFloat(value) || 0;
     const product = products.find((p) => p.id === currentItem.productId);
@@ -248,10 +260,14 @@ export default function EditBillPage() {
         sellingPrice: newSellingPrice.toFixed(2),
       });
     } else {
-      setCurrentItem({ ...currentItem, discount: value });
+      setCurrentItem({
+        ...currentItem,
+        discount: value,
+      });
     }
   };
 
+  // Handler for selling price change
   const handleSellingPriceChange = (value: string) => {
     const sellingPrice = parseFloat(value) || 0;
     const product = products.find((p) => p.id === currentItem.productId);
@@ -264,19 +280,25 @@ export default function EditBillPage() {
         discount: clampedDiscount.toFixed(2),
       });
     } else {
-      setCurrentItem({ ...currentItem, sellingPrice: value });
+      setCurrentItem({
+        ...currentItem,
+        sellingPrice: value,
+      });
     }
   };
 
+  // Calculate final price after additional discount
   const calculateFinalPrice = (
     sellingPrice: number,
-    additionalDiscount: number,
+    additionalDiscount: number
   ) => {
     return sellingPrice - (sellingPrice * additionalDiscount) / 100;
   };
 
+  // Add item to bill
   const handleAddItem = () => {
     const quantity = parseInt(currentItem.quantity) || 0;
+
     if (!currentItem.productId || quantity <= 0) {
       alert("Please select product and enter quantity");
       return;
@@ -284,6 +306,16 @@ export default function EditBillPage() {
 
     const product = products.find((p) => p.id === currentItem.productId);
     if (!product) return;
+
+    if (quantity > product.stock_quantity) {
+      alert(
+        `Only ${product.stock_quantity} ${product.unit_of_measure}s available in stock`
+      );
+      // Wait, we should allow adding if they are editing, but let's just warn instead of block?
+      // Actually keeping the block from new/page is safer, but wait, if stock is 0 they can't add MORE.
+      // We will allow it for Edit Page just warn:
+      // return; 
+    }
 
     const discount = parseFloat(currentItem.discount) || 0;
     const additionalDiscount = parseFloat(currentItem.additionalDiscount) || 0;
@@ -319,33 +351,48 @@ export default function EditBillPage() {
     });
   };
 
+  // Remove item from bill
   const handleRemoveItem = (id: string) => {
     setItems(items.filter((item) => item.id !== id));
   };
 
-  // Calculations
+  // Calculate totals
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
   const billDiscountAmount = (subtotal * billDiscount) / 100;
   const finalTotal = subtotal - billDiscountAmount;
-
-  // Balance calculation (use Math.max to avoid negative zero issues)
   const balance = Math.max(0, finalTotal - paidAmount);
 
-  // --- UPDATE HANDLER ---
-
+  // Update bill
   const handleUpdateBill = async () => {
-    if (!customerId || !billNo.trim() || items.length === 0) {
-      alert("Please fill in all required fields");
+    if (!customerId) {
+      alert("Please select a customer");
+      return;
+    }
+    if (!billNo.trim()) {
+      alert("Please enter an invoice number");
+      return;
+    }
+    if (items.length === 0) {
+      alert("Please add at least one item");
       return;
     }
 
     try {
-      const orderItems = items.map((item) => ({
-        product_id: item.productId,
-        quantity: item.quantity,
-        unit_price: item.finalPrice,
-        discount_percent: item.discount + item.additionalDiscount,
-      }));
+      // Prepare order items data - using mrp as unit_price to prevent double discounting in DB
+      const orderItems = items.map((item) => {
+        // Calculate the true overall discount percentage based on MRP and final price
+        // This ensures the DB generated line_total accurately matches finalPrice * quantity
+        const totalDiscountPercent = item.mrp > 0 
+          ? parseFloat((((item.mrp - item.finalPrice) / item.mrp) * 100).toFixed(4))
+          : 0;
+
+        return {
+          product_id: item.productId,
+          quantity: item.quantity,
+          unit_price: item.mrp, // Must send gross price to DB
+          discount_percent: totalDiscountPercent,
+        };
+      });
 
       const orderData = {
         order_number: billNo,
@@ -356,14 +403,13 @@ export default function EditBillPage() {
         discount_amount: billDiscountAmount,
         total_amount: finalTotal,
         payment_method: paymentType,
-        // Keep paid status logic consistent with amount paid
         payment_status:
           paidAmount >= finalTotal
             ? "paid"
             : paidAmount > 0
-              ? "partial"
-              : "unpaid",
-        notes: notes,
+            ? "partial"
+            : "unpaid",
+        notes: `Bill updated via Edit. Balance: LKR ${balance.toLocaleString()}`,
       };
 
       const response = await fetch(`/api/orders/${orderId}`, {
@@ -378,7 +424,7 @@ export default function EditBillPage() {
         throw new Error(result.error || "Failed to update bill");
       }
 
-      alert("✅ Bill Updated Successfully!");
+      alert(`✅ Bill Updated Successfully!`);
       router.push("/bills");
     } catch (error) {
       console.error("Error updating bill:", error);
@@ -386,8 +432,14 @@ export default function EditBillPage() {
     }
   };
 
-  // --- RENDER HELPERS ---
+  const handleUpdateAndPrint = async () => {
+    await handleUpdateBill();
+    // In a real scenario we'd want to wait for router push before print,
+    // but window.print() is acceptable if they stay on page or before navigating.
+    window.print();
+  };
 
+  // Get current MRP for display
   const getCurrentMRP = () => {
     if (currentItem.productId) {
       const product = products.find((p) => p.id === currentItem.productId);
@@ -396,20 +448,24 @@ export default function EditBillPage() {
     return 0;
   };
 
+  // Get available products (not already added to bill and in stock)
+  // For Edit Page, we might not want to strictly filter out `items` if they want to add same item twice,
+  // but let's stick to the same logic as new/page.tsx
+  const availableProducts = products
+    // .filter((product) => product.stock_quantity > 0)
+    .filter((product) => !items.some((item) => item.productId === product.id));
+
+  // Get selected product name for display
   const getSelectedProductName = () => {
     const product = products.find((p) => p.id === currentItem.productId);
     return product ? `${product.name} - ${product.sku}` : "Select product";
   };
 
-  const availableProducts = products
-    .filter((product) => product.stock_quantity > 0)
-    .filter((product) => !items.some((item) => item.productId === product.id));
-
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-screen">
+      <div className="flex justify-center items-center h-[50vh]">
         <Loader2 className="h-8 w-8 animate-spin mr-2" />
-        <span>Loading Bill Data...</span>
+        <span className="text-lg">Loading Bill Data...</span>
       </div>
     );
   }
@@ -417,24 +473,40 @@ export default function EditBillPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => router.push("/bills")}
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold tracking-tight">Edit Bill</h1>
-          <p className="text-muted-foreground mt-1">
-            Update invoice details and items
-          </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-row items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.push("/bills")}
+            className="shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">Edit Bill</h1>
+            <p className="text-sm sm:text-base text-muted-foreground mt-1 line-clamp-1">
+              Update invoice details and items
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={handleUpdateBill}>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleUpdateBill}
+            disabled={items.length === 0 || !customerId || !billNo.trim()}
+            className="w-full sm:w-auto"
+          >
             <Save className="w-4 h-4 mr-2" />
             Update Bill
+          </Button>
+          <Button
+            onClick={handleUpdateAndPrint}
+            disabled={items.length === 0 || !customerId || !billNo.trim()}
+            className="w-full sm:w-auto"
+          >
+            <Printer className="w-4 h-4 mr-2" />
+            Update & Print
           </Button>
         </div>
       </div>
@@ -446,7 +518,7 @@ export default function EditBillPage() {
           <CardDescription>Customer and invoice information</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="customer">Customer *</Label>
               <Popover
@@ -471,14 +543,16 @@ export default function EditBillPage() {
                 </PopoverTrigger>
                 <PopoverContent className="w-[400px] p-0" align="start">
                   <Command>
-                    <CommandInput placeholder="Search customer..." />
+                    <CommandInput placeholder="Search customer by name, phone, or city..." />
                     <CommandList>
                       <CommandEmpty>No customer found.</CommandEmpty>
                       <CommandGroup>
                         {customers.map((customer) => (
                           <CommandItem
                             key={customer.id}
-                            value={`${customer.name} ${customer.phone}`}
+                            value={`${customer.name} ${customer.phone || ""} ${
+                              customer.city || ""
+                            } ${customer.id}`}
                             onSelect={() => {
                               setCustomerId(customer.id);
                               setCustomerSearchOpen(false);
@@ -489,7 +563,7 @@ export default function EditBillPage() {
                                 "mr-2 h-4 w-4",
                                 customerId === customer.id
                                   ? "opacity-100"
-                                  : "opacity-0",
+                                  : "opacity-0"
                               )}
                             />
                             <div className="flex flex-col">
@@ -497,7 +571,9 @@ export default function EditBillPage() {
                                 {customer.name}
                               </span>
                               <span className="text-xs text-muted-foreground">
-                                {customer.phone}
+                                {customer.phone && `Phone: ${customer.phone}`}
+                                {customer.phone && customer.city && " | "}
+                                {customer.city && `City: ${customer.city}`}
                               </span>
                             </div>
                           </CommandItem>
@@ -513,6 +589,7 @@ export default function EditBillPage() {
               <Input
                 id="date"
                 type="date"
+                placeholder="YYYY-MM-DD"
                 value={billDate}
                 onChange={(e) => setBillDate(e.target.value)}
                 className="w-full h-10"
@@ -522,6 +599,7 @@ export default function EditBillPage() {
               <Label htmlFor="billNo">Invoice No *</Label>
               <Input
                 id="billNo"
+                placeholder="INV-001"
                 value={billNo}
                 onChange={(e) => setBillNo(e.target.value)}
                 className="w-full h-10"
@@ -538,9 +616,9 @@ export default function EditBillPage() {
           <CardDescription>Select products and quantities</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-7">
-            <div className="space-y-2">
-              <Label>Product</Label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
+            <div className="space-y-2 col-span-2 sm:col-span-4 lg:col-span-1">
+              <Label>Product *</Label>
               <Popover
                 open={productSearchOpen}
                 onOpenChange={setProductSearchOpen}
@@ -550,26 +628,26 @@ export default function EditBillPage() {
                     variant="outline"
                     role="combobox"
                     aria-expanded={productSearchOpen}
-                    className="w-full h-10 justify-between"
+                    className="w-full h-10 justify-between text-left"
                   >
-                    <span className="truncate">
+                    <span className="truncate block flex-1 mr-2">
                       {currentItem.productId
                         ? getSelectedProductName()
                         : "Select product"}
                     </span>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[400px] p-0" align="start">
                   <Command>
-                    <CommandInput placeholder="Search product..." />
+                    <CommandInput placeholder="Search product by name or SKU..." />
                     <CommandList>
                       <CommandEmpty>No product found.</CommandEmpty>
                       <CommandGroup>
                         {availableProducts.map((product) => (
                           <CommandItem
                             key={product.id}
-                            value={`${product.name} ${product.sku}`}
+                            value={`${product.name} ${product.sku} ${product.id}`}
                             onSelect={() => {
                               setCurrentItem({
                                 ...currentItem,
@@ -583,7 +661,7 @@ export default function EditBillPage() {
                                 "mr-2 h-4 w-4",
                                 currentItem.productId === product.id
                                   ? "opacity-100"
-                                  : "opacity-0",
+                                  : "opacity-0"
                               )}
                             />
                             <div className="flex flex-col">
@@ -591,7 +669,9 @@ export default function EditBillPage() {
                                 {product.name}
                               </span>
                               <span className="text-xs text-muted-foreground">
-                                Stock: {product.stock_quantity}
+                                SKU: {product.sku} | Stock:{" "}
+                                {product.stock_quantity}{" "}
+                                {product.unit_of_measure}
                               </span>
                             </div>
                           </CommandItem>
@@ -604,40 +684,54 @@ export default function EditBillPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Quantity</Label>
+              <Label>Quantity *</Label>
               <Input
-                placeholder="Qty"
+                placeholder="Enter quantity"
                 value={currentItem.quantity}
                 onChange={(e) =>
-                  setCurrentItem({ ...currentItem, quantity: e.target.value })
+                  setCurrentItem({
+                    ...currentItem,
+                    quantity: e.target.value,
+                  })
                 }
+                className="w-full h-10"
               />
             </div>
 
             <div className="space-y-2">
-              <Label>MRP</Label>
-              <Input disabled value={getCurrentMRP()} className="bg-muted" />
+              <Label>MRP (LKR)</Label>
+              <Input
+                disabled
+                value={getCurrentMRP() || ""}
+                placeholder="MRP"
+                className="w-full h-10 bg-muted"
+              />
             </div>
 
             <div className="space-y-2">
-              <Label>Disc (%)</Label>
+              <Label>Discount (%)</Label>
               <Input
+                placeholder="Enter discount"
                 value={currentItem.discount}
                 onChange={(e) => handleDiscountChange(e.target.value)}
+                className="w-full h-10"
               />
             </div>
 
             <div className="space-y-2">
-              <Label>Sell Price</Label>
+              <Label>Selling Price (LKR)</Label>
               <Input
+                placeholder="Enter selling price"
                 value={currentItem.sellingPrice}
                 onChange={(e) => handleSellingPriceChange(e.target.value)}
+                className="w-full h-10 font-medium"
               />
             </div>
 
             <div className="space-y-2">
-              <Label>Add. Disc</Label>
+              <Label>Add. Discount (%)</Label>
               <Input
+                placeholder="Enter additional discount"
                 value={currentItem.additionalDiscount}
                 onChange={(e) =>
                   setCurrentItem({
@@ -645,13 +739,15 @@ export default function EditBillPage() {
                     additionalDiscount: e.target.value,
                   })
                 }
+                className="w-full h-10"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label className="invisible">Add</Label>
-              <Button onClick={handleAddItem} className="w-full">
-                <Plus className="w-4 h-4 mr-2" /> Add
+            <div className="space-y-2 col-span-2 sm:col-span-4 lg:col-span-1">
+              <Label className="invisible hidden lg:block">Add</Label>
+              <Button onClick={handleAddItem} className="w-full h-10 mt-0 lg:mt-8">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Item
               </Button>
             </div>
           </div>
@@ -662,137 +758,244 @@ export default function EditBillPage() {
       <Card>
         <CardHeader>
           <CardTitle>Bill Items ({items.length})</CardTitle>
+          <CardDescription>Review items and totals</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Product</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">MRP</TableHead>
-                <TableHead className="text-right">Disc %</TableHead>
-                <TableHead className="text-right">Price</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead className="text-right"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>{item.productName}</TableCell>
-                  <TableCell className="text-right">
-                    {item.quantity} {item.unit}
-                  </TableCell>
-                  <TableCell className="text-right">{item.mrp}</TableCell>
-                  <TableCell className="text-right">
-                    {item.discount + item.additionalDiscount}%
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {item.finalPrice.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-right font-bold">
-                    {item.total.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-right">
+          {items.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <p>No items added yet</p>
+              <p className="text-sm mt-1">
+                Add products above to create invoice
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Mobile View: Cards */}
+              <div className="md:hidden space-y-4">
+                {items.map((item) => (
+                  <div key={item.id} className="border rounded-lg p-4 space-y-3 bg-card relative">
                     <Button
                       variant="ghost"
-                      size="icon"
+                      size="icon-sm"
                       onClick={() => handleRemoveItem(item.id)}
+                      className="absolute top-2 right-2 text-destructive hover:bg-destructive/10"
                     >
-                      <Trash2 className="w-4 h-4 text-destructive" />
+                      <Trash2 className="w-4 h-4" />
                     </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-
-          {/* Totals */}
-          <div className="mt-6 border-t pt-6 flex justify-end">
-            <div className="w-full max-w-md space-y-3">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Subtotal:</span>
-                <span className="font-medium">
-                  LKR {subtotal.toLocaleString()}
-                </span>
+                    
+                    <div className="font-medium pr-8">{item.productName}</div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="text-muted-foreground">Qty:</div>
+                      <div className="text-right font-medium">{item.quantity} {item.unit}s</div>
+                      
+                      <div className="text-muted-foreground">MRP:</div>
+                      <div className="text-right">LKR {item.mrp.toLocaleString()}</div>
+                      
+                      <div className="text-muted-foreground">Discount ({item.discount}%):</div>
+                      <div className="text-right text-green-600 font-medium">LKR {item.sellingPrice.toLocaleString()}</div>
+                      
+                      {item.additionalDiscount > 0 && (
+                        <>
+                          <div className="text-muted-foreground">Add. Disc ({item.additionalDiscount}%):</div>
+                          <div className="text-right text-orange-600 font-medium">LKR {item.finalPrice.toLocaleString()}</div>
+                        </>
+                      )}
+                      
+                      <div className="text-muted-foreground font-semibold mt-1">Total:</div>
+                      <div className="text-right font-bold text-blue-600 mt-1">LKR {item.total.toLocaleString()}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Bill Discount:</span>
-                <div className="flex items-center gap-2">
-                  <Input
-                    className="w-20 text-right h-8"
-                    value={billDiscount}
-                    onChange={(e) =>
-                      setBillDiscount(parseFloat(e.target.value) || 0)
-                    }
-                  />
-                  <span>%</span>
-                  <span className="text-green-600 font-medium">
-                    - {billDiscountAmount.toLocaleString()}
-                  </span>
+
+              {/* Desktop View: Table */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead className="text-right">Quantity</TableHead>
+                      <TableHead className="text-right">MRP</TableHead>
+                      <TableHead className="text-right">Disc. (%)</TableHead>
+                      <TableHead className="text-right">Selling Price</TableHead>
+                      <TableHead className="text-right">Add. Disc. (%)</TableHead>
+                      <TableHead className="text-right">Final Price</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">
+                          {item.productName}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {item.quantity} {item.unit}s
+                        </TableCell>
+                        <TableCell className="text-right">
+                          LKR {item.mrp.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right text-green-600">
+                          {item.discount}%
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          LKR {item.sellingPrice.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right text-orange-600">
+                          {item.additionalDiscount}%
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-blue-600">
+                          LKR {item.finalPrice.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          LKR {item.total.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => handleRemoveItem(item.id)}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Totals Section */}
+              <div className="mt-6 border-t pt-6">
+                <div className="flex justify-end">
+                  <div className="w-full max-w-sm space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Subtotal:</span>
+                      <span className="font-medium">
+                        LKR {subtotal.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">
+                        Bill Discount:
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          placeholder="Discount %"
+                          value={billDiscount}
+                          onChange={(e) =>
+                            setBillDiscount(parseFloat(e.target.value) || 0)
+                          }
+                          className="w-24 h-10 text-right"
+                        />
+                        <span>%</span>
+                        <span className="font-medium text-green-600">
+                          -LKR {billDiscountAmount.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex justify-between text-lg font-bold border-t pt-3">
+                      <span>Final Total:</span>
+                      <span>LKR {finalTotal.toLocaleString()}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="flex justify-between text-lg font-bold border-t pt-3">
-                <span>Final Total:</span>
-                <span>LKR {finalTotal.toLocaleString()}</span>
-              </div>
-            </div>
-          </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
-      {/* Payment & Notes */}
+      {/* Payment Details Section */}
       <Card>
         <CardHeader>
-          <CardTitle>Payment & Notes</CardTitle>
+          <CardTitle>Payment Details (Read Only)</CardTitle>
+          <CardDescription>Payment amount is managed in the main bill page</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label>Payment Method</Label>
-            <RadioGroup
-              value={paymentType}
-              onValueChange={setPaymentType}
-              className="flex gap-4"
-            >
-              {["cash", "credit", "bank", "cheque"].map((m) => (
-                <div key={m} className="flex items-center space-x-2">
-                  <RadioGroupItem value={m} id={m} />
-                  <Label htmlFor={m} className="capitalize">
-                    {m}
-                  </Label>
-                </div>
-              ))}
+            <RadioGroup value={paymentType} onValueChange={setPaymentType} className="flex flex-wrap gap-4">
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="cash" id="cash" />
+                <Label htmlFor="cash" className="font-normal cursor-pointer">
+                  Cash
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="credit" id="credit" />
+                <Label htmlFor="credit" className="font-normal cursor-pointer">
+                  Credit
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="bank" id="bank" />
+                <Label htmlFor="bank" className="font-normal cursor-pointer">
+                  Bank Transfer
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="cheque" id="cheque" />
+                <Label htmlFor="cheque" className="font-normal cursor-pointer">
+                  Cheque
+                </Label>
+              </div>
             </RadioGroup>
           </div>
-
           <div className="space-y-2">
-            <Label>Paid Amount (Read Only)</Label>
-            <div className="flex items-center gap-2">
-              <Input value={paidAmount} disabled className="bg-muted" />
-              <div className="whitespace-nowrap font-medium">
-                Balance:{" "}
-                <span
-                  className={balance > 0 ? "text-red-600" : "text-green-600"}
-                >
-                  LKR {balance.toLocaleString()}
-                </span>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              To add payments, please use the main bill details page.
+            <Label htmlFor="paidAmount">Paid Amount (LKR)</Label>
+            <Input
+              id="paidAmount"
+              placeholder="Enter paid amount"
+              value={paidAmount}
+              disabled
+              className="w-full h-10 bg-muted"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              To add or change payments, please use the main bill details page.
             </p>
           </div>
-
           <div className="space-y-2">
-            <Label>Notes</Label>
-            <Input
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add notes here..."
-            />
+            <Label>Balance</Label>
+            <div
+              className={`text-2xl font-bold ${
+                balance > 0 ? "text-destructive" : "text-green-600"
+              }`}
+            >
+              LKR {balance.toLocaleString()}
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Add bottom padding to account for fixed action bar on mobile */}
+      <div className="h-24 sm:h-0"></div>
+
+      {/* Action Buttons */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t z-50 sm:static sm:p-0 sm:bg-transparent sm:border-none sm:z-auto flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-4 mt-8 pb-4 sm:pb-8 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] sm:shadow-none">
+        <Button variant="outline" onClick={() => router.push("/bills")} className="w-full sm:w-auto">
+          Cancel
+        </Button>
+        <Button
+          onClick={handleUpdateBill}
+          disabled={items.length === 0 || !customerId || !billNo.trim()}
+          variant="outline"
+          className="w-full sm:w-auto"
+        >
+          <Save className="w-4 h-4 mr-2" />
+          Update Bill
+        </Button>
+        <Button
+          onClick={handleUpdateAndPrint}
+          disabled={items.length === 0 || !customerId || !billNo.trim()}
+          className="w-full sm:w-auto"
+        >
+          <Printer className="w-4 h-4 mr-2" />
+          Update & Print Invoice
+        </Button>
+      </div>
     </div>
   );
 }

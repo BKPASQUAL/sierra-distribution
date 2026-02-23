@@ -328,13 +328,21 @@ export default function CreateBillPage() {
     }
 
     try {
-      // Prepare order items data - using finalPrice as unit_price
-      const orderItems = items.map((item) => ({
-        product_id: item.productId,
-        quantity: item.quantity,
-        unit_price: item.finalPrice,
-        discount_percent: item.discount + item.additionalDiscount, // Combined discount
-      }));
+      // Prepare order items data - using mrp as unit_price to prevent double discounting in DB
+      const orderItems = items.map((item) => {
+        // Calculate the true overall discount percentage based on MRP and final price
+        // This ensures the DB generated line_total accurately matches finalPrice * quantity
+        const totalDiscountPercent = item.mrp > 0 
+          ? parseFloat((((item.mrp - item.finalPrice) / item.mrp) * 100).toFixed(4))
+          : 0;
+
+        return {
+          product_id: item.productId,
+          quantity: item.quantity,
+          unit_price: item.mrp, // Must send gross price to DB
+          discount_percent: totalDiscountPercent,
+        };
+      });
 
       // Prepare order data
       const orderData = {
