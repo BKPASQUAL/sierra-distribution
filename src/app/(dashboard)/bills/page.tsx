@@ -1221,7 +1221,7 @@ export default function BillsPage() {
               <TableRow>
                 <TableHead
                   onClick={() => handleSort("order_date")}
-                  className="cursor-pointer"
+                  className="cursor-pointer w-[10%]"
                 >
                   <div className="flex items-center">
                     Date {getSortIcon("order_date")}
@@ -1229,7 +1229,7 @@ export default function BillsPage() {
                 </TableHead>
                 <TableHead
                   onClick={() => handleSort("customers.name")}
-                  className="cursor-pointer w-[200px]"
+                  className="cursor-pointer w-[20%]"
                 >
                   <div className="flex items-center">
                     Customer {getSortIcon("customers.name")}
@@ -1237,14 +1237,14 @@ export default function BillsPage() {
                 </TableHead>
                 <TableHead
                   onClick={() => handleSort("order_number")}
-                  className="cursor-pointer whitespace-nowrap"
+                  className="cursor-pointer whitespace-nowrap w-[10%]"
                 >
                   <div className="flex items-center">
                     Invoice No {getSortIcon("order_number")}
                   </div>
                 </TableHead>
                 <TableHead
-                  className="text-right cursor-pointer"
+                  className="text-right cursor-pointer w-[15%]"
                   onClick={() => handleSort("total_amount")}
                 >
                   <div className="flex items-center justify-end">
@@ -1252,7 +1252,7 @@ export default function BillsPage() {
                   </div>
                 </TableHead>
                 <TableHead
-                  className="text-right cursor-pointer"
+                  className="text-right cursor-pointer w-[15%]"
                   onClick={() => handleSort("paid_amount")}
                 >
                   <div className="flex items-center justify-end">
@@ -1260,7 +1260,7 @@ export default function BillsPage() {
                   </div>
                 </TableHead>
                 <TableHead
-                  className="text-right cursor-pointer"
+                  className="text-right cursor-pointer w-[15%]"
                   onClick={() => handleSort("due_amount")}
                 >
                   <div className="flex items-center justify-end">
@@ -1269,13 +1269,13 @@ export default function BillsPage() {
                 </TableHead>
                 <TableHead
                   onClick={() => handleSort("payment_status")}
-                  className="cursor-pointer"
+                  className="cursor-pointer w-[10%]"
                 >
                   <div className="flex items-center">
                     Payment Status {getSortIcon("payment_status")}
                   </div>
                 </TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-right w-[5%]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1297,7 +1297,7 @@ export default function BillsPage() {
                         {new Date(order.order_date).toLocaleDateString()}
                       </div>
                     </TableCell>
-                    <TableCell className="font-medium max-w-[150px] truncate" title={order.customers.name}>
+                    <TableCell className="font-medium truncate" title={order.customers.name}>
                       {order.customers.name}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">{order.order_number}</TableCell>
