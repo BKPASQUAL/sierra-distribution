@@ -421,25 +421,29 @@ export default function CreateBillPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => router.push("/bills")}
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold tracking-tight">Create New Bill</h1>
-          <p className="text-muted-foreground mt-1">
-            Generate customer invoice and update stock
-          </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-row items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.push("/bills")}
+            className="shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">Create New Bill</h1>
+            <p className="text-sm sm:text-base text-muted-foreground mt-1 line-clamp-1">
+              Generate customer invoice and update stock
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <Button
             variant="outline"
             onClick={handleSaveBill}
             disabled={items.length === 0 || !customerId || !billNo.trim()}
+            className="w-full sm:w-auto"
           >
             <Save className="w-4 h-4 mr-2" />
             Save Bill
@@ -447,6 +451,7 @@ export default function CreateBillPage() {
           <Button
             onClick={handleSaveAndPrint}
             disabled={items.length === 0 || !customerId || !billNo.trim()}
+            className="w-full sm:w-auto"
           >
             <Printer className="w-4 h-4 mr-2" />
             Save & Print
@@ -461,7 +466,7 @@ export default function CreateBillPage() {
           <CardDescription>Customer and invoice information</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="customer">Customer *</Label>
               <Popover
@@ -561,8 +566,8 @@ export default function CreateBillPage() {
           <CardDescription>Select products and quantities</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-7">
-            <div className="space-y-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
+            <div className="space-y-2 col-span-2 sm:col-span-4 lg:col-span-1">
               <Label>Product *</Label>
               <Popover
                 open={productSearchOpen}
@@ -573,17 +578,17 @@ export default function CreateBillPage() {
                     variant="outline"
                     role="combobox"
                     aria-expanded={productSearchOpen}
-                    className="w-full h-10 justify-between"
+                    className="w-full h-10 justify-between text-left"
                     disabled={loadingProducts}
                   >
-                    <span className="truncate">
+                    <span className="truncate block flex-1 mr-2">
                       {loadingProducts
                         ? "Loading products..."
                         : currentItem.productId
                         ? getSelectedProductName()
                         : "Select product"}
                     </span>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[400px] p-0" align="start">
@@ -691,11 +696,11 @@ export default function CreateBillPage() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label className="invisible">Add</Label>
-              <Button onClick={handleAddItem} className="w-full h-10">
+            <div className="space-y-2 col-span-2 sm:col-span-4 lg:col-span-1">
+              <Label className="invisible hidden lg:block">Add</Label>
+              <Button onClick={handleAddItem} className="w-full h-10 mt-0 lg:mt-8">
                 <Plus className="w-4 h-4 mr-2" />
-                Add
+                Add Item
               </Button>
             </div>
           </div>
@@ -718,65 +723,107 @@ export default function CreateBillPage() {
             </div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-right">Quantity</TableHead>
-                    <TableHead className="text-right">MRP</TableHead>
-                    <TableHead className="text-right">Disc. (%)</TableHead>
-                    <TableHead className="text-right">Selling Price</TableHead>
-                    <TableHead className="text-right">Add. Disc. (%)</TableHead>
-                    <TableHead className="text-right">Final Price</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">
-                        {item.productName}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {item.quantity} {item.unit}s
-                      </TableCell>
-                      <TableCell className="text-right">
-                        LKR {item.mrp.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right text-green-600">
-                        {item.discount}%
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        LKR {item.sellingPrice.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right text-orange-600">
-                        {item.additionalDiscount}%
-                      </TableCell>
-                      <TableCell className="text-right font-bold text-blue-600">
-                        LKR {item.finalPrice.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        LKR {item.total.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => handleRemoveItem(item.id)}
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </TableCell>
+              {/* Mobile View: Cards */}
+              <div className="md:hidden space-y-4">
+                {items.map((item) => (
+                  <div key={item.id} className="border rounded-lg p-4 space-y-3 bg-card relative">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => handleRemoveItem(item.id)}
+                      className="absolute top-2 right-2 text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                    
+                    <div className="font-medium pr-8">{item.productName}</div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="text-muted-foreground">Qty:</div>
+                      <div className="text-right font-medium">{item.quantity} {item.unit}s</div>
+                      
+                      <div className="text-muted-foreground">MRP:</div>
+                      <div className="text-right">LKR {item.mrp.toLocaleString()}</div>
+                      
+                      <div className="text-muted-foreground">Discount ({item.discount}%):</div>
+                      <div className="text-right text-green-600 font-medium">LKR {item.sellingPrice.toLocaleString()}</div>
+                      
+                      {item.additionalDiscount > 0 && (
+                        <>
+                          <div className="text-muted-foreground">Add. Disc ({item.additionalDiscount}%):</div>
+                          <div className="text-right text-orange-600 font-medium">LKR {item.finalPrice.toLocaleString()}</div>
+                        </>
+                      )}
+                      
+                      <div className="text-muted-foreground font-semibold mt-1">Total:</div>
+                      <div className="text-right font-bold text-blue-600 mt-1">LKR {item.total.toLocaleString()}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop View: Table */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead className="text-right">Quantity</TableHead>
+                      <TableHead className="text-right">MRP</TableHead>
+                      <TableHead className="text-right">Disc. (%)</TableHead>
+                      <TableHead className="text-right">Selling Price</TableHead>
+                      <TableHead className="text-right">Add. Disc. (%)</TableHead>
+                      <TableHead className="text-right">Final Price</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">
+                          {item.productName}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {item.quantity} {item.unit}s
+                        </TableCell>
+                        <TableCell className="text-right">
+                          LKR {item.mrp.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right text-green-600">
+                          {item.discount}%
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          LKR {item.sellingPrice.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right text-orange-600">
+                          {item.additionalDiscount}%
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-blue-600">
+                          LKR {item.finalPrice.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          LKR {item.total.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => handleRemoveItem(item.id)}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
 
               {/* Totals Section */}
               <div className="mt-6 border-t pt-6">
                 <div className="flex justify-end">
-                  <div className="w-full max-w-md space-y-3">
+                  <div className="w-full max-w-sm space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Subtotal:</span>
                       <span className="font-medium">
@@ -823,7 +870,7 @@ export default function CreateBillPage() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label>Payment Method *</Label>
-            <RadioGroup value={paymentType} onValueChange={setPaymentType}>
+            <RadioGroup value={paymentType} onValueChange={setPaymentType} className="flex flex-wrap gap-4">
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="cash" id="cash" />
                 <Label htmlFor="cash" className="font-normal cursor-pointer">
@@ -879,15 +926,19 @@ export default function CreateBillPage() {
         </CardContent>
       </Card>
 
+      {/* Add bottom padding to account for fixed action bar on mobile */}
+      <div className="h-24 sm:h-0"></div>
+
       {/* Action Buttons */}
-      <div className="flex justify-end gap-4">
-        <Button variant="outline" onClick={() => router.push("/bills")}>
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-background border-t z-50 sm:static sm:p-0 sm:bg-transparent sm:border-none sm:z-auto flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-4 mt-8 pb-4 sm:pb-8 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] sm:shadow-none">
+        <Button variant="outline" onClick={() => router.push("/bills")} className="w-full sm:w-auto">
           Cancel
         </Button>
         <Button
           onClick={handleSaveBill}
           disabled={items.length === 0 || !customerId || !billNo.trim()}
           variant="outline"
+          className="w-full sm:w-auto"
         >
           <Save className="w-4 h-4 mr-2" />
           Save Bill
@@ -895,6 +946,7 @@ export default function CreateBillPage() {
         <Button
           onClick={handleSaveAndPrint}
           disabled={items.length === 0 || !customerId || !billNo.trim()}
+          className="w-full sm:w-auto"
         >
           <Printer className="w-4 h-4 mr-2" />
           Save & Print Invoice
