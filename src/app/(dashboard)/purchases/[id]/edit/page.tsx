@@ -11,9 +11,9 @@ import {
   Loader2,
   AlertCircle,
   Building2,
-  Calendar,
   DollarSign,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -122,12 +122,12 @@ export default function EditPurchasePage() {
         setIsAdmin(true);
       } else {
         setIsAdmin(false);
-        alert("Access Denied: Only administrators can edit purchases");
+        toast.error("Access Denied: Only administrators can edit purchases");
         router.push("/purchases");
       }
     } catch (error) {
       console.error("Error checking admin access:", error);
-      alert("Error verifying permissions");
+      toast.error("Error verifying permissions");
       router.push("/purchases");
     } finally {
       setCheckingAuth(false);
@@ -230,12 +230,12 @@ export default function EditPurchasePage() {
           setItems([]);
         }
       } else {
-        alert("Failed to load purchase data");
+        toast.error("Failed to load purchase data");
         router.push("/purchases");
       }
     } catch (error) {
       console.error("Error fetching purchase:", error);
-      alert("Error loading purchase data");
+      toast.error("Error loading purchase data");
       router.push("/purchases");
     } finally {
       setLoading(false);
@@ -323,17 +323,17 @@ export default function EditPurchasePage() {
 
   const handleUpdatePurchase = async () => {
     if (items.length === 0) {
-      alert("Please add at least one item");
+      toast.error("Please add at least one item");
       return;
     }
 
     if (!purchaseDate) {
-      alert("Please select a purchase date");
+      toast.error("Please select a purchase date");
       return;
     }
 
     if (!isAdmin) {
-      alert("Only administrators can update purchases");
+      toast.error("Only administrators can update purchases");
       return;
     }
 
@@ -369,15 +369,15 @@ export default function EditPurchasePage() {
       });
 
       if (response.ok) {
-        alert("Purchase updated successfully!");
+        toast.success("Purchase updated successfully!");
         router.push("/purchases");
       } else {
         const errorData = await response.json();
-        alert(`Failed to update purchase: ${errorData.error}`);
+        toast.error(`Failed to update purchase: ${errorData.error}`);
       }
     } catch (error) {
       console.error("Error updating purchase:", error);
-      alert("Error updating purchase");
+      toast.error("Error updating purchase");
     } finally {
       setSaving(false);
     }

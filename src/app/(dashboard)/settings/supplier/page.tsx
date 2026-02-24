@@ -13,6 +13,7 @@ import {
   Loader2,
   Building2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -132,7 +133,7 @@ export default function NewPurchasePage() {
   // Add item to purchase
   const handleAddItem = () => {
     if (!currentItem.productId || currentItem.quantity <= 0) {
-      alert("Please select a product and enter quantity");
+      toast.error("Please select a product and enter quantity");
       return;
     }
 
@@ -183,12 +184,12 @@ export default function NewPurchasePage() {
   // Save purchase
   const handleSavePurchase = async () => {
     if (items.length === 0) {
-      alert("Please add at least one item to the purchase");
+      toast.error("Please add at least one item to the purchase");
       return;
     }
 
     if (!supplier) {
-      alert("No supplier configured. Please set up a supplier first.");
+      toast.error("No supplier configured. Please set up a supplier first.");
       return;
     }
 
@@ -258,11 +259,11 @@ export default function NewPurchasePage() {
         });
       }
 
-      alert("Purchase order created successfully!");
+      toast.success("Purchase order created successfully!");
       router.push("/purchases");
     } catch (error) {
       console.error("Error saving purchase:", error);
-      alert(
+      toast.error(
         `Error saving purchase: ${
           error instanceof Error ? error.message : "Unknown error"
         }`

@@ -14,6 +14,7 @@ import {
   Truck,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -186,11 +187,11 @@ export default function ExpensesPage() {
         resetForm();
         fetchExpenses();
       } else {
-        alert(`Error: ${data.error}`);
+        toast.error(`Error: ${data.error}`);
       }
     } catch (error) {
       console.error("Error creating expense:", error);
-      alert("Network error while creating expense");
+      toast.error("Network error while creating expense");
     }
   };
 
@@ -214,11 +215,11 @@ export default function ExpensesPage() {
         resetForm();
         fetchExpenses();
       } else {
-        alert(`Error: ${data.error}`);
+        toast.error(`Error: ${data.error}`);
       }
     } catch (error) {
       console.error("Error updating expense:", error);
-      alert("Network error while updating expense");
+      toast.error("Network error while updating expense");
     }
   };
 
@@ -237,11 +238,11 @@ export default function ExpensesPage() {
         fetchExpenses();
       } else {
         const data = await response.json();
-        alert(`Error: ${data.error}`);
+        toast.error(`Error: ${data.error}`);
       }
     } catch (error) {
       console.error("Error deleting expense:", error);
-      alert("Network error while deleting expense");
+      toast.error("Network error while deleting expense");
     }
   };
 

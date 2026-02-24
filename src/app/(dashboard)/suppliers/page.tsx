@@ -14,6 +14,7 @@ import {
   Calendar,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -144,7 +145,7 @@ export default function SuppliersPage() {
       }
     } catch (error) {
       console.error("Error fetching supplier:", error);
-      alert(`Failed to load supplier information: ${(error as Error).message}`);
+      toast.error(`Failed to load supplier information: ${(error as Error).message}`);
     } finally {
       setLoading(false);
     }
@@ -157,7 +158,7 @@ export default function SuppliersPage() {
       !formData.city ||
       !formData.address
     ) {
-      alert("Please fill all required fields");
+      toast.error("Please fill all required fields");
       return;
     }
 
@@ -183,7 +184,7 @@ export default function SuppliersPage() {
         throw new Error(errorData.error || "Failed to update supplier");
       }
 
-      alert("Supplier information updated successfully!");
+      toast.success("Supplier information updated successfully!");
 
       // Refresh data from database
       await fetchSupplier();
@@ -191,7 +192,7 @@ export default function SuppliersPage() {
       setIsEditDialogOpen(false);
     } catch (error) {
       console.error("Error updating supplier:", error);
-      alert(`Error updating supplier: ${(error as Error).message}`);
+      toast.error(`Error updating supplier: ${(error as Error).message}`);
     }
   };
 

@@ -19,6 +19,7 @@ import {
   Check,
   ChevronsUpDown,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -140,7 +141,7 @@ export default function AddPurchasePage() {
       }
     } catch (error) {
       console.error("Error fetching data:", error);
-      alert("Failed to load products and supplier");
+      toast.error("Failed to load products and supplier");
     } finally {
       setLoading(false);
     }
@@ -206,7 +207,7 @@ export default function AddPurchasePage() {
       currentItem.quantity <= 0 ||
       currentItem.costPrice <= 0
     ) {
-      alert("Please fill all item details with valid cost price");
+      toast.error("Please fill all item details with valid cost price");
       return;
     }
 
@@ -267,12 +268,12 @@ export default function AddPurchasePage() {
 
   const handleSavePurchase = async () => {
     if (items.length === 0) {
-      alert("Please add at least one item");
+      toast.error("Please add at least one item");
       return;
     }
 
     if (!supplierId) {
-      alert("Supplier not found");
+      toast.error("Supplier not found");
       return;
     }
 
@@ -315,7 +316,7 @@ export default function AddPurchasePage() {
 
       if (!purchaseId) {
         console.error("Purchase created but no ID returned:", purchaseResult);
-        alert("Purchase created but ID not returned");
+        toast.error("Purchase created but ID not returned");
         return;
       }
 
@@ -376,11 +377,11 @@ export default function AddPurchasePage() {
       await Promise.all(transactionAndProductUpdatePromises);
 
       console.log("✅ All updates completed successfully");
-      alert(`Purchase order created successfully!`);
+      toast.success(`Purchase order created successfully!`);
       router.push("/purchases");
     } catch (error) {
       console.error("Error saving purchase:", error);
-      alert(`Error saving purchase: ${(error as Error).message}`);
+      toast.error(`Error saving purchase: ${(error as Error).message}`);
     }
   };
 

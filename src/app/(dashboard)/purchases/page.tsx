@@ -23,6 +23,7 @@ import {
   ChevronRight,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -312,22 +313,22 @@ export default function PurchasesPage() {
       });
 
       if (response.ok) {
-        alert("Purchase order deleted successfully");
+        toast.success("Purchase order deleted successfully");
         fetchPurchases();
       } else {
         const data = await response.json();
-        alert(`Failed to delete purchase: ${data.error}`);
+        toast.error(`Failed to delete purchase: ${data.error}`);
       }
     } catch (error) {
       console.error("Error deleting purchase:", error);
-      alert("Error deleting purchase order");
+      toast.error("Error deleting purchase order");
     }
   };
 
   // Handle edit purchase
   const handleEdit = (purchaseId: string) => {
     if (!isAdmin) {
-      alert("Only administrators can edit purchases");
+      toast.error("Only administrators can edit purchases");
       return;
     }
     router.push(`/purchases/${purchaseId}/edit`);
@@ -357,15 +358,15 @@ export default function PurchasesPage() {
 
       if (response.ok) {
         setIsPaymentDialogOpen(false);
-        alert("Payment status updated successfully");
+        toast.success("Payment status updated successfully");
         await fetchPurchases();
       } else {
         const data = await response.json();
-        alert(`Failed to update payment status: ${data.error}`);
+        toast.error(`Failed to update payment status: ${data.error}`);
       }
     } catch (error) {
       console.error("Error updating payment status:", error);
-      alert("Error updating payment status");
+      toast.error("Error updating payment status");
     }
   };
 

@@ -445,7 +445,7 @@ export default function BillsPage() {
 
   const generateExcelReport = () => {
     if (sortedOrders.length === 0) {
-      alert("No bills to export. Please adjust your filters.");
+      toast.error("No bills to export. Please adjust your filters.");
       return;
     }
 
@@ -515,7 +515,7 @@ export default function BillsPage() {
 
   const generatePDFReport = () => {
     if (sortedOrders.length === 0) {
-      alert("No bills to export. Please adjust your filters.");
+      toast.error("No bills to export. Please adjust your filters.");
       return;
     }
 
@@ -679,7 +679,7 @@ export default function BillsPage() {
     });
 
     if (outstandingOrders.length === 0) {
-      alert("No outstanding bills found.");
+      toast.info("No outstanding bills found.");
       return;
     }
 

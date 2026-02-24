@@ -12,6 +12,7 @@ import {
   MapPin,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -137,7 +138,7 @@ export default function CustomersPage() {
       !formData.city ||
       !formData.address
     ) {
-      alert("Please fill all required fields");
+      toast.error("Please fill all required fields");
       return;
     }
 
@@ -162,7 +163,7 @@ export default function CustomersPage() {
         });
 
         if (!response.ok) throw new Error("Failed to update customer");
-        alert("Customer updated successfully!");
+        toast.success("Customer updated successfully!");
       } else {
         // POST: Add new customer
         const response = await fetch("/api/customers", {
@@ -172,13 +173,13 @@ export default function CustomersPage() {
         });
 
         if (!response.ok) throw new Error("Failed to add new customer");
-        alert("Customer added successfully!");
+        toast.success("Customer added successfully!");
       }
 
       fetchCustomers();
     } catch (error) {
       console.error("Error saving customer:", error);
-      alert(`Error saving customer.`);
+      toast.error(`Error saving customer.`);
     }
 
     setIsAddDialogOpen(false);
@@ -196,11 +197,11 @@ export default function CustomersPage() {
 
       if (!response.ok) throw new Error("Failed to delete customer");
 
-      alert(`Customer ${selectedCustomer.name} deleted successfully!`);
+      toast.success(`Customer ${selectedCustomer.name} deleted successfully!`);
       fetchCustomers();
     } catch (error) {
       console.error("Error deleting customer:", error);
-      alert(`Error deleting customer.`);
+      toast.error(`Error deleting customer.`);
     }
 
     setIsDeleteDialogOpen(false);

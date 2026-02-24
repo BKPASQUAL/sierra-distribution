@@ -13,6 +13,7 @@ import {
   ChevronsUpDown,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -134,11 +135,11 @@ export default function CreateBillPage() {
           setCustomers(data.customers);
         } else {
           console.error("Failed to fetch customers:", data.error);
-          alert(`Error fetching customers: ${data.error}`);
+          toast.error(`Error fetching customers: ${data.error}`);
         }
       } catch (error) {
         console.error("Network error fetching customers:", error);
-        alert("Network error fetching customers");
+        toast.error("Network error fetching customers");
       } finally {
         setLoadingCustomers(false);
       }
@@ -158,11 +159,11 @@ export default function CreateBillPage() {
           setProducts(data.products);
         } else {
           console.error("Failed to fetch products:", data.error);
-          alert(`Error fetching products: ${data.error}`);
+          toast.error(`Error fetching products: ${data.error}`);
         }
       } catch (error) {
         console.error("Network error fetching products:", error);
-        alert("Network error fetching products");
+        toast.error("Network error fetching products");
       } finally {
         setLoadingProducts(false);
       }
@@ -247,7 +248,7 @@ export default function CreateBillPage() {
     const quantity = parseInt(currentItem.quantity) || 0;
 
     if (!currentItem.productId || quantity <= 0) {
-      alert("Please select product and enter quantity");
+      toast.error("Please select product and enter quantity");
       return;
     }
 
@@ -255,7 +256,7 @@ export default function CreateBillPage() {
     if (!product) return;
 
     if (quantity > product.stock_quantity) {
-      alert(
+      toast.error(
         `Only ${product.stock_quantity} ${product.unit_of_measure}s available in stock`
       );
       return;
@@ -319,15 +320,15 @@ export default function CreateBillPage() {
     if (isSubmitting) return;
 
     if (!customerId) {
-      alert("Please select a customer");
+      toast.error("Please select a customer");
       return;
     }
     if (!billNo.trim()) {
-      alert("Please enter an invoice number");
+      toast.error("Please enter an invoice number");
       return;
     }
     if (items.length === 0) {
-      alert("Please add at least one item");
+      toast.error("Please add at least one item");
       return;
     }
 
@@ -386,16 +387,16 @@ export default function CreateBillPage() {
 
       // Show success message with profit information
       const profitInfo = result.profit
-        ? `\n\n✅ Total Profit: LKR ${result.profit.toLocaleString()}`
+        ? `\n\nTotal Profit: LKR ${result.profit.toLocaleString()}`
         : "";
 
-      alert(
-        `✅ Bill Saved Successfully!${profitInfo}\n\n📦 Stock has been updated.\n💰 Payment Status: ${paymentStatusText}`
+      toast.success(
+        `Bill Saved Successfully!${profitInfo}\n\nStock has been updated.\nPayment Status: ${paymentStatusText}`
       );
       router.push("/bills");
     } catch (error) {
       console.error("Error saving bill:", error);
-      alert(`❌ Error saving bill: ${(error as Error).message}`);
+      toast.error(`Error saving bill: ${(error as Error).message}`);
     } finally {
       setIsSubmitting(false);
     }

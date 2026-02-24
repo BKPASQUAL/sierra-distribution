@@ -13,6 +13,7 @@ import {
   ChevronsUpDown,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -221,7 +222,7 @@ export default function EditBillPage() {
         }
       } catch (error) {
         console.error("Error fetching data:", error);
-        alert("Failed to load bill data");
+        toast.error("Failed to load bill data");
       } finally {
         setIsLoading(false);
       }
@@ -301,7 +302,7 @@ export default function EditBillPage() {
     const quantity = parseInt(currentItem.quantity) || 0;
 
     if (!currentItem.productId || quantity <= 0) {
-      alert("Please select product and enter quantity");
+      toast.error("Please select product and enter quantity");
       return;
     }
 
@@ -309,7 +310,7 @@ export default function EditBillPage() {
     if (!product) return;
 
     if (quantity > product.stock_quantity) {
-      alert(
+      toast.warning(
         `Only ${product.stock_quantity} ${product.unit_of_measure}s available in stock`
       );
       // Wait, we should allow adding if they are editing, but let's just warn instead of block?
@@ -368,15 +369,15 @@ export default function EditBillPage() {
     if (isSubmitting) return;
 
     if (!customerId) {
-      alert("Please select a customer");
+      toast.error("Please select a customer");
       return;
     }
     if (!billNo.trim()) {
-      alert("Please enter an invoice number");
+      toast.error("Please enter an invoice number");
       return;
     }
     if (items.length === 0) {
-      alert("Please add at least one item");
+      toast.error("Please add at least one item");
       return;
     }
 
@@ -428,11 +429,11 @@ export default function EditBillPage() {
         throw new Error(result.error || "Failed to update bill");
       }
 
-      alert(`✅ Bill Updated Successfully!`);
+      toast.success(`Bill Updated Successfully!`);
       router.push("/bills");
     } catch (error) {
       console.error("Error updating bill:", error);
-      alert(`❌ Error updating bill: ${(error as Error).message}`);
+      toast.error(`Error updating bill: ${(error as Error).message}`);
     } finally {
       setIsSubmitting(false);
     }

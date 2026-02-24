@@ -13,6 +13,7 @@ import {
   CheckCircle,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -229,17 +230,17 @@ export default function DueInvoicesPage() {
     setIsReminderDialogOpen(false);
     setSelectedInvoice(null);
     setReminderMessage("");
-    alert("Reminder logged! (Email/SMS integration pending)");
+    toast.success("Reminder logged! (Email/SMS integration pending)");
   };
 
   const handleRecordPayment = async () => {
     if (!selectedInvoice || paymentData.amount <= 0) {
-      alert("Please enter a valid payment amount");
+      toast.error("Please enter a valid payment amount");
       return;
     }
 
     if (paymentData.amount > selectedInvoice.balance) {
-      alert(
+      toast.error(
         `Payment amount (LKR ${paymentData.amount.toLocaleString()}) cannot exceed balance (LKR ${selectedInvoice.balance.toLocaleString()})`
       );
       return;
@@ -249,7 +250,7 @@ export default function DueInvoicesPage() {
       paymentData.method === "cheque" &&
       (!paymentData.chequeNo || !paymentData.chequeDate)
     ) {
-      alert("Please provide cheque number and date for cheque payments");
+      toast.error("Please provide cheque number and date for cheque payments");
       return;
     }
 
@@ -286,7 +287,7 @@ export default function DueInvoicesPage() {
         throw new Error(result.error || "Failed to record payment");
       }
 
-      alert("✅ Payment recorded successfully!");
+      toast.success("Payment recorded successfully!");
 
       // Refresh the due invoices list
       fetchDueInvoices();
@@ -296,7 +297,7 @@ export default function DueInvoicesPage() {
       resetPaymentForm();
     } catch (error) {
       console.error("Error recording payment:", error);
-      alert(`❌ Error recording payment: ${(error as Error).message}`);
+      toast.error(`Error recording payment: ${(error as Error).message}`);
     }
   };
 

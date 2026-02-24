@@ -12,6 +12,7 @@ import {
   User,
   Building2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -89,12 +90,12 @@ export default function PurchaseDetailPage() {
         setPurchase(data.purchase);
       } else {
         console.error("Failed to fetch purchase:", data.error);
-        alert("Purchase not found");
+        toast.error("Purchase not found");
         router.push("/purchases");
       }
     } catch (error) {
       console.error("Error fetching purchase:", error);
-      alert("Error loading purchase details");
+      toast.error("Error loading purchase details");
       router.push("/purchases");
     } finally {
       setLoading(false);

@@ -23,6 +23,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -219,7 +220,7 @@ export default function ProductsPage() {
       formData.mrp <= 0 ||
       isNaN(formData.mrp)
     ) {
-      alert(
+      toast.error(
         "Please fill all required fields: Name, Type, Size, and MRP (must be positive)."
       );
       return;
@@ -286,7 +287,7 @@ export default function ProductsPage() {
       await fetchProducts();
     } catch (error) {
       console.error("Error saving product:", error);
-      alert(`Error saving product: ${(error as Error).message}`);
+      toast.error(`Error saving product: ${(error as Error).message}`);
     }
 
     setIsAddDialogOpen(false);
@@ -315,7 +316,7 @@ export default function ProductsPage() {
       await fetchProducts();
     } catch (error) {
       console.error("Error deleting product:", error);
-      alert(`Error deleting product. See console for details.`);
+      toast.error(`Error deleting product. See console for details.`);
     }
 
     setIsDeleteDialogOpen(false);
@@ -462,7 +463,7 @@ export default function ProductsPage() {
 
   const generateExcelReport = () => {
     if (sortedProducts.length === 0) {
-      alert("No products to export. Please adjust your filters.");
+      toast.error("No products to export. Please adjust your filters.");
       return;
     }
 
@@ -525,7 +526,7 @@ export default function ProductsPage() {
 
   const generatePDFReport = () => {
     if (sortedProducts.length === 0) {
-      alert("No products to export. Please adjust your filters.");
+      toast.error("No products to export. Please adjust your filters.");
       return;
     }
 

@@ -11,6 +11,7 @@ import {
   Clock,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -116,7 +117,7 @@ export default function BillDetailsPage() {
 
   const handleRecordPayment = async () => {
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
-      alert("Please enter a valid payment amount");
+      toast.error("Please enter a valid payment amount");
       return;
     }
 
@@ -124,7 +125,7 @@ export default function BillDetailsPage() {
 
     const amount = parseFloat(paymentAmount);
     if (amount > bill.total) {
-      alert(`Payment amount cannot exceed LKR ${bill.total.toLocaleString()}`);
+      toast.error(`Payment amount cannot exceed LKR ${bill.total.toLocaleString()}`);
       return;
     }
 
@@ -152,10 +153,10 @@ export default function BillDetailsPage() {
 
       setPaymentAmount("");
       setIsPaymentDialogOpen(false);
-      alert("Payment recorded successfully!");
+      toast.success("Payment recorded successfully!");
     } catch (err) {
       console.error("Error recording payment:", err);
-      alert("Failed to record payment. Please try again.");
+      toast.error("Failed to record payment. Please try again.");
     } finally {
       setIsProcessingPayment(false);
     }

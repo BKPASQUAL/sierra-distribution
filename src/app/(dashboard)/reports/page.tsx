@@ -23,6 +23,7 @@ import {
   Wrench,
   Building2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -636,13 +637,13 @@ export default function ReportsPage() {
   };
 
   const handleExportPDF = () => {
-    alert(
+    toast.info(
       "Exporting to PDF...\nThis would generate a PDF file with the current report.",
     );
   };
 
   const handleExportExcel = () => {
-    alert(
+    toast.info(
       "Exporting to Excel...\nThis would generate an Excel file with the current report data.",
     );
   };
