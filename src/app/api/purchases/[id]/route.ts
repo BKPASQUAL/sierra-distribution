@@ -204,6 +204,39 @@ export async function DELETE(
       );
     }
 
+    // --- NEW LOGIC: Reverse stock BEFORE deleting items ---
+    if (purchase.purchase_items && purchase.purchase_items.length > 0) {
+      for (const item of purchase.purchase_items) {
+        // Fetch current product stock
+        const { data: product } = await supabase
+          .from("products")
+          .select("stock_quantity")
+          .eq("id", item.product_id)
+          .single();
+
+        if (product) {
+          // Revert stock (subtract what was originally added by this purchase)
+          const newStock = product.stock_quantity - item.quantity;
+          
+          await supabase
+            .from("products")
+            .update({ stock_quantity: newStock })
+            .eq("id", item.product_id);
+
+          // Add an inventory transaction to track the reversal
+          await supabase.from("inventory_transactions").insert({
+            product_id: item.product_id,
+            transaction_type: "purchase_cancel",
+            quantity: -item.quantity,
+            reference_type: "purchase",
+            reference_id: purchase.id,
+            notes: `Stock reversed from deleted Purchase Order ${purchaseId}`
+          });
+        }
+      }
+    }
+    // --- END NEW LOGIC ---
+
     // Delete purchase items first (due to foreign key constraint)
     const { error: itemsError } = await supabase
       .from("purchase_items")

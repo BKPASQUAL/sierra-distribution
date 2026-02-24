@@ -11,6 +11,7 @@ import {
   Printer,
   Check,
   ChevronsUpDown,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -102,6 +103,7 @@ export default function CreateBillPage() {
   const [billDiscount, setBillDiscount] = useState(0);
   const [paymentType, setPaymentType] = useState("credit");
   const [paidAmount, setPaidAmount] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // API data states
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -314,6 +316,8 @@ export default function CreateBillPage() {
 
   // Save bill
   const handleSaveBill = async () => {
+    if (isSubmitting) return;
+
     if (!customerId) {
       alert("Please select a customer");
       return;
@@ -327,6 +331,7 @@ export default function CreateBillPage() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       // Prepare order items data - using mrp as unit_price to prevent double discounting in DB
       const orderItems = items.map((item) => {
@@ -391,6 +396,8 @@ export default function CreateBillPage() {
     } catch (error) {
       console.error("Error saving bill:", error);
       alert(`❌ Error saving bill: ${(error as Error).message}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -450,15 +457,19 @@ export default function CreateBillPage() {
           <Button
             variant="outline"
             onClick={handleSaveBill}
-            disabled={items.length === 0 || !customerId || !billNo.trim()}
+            disabled={items.length === 0 || !customerId || !billNo.trim() || isSubmitting}
             className="w-full sm:w-auto"
           >
-            <Save className="w-4 h-4 mr-2" />
-            Save Bill
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4 mr-2" />
+            )}
+            {isSubmitting ? "Saving..." : "Save Bill"}
           </Button>
           <Button
             onClick={handleSaveAndPrint}
-            disabled={items.length === 0 || !customerId || !billNo.trim()}
+            disabled={items.length === 0 || !customerId || !billNo.trim() || isSubmitting}
             className="w-full sm:w-auto"
           >
             <Printer className="w-4 h-4 mr-2" />

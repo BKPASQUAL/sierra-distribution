@@ -100,6 +100,7 @@ export default function EditBillPage() {
   const [billDiscount, setBillDiscount] = useState(0);
   const [paymentType, setPaymentType] = useState("credit");
   const [paidAmount, setPaidAmount] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // API data states
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -364,6 +365,8 @@ export default function EditBillPage() {
 
   // Update bill
   const handleUpdateBill = async () => {
+    if (isSubmitting) return;
+
     if (!customerId) {
       alert("Please select a customer");
       return;
@@ -377,6 +380,7 @@ export default function EditBillPage() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       // Prepare order items data - using mrp as unit_price to prevent double discounting in DB
       const orderItems = items.map((item) => {
@@ -429,6 +433,8 @@ export default function EditBillPage() {
     } catch (error) {
       console.error("Error updating bill:", error);
       alert(`❌ Error updating bill: ${(error as Error).message}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -494,15 +500,19 @@ export default function EditBillPage() {
           <Button
             variant="outline"
             onClick={handleUpdateBill}
-            disabled={items.length === 0 || !customerId || !billNo.trim()}
+            disabled={items.length === 0 || !customerId || !billNo.trim() || isSubmitting}
             className="w-full sm:w-auto"
           >
-            <Save className="w-4 h-4 mr-2" />
-            Update Bill
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4 mr-2" />
+            )}
+            {isSubmitting ? "Updating..." : "Update Bill"}
           </Button>
           <Button
             onClick={handleUpdateAndPrint}
-            disabled={items.length === 0 || !customerId || !billNo.trim()}
+            disabled={items.length === 0 || !customerId || !billNo.trim() || isSubmitting}
             className="w-full sm:w-auto"
           >
             <Printer className="w-4 h-4 mr-2" />

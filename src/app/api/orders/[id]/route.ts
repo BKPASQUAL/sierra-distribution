@@ -117,6 +117,24 @@ export async function PUT(
     const { id } = await params; // Await params
     const body = await request.json();
 
+    // --- NEW LOGIC: Check for duplicate order_number (Invoice No) ---
+    if (body.order_number) {
+      const { data: existingOrder } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("order_number", body.order_number)
+        .neq("id", id) // don't check against itself
+        .single();
+
+      if (existingOrder) {
+        return NextResponse.json(
+          { error: `Invoice number ${body.order_number} already exists. Please use a unique invoice number.` },
+          { status: 400 }
+        );
+      }
+    }
+    // --- END NEW LOGIC ---
+
     if (body.items && Array.isArray(body.items)) {
       // 1. Fetch current items to reverse stock
       const { data: oldItems, error: oldItemsError } = await supabase

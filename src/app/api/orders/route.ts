@@ -29,6 +29,21 @@ export async function POST(request: Request) {
       payment_status = "partial";
     }
 
+    // --- NEW LOGIC: Check for duplicate order_number (Invoice No) ---
+    const { data: existingOrder } = await supabase
+      .from("orders")
+      .select("id")
+      .eq("order_number", order_number)
+      .single();
+
+    if (existingOrder) {
+      return NextResponse.json(
+        { error: `Invoice number ${order_number} already exists. Please use a unique invoice number.` },
+        { status: 400 }
+      );
+    }
+    // --- END NEW LOGIC ---
+
     // 1. Create the order
     const { data: order, error: orderError } = await supabase
       .from("orders")

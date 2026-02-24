@@ -64,6 +64,24 @@ export async function PUT(
       );
     }
 
+    // --- NEW LOGIC: Check for duplicate invoice_number ---
+    if (body.invoice_number) {
+      const { data: existingPurchase } = await supabase
+        .from("purchases")
+        .select("purchase_id")
+        .eq("invoice_number", body.invoice_number)
+        .neq("purchase_id", purchaseId) // don't check against itself
+        .single();
+
+      if (existingPurchase) {
+        return NextResponse.json(
+          { error: `Invoice number ${body.invoice_number} already exists. Please use a unique invoice number.` },
+          { status: 400 }
+        );
+      }
+    }
+    // --- END NEW LOGIC ---
+
     // Start transaction - Update purchase header
     const purchaseUpdateData = {
       purchase_date: body.purchase_date,
@@ -193,7 +211,7 @@ export async function PUT(
         await supabase.from("inventory_transactions").insert({
           product_id: item.product_id,
           transaction_type: "purchase_edit",
-          quantity: Math.abs(stockAdjustment),
+          quantity: stockAdjustment,
           reference_type: "purchase",
           reference_id: updatedPurchase.id,
           notes: `Stock ${stockAdjustment > 0 ? "increase" : "decrease"} from purchase order edit`,
@@ -230,7 +248,7 @@ export async function PUT(
           await supabase.from("inventory_transactions").insert({
             product_id: productId,
             transaction_type: "purchase_edit",
-            quantity: existingItem.quantity,
+            quantity: -existingItem.quantity, // Negative since stock is removed
             reference_type: "purchase",
             reference_id: updatedPurchase.id,
             notes: "Stock reversal - item removed from purchase order",

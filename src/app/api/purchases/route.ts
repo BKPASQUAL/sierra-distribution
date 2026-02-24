@@ -76,12 +76,17 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const formattedPurchases = purchases?.map((purchase) => ({
-      id: purchase.purchase_id,
-      supplierId: purchase.supplier_id,
-      supplierName: purchase.suppliers?.name || "Unknown",
-      date: purchase.purchase_date,
-      items: purchase.purchase_items?.length || 0,
+    const formattedPurchases = purchases?.map((purchase) => {
+      const supplier = Array.isArray(purchase.suppliers) 
+        ? purchase.suppliers[0] 
+        : purchase.suppliers;
+        
+      return {
+        id: purchase.purchase_id,
+        supplierId: purchase.supplier_id,
+        supplierName: supplier?.name || "Unknown",
+        date: purchase.purchase_date,
+        items: purchase.purchase_items?.length || 0,
       totalItems:
         purchase.purchase_items?.reduce(
           (sum: number, item: any) => sum + item.quantity,
@@ -95,7 +100,8 @@ export async function GET() {
       notes: purchase.notes,
       createdAt: purchase.created_at,
       updatedAt: purchase.updated_at,
-    }));
+      };
+    });
 
     return NextResponse.json(
       { purchases: formattedPurchases },
@@ -132,6 +138,23 @@ export async function POST(request: Request) {
 
     // Generate unique purchase ID
     const purchaseId = await generatePurchaseId(supabase);
+
+    // --- NEW LOGIC: Check for duplicate invoice_number ---
+    if (body.invoice_number) {
+      const { data: existingPurchase } = await supabase
+        .from("purchases")
+        .select("id")
+        .eq("invoice_number", body.invoice_number)
+        .single();
+
+      if (existingPurchase) {
+        return NextResponse.json(
+          { error: `Invoice number ${body.invoice_number} already exists. Please use a unique invoice number.` },
+          { status: 400 }
+        );
+      }
+    }
+    // --- END NEW LOGIC ---
 
     // Create purchase
     const { data: purchase, error: purchaseError } = await supabase
@@ -186,6 +209,40 @@ export async function POST(request: Request) {
           { error: `Failed to create purchase items: ${itemsError.message}` },
           { status: 500 }
         );
+      }
+
+      // Update product inventory and cost price for each item
+      for (const item of body.items) {
+        // Get current product
+        const { data: product } = await supabase
+          .from("products")
+          .select("stock_quantity")
+          .eq("id", item.product_id)
+          .single();
+
+        if (product) {
+          // Add to stock
+          const newStock = product.stock_quantity + item.quantity;
+          
+          await supabase
+            .from("products")
+            .update({
+              stock_quantity: newStock,
+              cost_price: item.unit_price, // Update cost price based on latest purchase
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", item.product_id);
+
+          // Record inventory transaction
+          await supabase.from("inventory_transactions").insert({
+            product_id: item.product_id,
+            transaction_type: "purchase",
+            quantity: item.quantity,
+            reference_type: "purchase",
+            reference_id: purchase.id,
+            notes: `Stock added from Purchase Order ${purchase.purchase_id}`
+          });
+        }
       }
     }
 
