@@ -92,6 +92,7 @@ interface PurchaseItem {
 export default function AddPurchasePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [supplierId, setSupplierId] = useState<string | null>(null);
 
@@ -277,6 +278,7 @@ export default function AddPurchasePage() {
       return;
     }
 
+    setSaving(true);
     try {
       // ✅ STEP 1: Create purchase record FIRST
       const purchaseData = {
@@ -382,6 +384,8 @@ export default function AddPurchasePage() {
     } catch (error) {
       console.error("Error saving purchase:", error);
       toast.error(`Error saving purchase: ${(error as Error).message}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -422,9 +426,13 @@ export default function AddPurchasePage() {
             Create a new purchase order from Sierra Cables Ltd
           </p>
         </div>
-        <Button onClick={handleSavePurchase} disabled={items.length === 0}>
-          <Save className="w-4 h-4 mr-2" />
-          Save Purchase
+        <Button onClick={handleSavePurchase} disabled={items.length === 0 || saving}>
+          {saving ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4 mr-2" />
+          )}
+          {saving ? "Saving..." : "Save Purchase"}
         </Button>
       </div>
 

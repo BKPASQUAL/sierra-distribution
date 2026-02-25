@@ -473,8 +473,12 @@ export default function CreateBillPage() {
             disabled={items.length === 0 || !customerId || !billNo.trim() || isSubmitting}
             className="w-full sm:w-auto"
           >
-            <Printer className="w-4 h-4 mr-2" />
-            Save & Print
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Printer className="w-4 h-4 mr-2" />
+            )}
+            {isSubmitting ? "Saving..." : "Save & Print"}
           </Button>
         </div>
       </div>

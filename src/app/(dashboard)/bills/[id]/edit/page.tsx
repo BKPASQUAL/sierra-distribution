@@ -516,8 +516,12 @@ export default function EditBillPage() {
             disabled={items.length === 0 || !customerId || !billNo.trim() || isSubmitting}
             className="w-full sm:w-auto"
           >
-            <Printer className="w-4 h-4 mr-2" />
-            Update & Print
+            {isSubmitting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Printer className="w-4 h-4 mr-2" />
+            )}
+            {isSubmitting ? "Updating..." : "Update & Print"}
           </Button>
         </div>
       </div>
