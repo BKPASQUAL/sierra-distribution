@@ -66,6 +66,11 @@ const navigation: NavGroup[] = [
         href: "/supplier-payments",
         icon: TrendingDown,
       },
+      {
+        name: "Supplier Payment Entry",
+        href: "/supplier-payment-entry",
+        icon: ClipboardCheck,
+      },
     ],
   },
   {

@@ -14,6 +14,7 @@ export async function GET() {
         `
         id,
         purchase_id,
+        invoice_number,
         purchase_date,
         total_amount,
         amount_paid,
