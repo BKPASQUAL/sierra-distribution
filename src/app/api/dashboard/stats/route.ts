@@ -19,12 +19,14 @@ export async function GET() {
     const { data: todayOrders } = await supabase
       .from('orders')
       .select('total_amount')
+      .neq('status', 'cancelled')
       .gte('order_date', todayStart.toISOString())
       .lt('order_date', todayEnd.toISOString());
 
     const { data: yesterdayOrders } = await supabase
       .from('orders')
       .select('total_amount')
+      .neq('status', 'cancelled')
       .gte('order_date', new Date(todayStart.getTime() - 24 * 60 * 60 * 1000).toISOString())
       .lt('order_date', todayStart.toISOString());
 
@@ -36,12 +38,14 @@ export async function GET() {
     const { data: monthOrders } = await supabase
       .from('orders')
       .select('total_amount')
+      .neq('status', 'cancelled')
       .gte('order_date', monthStart.toISOString())
       .lte('order_date', monthEnd.toISOString());
 
     const { data: lastMonthOrders } = await supabase
       .from('orders')
       .select('total_amount')
+      .neq('status', 'cancelled')
       .gte('order_date', lastMonthStart.toISOString())
       .lte('order_date', lastMonthEnd.toISOString());
 
@@ -69,7 +73,8 @@ export async function GET() {
         total_amount,
         payment_status
       `)
-      .in('payment_status', ['unpaid', 'partial']);
+      .in('payment_status', ['unpaid', 'partial'])
+      .neq('status', 'cancelled');
 
     const { data: allPayments } = await supabase
       .from('payments')
@@ -105,6 +110,7 @@ export async function GET() {
       const { data: dayOrders } = await supabase
         .from('orders')
         .select('total_amount')
+        .neq('status', 'cancelled')
         .gte('order_date', dayStart.toISOString())
         .lt('order_date', dayEnd.toISOString());
 

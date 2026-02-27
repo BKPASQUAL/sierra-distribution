@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
       )
       .eq("customer_id", customerId)
       .in("payment_status", ["unpaid", "partial"])
+      .neq("status", "cancelled")
       .order("order_date", { ascending: false });
 
     if (ordersError) {

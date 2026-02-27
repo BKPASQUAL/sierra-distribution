@@ -95,6 +95,7 @@ interface Order {
   subtotal: number;
   discount_amount: number;
   total_amount: number;
+  status: string;
   payment_status: "unpaid" | "partial" | "paid" | "cancelled";
   payment_method: string | null;
   customers: Customer;
@@ -156,52 +157,54 @@ export default function BillsPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Fetch orders and payments from API
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch orders
-        const ordersResponse = await fetch("/api/orders");
-        const ordersData = await ordersResponse.json();
+  const fetchOrdersAndPayments = async () => {
+    try {
+      // Fetch orders
+      const ordersResponse = await fetch("/api/orders");
+      const ordersData = await ordersResponse.json();
 
-        // Fetch payments
-        const paymentsResponse = await fetch("/api/payments");
-        const paymentsData = await paymentsResponse.json();
+      // Fetch payments
+      const paymentsResponse = await fetch("/api/payments");
+      const paymentsData = await paymentsResponse.json();
 
-        if (ordersData.orders && paymentsData.payments) {
-          const ordersWithBalance = ordersData.orders.map((order: Order) => {
-            // Calculate paid amount for this order (exclude returned cheques)
-            const orderPayments = paymentsData.payments.filter(
-              (p: Payment) =>
-                p.order_id === order.id && p.cheque_status !== "returned",
-            );
+      if (ordersData.orders && paymentsData.payments) {
+        const ordersWithBalance = ordersData.orders.map((order: Order) => {
+          // Calculate paid amount for this order (exclude returned cheques)
+          const orderPayments = paymentsData.payments.filter(
+            (p: Payment) =>
+              p.order_id === order.id && p.cheque_status !== "returned",
+          );
 
-            const paidAmount = orderPayments.reduce(
-              (sum: number, p: Payment) => sum + p.amount,
-              0,
-            );
+          const paidAmount = orderPayments.reduce(
+            (sum: number, p: Payment) => sum + p.amount,
+            0,
+          );
 
-            const dueAmount = order.total_amount - paidAmount;
+          // If the bill is cancelled, it shouldn't show a due balance
+          const isCancelled = order.status === "cancelled";
+          const dueAmount = isCancelled ? 0 : order.total_amount - paidAmount;
 
-            return {
-              ...order,
-              paid_amount: paidAmount,
-              due_amount: dueAmount,
-            };
-          });
+          return {
+            ...order,
+            paid_amount: paidAmount,
+            due_amount: dueAmount,
+          };
+        });
 
-          setOrders(ordersWithBalance);
-          setPayments(paymentsData.payments);
-        } else {
-          console.error("Failed to fetch data");
-        }
-      } catch (error) {
-        console.error("Network error fetching data:", error);
-      } finally {
-        setLoading(false);
+        setOrders(ordersWithBalance);
+        setPayments(paymentsData.payments);
+      } else {
+        console.error("Failed to fetch data");
       }
-    };
+    } catch (error) {
+      console.error("Network error fetching data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchData();
+  useEffect(() => {
+    fetchOrdersAndPayments();
   }, []);
 
   // ── Fetch items for return dialog ─────────────────────────────────────────
@@ -247,10 +250,8 @@ export default function BillsPage() {
       if (res.ok) {
         toast.success("Items returned and stock restored");
         setReturnDialogOrder(null);
-        // Refresh orders
-        const r = await fetch("/api/orders");
-        const d = await r.json();
-        if (d.orders) setOrders(d.orders);
+        // Refresh orders and recalculate balances
+        fetchOrdersAndPayments();
       } else {
         toast.error(data.error || "Return failed");
       }
@@ -274,9 +275,14 @@ export default function BillsPage() {
       if (res.ok) {
         toast.success("Bill cancelled and all stock restored");
         setCancelDialogOrder(null);
-        const r = await fetch("/api/orders");
-        const d = await r.json();
-        if (d.orders) setOrders(d.orders);
+        // Update local state without full network request
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === cancelDialogOrder.id
+              ? { ...o, status: "cancelled", payment_status: "unpaid", due_amount: 0 }
+              : o
+          )
+        );
       } else {
         toast.error(data.error || "Cancellation failed");
       }
@@ -424,9 +430,9 @@ export default function BillsPage() {
 
   // Calculate stats
   const totalBills = orders.length;
-  const totalRevenue = orders.reduce((sum, o) => sum + o.total_amount, 0);
-  const totalBalance = orders.reduce((sum, o) => sum + (o.due_amount || 0), 0);
-  const pendingBills = orders.filter((o) => o.payment_status !== "paid").length;
+  const totalRevenue = orders.filter(o => o.status !== "cancelled").reduce((sum, o) => sum + o.total_amount, 0);
+  const totalBalance = orders.filter(o => o.status !== "cancelled").reduce((sum, o) => sum + (o.due_amount || 0), 0);
+  const pendingBills = orders.filter((o) => o.payment_status !== "paid" && o.status !== "cancelled").length;
 
   const getPaymentStatusColor = (status: string) => {
     switch (status) {
@@ -436,6 +442,8 @@ export default function BillsPage() {
         return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
       case "unpaid":
         return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+      case "cancelled":
+        return "bg-gray-200 text-gray-800 dark:bg-gray-800/30 dark:text-gray-300";
       default:
         return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400";
     }
@@ -663,7 +671,7 @@ export default function BillsPage() {
   const generateOutstandingReport = () => {
     // 1. Filter for UNPAID or PARTIAL only
     const outstandingOrders = orders.filter(
-      (o) => o.payment_status === "unpaid" || o.payment_status === "partial",
+      (o) => (o.payment_status === "unpaid" || o.payment_status === "partial") && o.status !== "cancelled",
     );
 
     // 2. Sort by Customer Name (A-Z), then by Due Amount (Desc)
@@ -1060,21 +1068,25 @@ export default function BillsPage() {
                   </div>
                   <Badge
                     variant={
-                      order.payment_status === "paid"
+                      order.status === "cancelled"
+                        ? "outline"
+                        : order.payment_status === "paid"
                         ? "default"
                         : order.payment_status === "partial"
                           ? "secondary"
                           : "destructive"
                     }
                     className={`capitalize ${
-                        order.payment_status === "paid" 
+                        order.status === "cancelled"
+                            ? "bg-gray-200 text-gray-800 hover:bg-gray-300"
+                            : order.payment_status === "paid" 
                             ? "bg-green-100 text-green-800 hover:bg-green-200" 
                             : order.payment_status === "partial" 
                                 ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200" 
                                 : "bg-red-100 text-red-800 hover:bg-red-200"
                     }`}
                   >
-                    {order.payment_status}
+                    {order.status === "cancelled" ? "Cancelled" : order.payment_status}
                   </Badge>
                 </div>
 
@@ -1155,10 +1167,10 @@ export default function BillsPage() {
                        </p>
                      </div>
                      <Badge
-                        className={getPaymentStatusColor(order.payment_status)}
+                        className={getPaymentStatusColor(order.status === "cancelled" ? "cancelled" : order.payment_status)}
                         variant="outline"
                       >
-                        {order.payment_status.charAt(0).toUpperCase() + order.payment_status.slice(1)}
+                        {order.status === "cancelled" ? "Cancelled" : order.payment_status.charAt(0).toUpperCase() + order.payment_status.slice(1)}
                       </Badge>
                    </div>
 
@@ -1193,7 +1205,7 @@ export default function BillsPage() {
                                    <Pencil className="mr-2 h-4 w-4" /> Edit Bill
                                 </DropdownMenuItem>
                              )}
-                              {order.payment_status !== "cancelled" && (
+                              {order.status !== "cancelled" && (
                                 <>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem onClick={() => openReturnDialog(order)} className="text-orange-600">
@@ -1201,7 +1213,7 @@ export default function BillsPage() {
                                   </DropdownMenuItem>
                                 </>
                               )}
-                              {order.payment_status !== "paid" && order.payment_status !== "cancelled" && (
+                              {order.payment_status !== "paid" && order.status !== "cancelled" && (
                                 <DropdownMenuItem onClick={() => setCancelDialogOrder(order)} className="text-red-600">
                                   <XCircle className="mr-2 h-4 w-4" /> Cancel Bill
                                 </DropdownMenuItem>
@@ -1319,11 +1331,12 @@ export default function BillsPage() {
                     <TableCell>
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(
-                          order.payment_status,
+                          order.status === "cancelled" ? "cancelled" : order.payment_status,
                         )}`}
                       >
-                        {order.payment_status.charAt(0).toUpperCase() +
-                          order.payment_status.slice(1)}
+                        {order.status === "cancelled" 
+                          ? "Cancelled" 
+                          : order.payment_status.charAt(0).toUpperCase() + order.payment_status.slice(1)}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
@@ -1336,12 +1349,12 @@ export default function BillsPage() {
                             <Pencil className="w-4 h-4 text-blue-500" />
                           </Button>
                         )}
-                        {order.payment_status !== "cancelled" && (
+                        {order.status !== "cancelled" && (
                           <Button variant="ghost" size="icon" onClick={() => openReturnDialog(order)} title="Return Items" className="text-orange-500 hover:text-orange-600">
                             <RotateCcw className="w-4 h-4" />
                           </Button>
                         )}
-                        {order.payment_status !== "paid" && order.payment_status !== "cancelled" && (
+                        {order.payment_status !== "paid" && order.status !== "cancelled" && (
                           <Button variant="ghost" size="icon" onClick={() => setCancelDialogOrder(order)} title="Cancel Bill" className="text-red-500 hover:text-red-600">
                             <XCircle className="w-4 h-4" />
                           </Button>

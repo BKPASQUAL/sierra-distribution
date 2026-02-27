@@ -8,6 +8,7 @@ import {
   Loader2,
   AlertCircle,
   ReceiptText,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,6 +154,9 @@ export default function SupplierPaymentEntryPage() {
   const [settlements, setSettlements] = useState<
     Record<string, BillSettlement>
   >({});
+  
+  // Search query for pending bills
+  const [searchQuery, setSearchQuery] = useState("");
 
   // ── Data fetching ──────────────────────────────────────────────────────────
 
@@ -302,6 +306,15 @@ export default function SupplierPaymentEntryPage() {
   const remaining = totalAmount - totalAllocated;
 
   const selectedSupplier = suppliers.find((s) => s.id === selectedSupplierId);
+
+  const filteredBills = pendingBills.filter((bill) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      (bill.purchase_id && bill.purchase_id.toLowerCase().includes(query)) ||
+      (bill.invoice_number && bill.invoice_number.toLowerCase().includes(query))
+    );
+  });
 
   // ── Invoice selection ─────────────────────────────────────────────────────
 
@@ -720,8 +733,18 @@ export default function SupplierPaymentEntryPage() {
               <p>No pending bills found for this supplier.</p>
             </div>
           ) : (
-            <div className="overflow-hidden border rounded-lg">
-              <Table>
+            <div className="space-y-4">
+              <div className="relative max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by Bill ID or Invoice No..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="overflow-hidden border rounded-lg">
+                <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
                     <TableHead className="w-[50px] text-center">Select</TableHead>
@@ -737,12 +760,19 @@ export default function SupplierPaymentEntryPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pendingBills.map((bill) => {
-                    const s = settlements[bill.id] || {
-                      billId: bill.id,
-                      selected: false,
-                      settleAmount: 0,
-                    };
+                  {filteredBills.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                        No bills found matching your search.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredBills.map((bill) => {
+                      const s = settlements[bill.id] || {
+                        billId: bill.id,
+                        selected: false,
+                        settleAmount: 0,
+                      };
                     return (
                       <TableRow
                         key={bill.id}
@@ -802,9 +832,11 @@ export default function SupplierPaymentEntryPage() {
                         </TableCell>
                       </TableRow>
                     );
-                  })}
+                  })
+                  )}
                 </TableBody>
               </Table>
+            </div>
             </div>
           )}
         </CardContent>

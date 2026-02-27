@@ -119,11 +119,11 @@ export default function DueInvoicesPage() {
         return;
       }
 
-      // Filter orders that are not fully paid
+      // Filter orders that are not fully paid and not cancelled
       const unpaidOrders = ordersData.orders.filter(
         (order: any) =>
-          order.payment_status === "unpaid" ||
-          order.payment_status === "partial"
+          (order.payment_status === "unpaid" || order.payment_status === "partial") &&
+          order.status !== "cancelled"
       );
 
       // Calculate balance and days overdue for each order

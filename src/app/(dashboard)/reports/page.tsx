@@ -286,7 +286,10 @@ export default function ReportsPage() {
       setPurchases(loadedPurchases);
 
       // Process Orders
-      const ordersWithProfit: OrderWithProfit[] = ordersData.orders.map(
+      // IMPORTANT: Exclude cancelled orders from reports
+      const activeOrders = ordersData.orders.filter((o: any) => o.status !== "cancelled");
+      
+      const ordersWithProfit: OrderWithProfit[] = activeOrders.map(
         (order: any) => {
           const subtotal =
             order.order_items?.reduce((sum: number, item: any) => {
