@@ -248,7 +248,11 @@ export default function BillsPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success("Items returned and stock restored");
+        if (data.newTotal === 0) {
+          toast.success("All items returned — order has been cancelled and stock restored");
+        } else {
+          toast.success("Selected item(s) returned and stock restored");
+        }
         setReturnDialogOrder(null);
         // Refresh orders and recalculate balances
         fetchOrdersAndPayments();

@@ -106,9 +106,8 @@ export default function CustomersPage() {
         // Map fetched data
         const mappedCustomers: Customer[] = data.customers.map((c: any) => ({
           ...c,
-          // Default values for fields not yet provided by this specific API endpoint
-          totalOrders: 0,
-          totalPaid: 0,
+          totalOrders: c.totalOrders ?? 0,
+          totalPaid: c.totalPaid ?? 0,
           outstanding_balance: c.outstanding_balance ?? 0,
         }));
 
