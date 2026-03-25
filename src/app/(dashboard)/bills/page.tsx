@@ -735,7 +735,7 @@ export default function BillsPage() {
         tableBody.push([
           {
             content: `${currentCustomer} (Total Due: LKR ${customerTotalDue.toLocaleString()})`,
-            colSpan: 6,
+            colSpan: 7,
             styles: {
               fillColor: [240, 240, 240],
               fontStyle: "bold",
@@ -746,14 +746,27 @@ export default function BillsPage() {
         ]);
       }
 
+      const orderDate = new Date(order.order_date);
+      const today = new Date();
+      const diffTime = today.getTime() - orderDate.getTime();
+      const daysOverdue = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      let rowStyles = {};
+      if (daysOverdue > 60) {
+        rowStyles = { fillColor: [254, 226, 226], textColor: [153, 27, 27] }; // Light Red
+      } else if (daysOverdue >= 45) {
+        rowStyles = { fillColor: [254, 249, 195], textColor: [133, 77, 14] }; // Yellow (Tesslo)
+      }
+
       // Add the bill row
       tableBody.push([
-        new Date(order.order_date).toLocaleDateString("en-GB"),
-        order.order_number,
-        order.total_amount.toLocaleString(),
-        (order.paid_amount || 0).toLocaleString(),
-        (order.due_amount || 0).toLocaleString(),
-        order.payment_status.toUpperCase(),
+        { content: new Date(order.order_date).toLocaleDateString("en-GB"), styles: rowStyles },
+        { content: order.order_number, styles: rowStyles },
+        { content: daysOverdue.toString(), styles: rowStyles },
+        { content: order.total_amount.toLocaleString(), styles: rowStyles },
+        { content: (order.paid_amount || 0).toLocaleString(), styles: rowStyles },
+        { content: (order.due_amount || 0).toLocaleString(), styles: rowStyles },
+        { content: order.payment_status.toUpperCase(), styles: rowStyles },
       ]);
     });
 
@@ -774,7 +787,7 @@ export default function BillsPage() {
     tableBody.push([
       {
         content: "GRAND TOTAL",
-        colSpan: 2,
+        colSpan: 3,
         styles: { fontStyle: "bold", halign: "right" },
       },
       {
@@ -801,6 +814,7 @@ export default function BillsPage() {
         [
           "Date",
           "Invoice No",
+          "Days Overdue",
           "Total (LKR)",
           "Paid (LKR)",
           "Due (LKR)",
@@ -821,12 +835,13 @@ export default function BillsPage() {
         fontSize: 7,
       },
       columnStyles: {
-        0: { cellWidth: 25, halign: "center" }, // Date
-        1: { cellWidth: 35, halign: "left" }, // Invoice
-        2: { cellWidth: 30, halign: "right" }, // Total
-        3: { cellWidth: 30, halign: "right" }, // Paid
-        4: { cellWidth: 30, halign: "right" }, // Due
-        5: { cellWidth: 25, halign: "center" }, // Status
+        0: { cellWidth: 22, halign: "center" }, // Date
+        1: { cellWidth: 30, halign: "left" }, // Invoice
+        2: { cellWidth: 23, halign: "center" }, // Days Overdue
+        3: { cellWidth: 27, halign: "right" }, // Total
+        4: { cellWidth: 27, halign: "right" }, // Paid
+        5: { cellWidth: 28, halign: "right" }, // Due
+        6: { cellWidth: 25, halign: "center" }, // Status
       },
       margin: { left: 14, right: 14 },
     });
