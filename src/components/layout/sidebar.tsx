@@ -90,6 +90,7 @@ const navigation: NavGroup[] = [
     title: "System",
     items: [
       { name: "Reports", href: "/reports", icon: TrendingUp, adminOnly: true },
+      { name: "Profit Report", href: "/reports?tab=profit", icon: TrendingUp, adminOnly: true },
       { name: "Settings", href: "/settings", icon: Settings, adminOnly: true },
     ],
   },

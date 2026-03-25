@@ -66,6 +66,8 @@ import {
   Line,
   ComposedChart,
 } from "recharts";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import { createClient } from "@/lib/supabase/client";
 
 // --- Interfaces ---
@@ -208,6 +210,21 @@ export default function ReportsPage() {
     () => new Date().toISOString().split("T")[0],
   );
   const [selectedPeriod, setSelectedPeriod] = useState("month");
+  
+  // Check URL inside useEffect since this is a Next.js client component
+  // to prevent hydration mismatch errors if we read window directly in useState
+  const [activeTab, setActiveTab] = useState("company");
+
+  // Handle URL query parameters to set the initial tab
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tabParam = searchParams.get("tab");
+      if (tabParam === "profit") {
+        setActiveTab("profit");
+      }
+    }
+  }, []);
 
   // Check user role on mount
   useEffect(() => {
@@ -640,15 +657,89 @@ export default function ReportsPage() {
   };
 
   const handleExportPDF = () => {
-    toast.info(
-      "Exporting to PDF...\nThis would generate a PDF file with the current report.",
-    );
+    if (activeTab === "profit") {
+      handleExportProfitPDF();
+    } else {
+      toast.info(
+        "Exporting to PDF...\nThis feature is currently available for the Profit tab.",
+      );
+    }
   };
 
   const handleExportExcel = () => {
     toast.info(
       "Exporting to Excel...\nThis would generate an Excel file with the current report data.",
     );
+  };
+
+  const handleExportProfitPDF = () => {
+    try {
+      toast.info("Generating Profit Report PDF...");
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.width;
+
+      // --- BRANDING HEADER ---
+      // Colored Background Banner
+      doc.setFillColor(41, 128, 185); // Professional Blue
+      doc.rect(0, 0, pageWidth, 40, "F");
+
+      // Main Brand
+      doc.setFontSize(24);
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.text("CHAMPIKA HARDWARE", pageWidth / 2, 20, { align: "center" });
+      
+      // Sub Brand
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "normal");
+      doc.text("Sierra Agency Distribution", pageWidth / 2, 30, { align: "center" });
+
+      // --- DOCUMENT TITLE ---
+      doc.setFontSize(18);
+      doc.setTextColor(40);
+      doc.setFont("helvetica", "bold");
+      doc.text("PROFIT REPORT", pageWidth / 2, 55, { align: "center" });
+      
+      doc.setFontSize(11);
+      doc.setTextColor(100);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Generated on: ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`, pageWidth / 2, 62, { align: "center" });
+
+      // --- SUMMARY TABLE ---
+      const summaryData = [
+        ["Total Sales", `LKR ${totalSales.toLocaleString()}`],
+        ["Total Cost", `LKR ${totalCost.toLocaleString()}`],
+        ["Net Profit", `LKR ${totalProfit.toLocaleString()}`],
+        ["Profit Margin", `${overallProfitMargin.toFixed(2)}%`],
+      ];
+
+      autoTable(doc, {
+        startY: 75,
+        head: [["Metric", "Value"]],
+        body: summaryData,
+        theme: "grid",
+        headStyles: { fillColor: [41, 128, 185], textColor: 255, halign: "center" },
+        bodyStyles: { halign: "center", fontSize: 12 },
+        columnStyles: {
+          0: { fontStyle: "bold", cellWidth: 80 },
+          1: { cellWidth: 60 },
+        },
+        margin: { left: (pageWidth - 140) / 2 } // Center the table horizontally (140 is total width)
+      });
+
+      // --- FOOTER ---
+      const pageHeight = doc.internal.pageSize.height;
+      doc.setFontSize(9);
+      doc.setTextColor(150);
+      doc.text("Computer-generated document - Sierra Distribution System", pageWidth / 2, pageHeight - 10, { align: "center" });
+
+      const fileName = `champika-profit-report-${new Date().toISOString().split("T")[0]}.pdf`;
+      doc.save(fileName);
+      toast.success("Profit report downloaded successfully");
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast.error("Failed to generate PDF");
+    }
   };
 
   const getProfitMarginColor = (margin: number) => {
@@ -917,7 +1008,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Reports Tabs */}
-      <Tabs defaultValue="company" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-7">
           {/* Added grid-cols-7 for new tab */}
           <TabsTrigger value="company">
@@ -1126,6 +1217,16 @@ export default function ReportsPage() {
 
         {/* Profit Analysis Tab */}
         <TabsContent value="profit" className="space-y-4">
+          <div className="flex items-center justify-between pb-2 pt-2">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">Profit Overview</h2>
+              <p className="text-sm text-muted-foreground">Comprehensive breakdown of your business profits</p>
+            </div>
+            <Button onClick={handleExportProfitPDF} className="bg-blue-600 hover:bg-blue-700">
+              <File className="w-4 h-4 mr-2" />
+              Export Profit PDF
+            </Button>
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             <Card>
               <CardHeader>
